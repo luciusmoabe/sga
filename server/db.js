@@ -1,6 +1,12 @@
 import Database from 'better-sqlite3';
+import pg from 'pg';
 import fs from 'node:fs';
 import path from 'node:path';
+import 'dotenv/config';
+
+const { Pool, types } = pg;
+// Garante que contadores e identificadores int8 sejam retornados como Number no JavaScript
+types.setTypeParser(types.builtins.INT8, (val) => (val === null ? null : parseInt(val, 10)));
 
 const SCHEMA = `
 create table if not exists secoes (
@@ -130,18 +136,154 @@ create table if not exists decisoes (
 );
 `;
 
-export function openDb(file = process.env.SGC_DB || 'data/sgc.db') {
+export function toPgSql(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+}
+
+function openSqliteDb(file) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const db = new Database(file);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
   try { db.prepare('alter table acoes add column arquivada integer not null default 0').run(); } catch {}
+  db.isPg = false;
+
+  const makeTx = (execTx) => (fn) => {
+    let executed = false;
+    let promise = null;
+    const run = () => {
+      if (executed) return promise;
+      executed = true;
+      promise = execTx(fn);
+      return promise;
+    };
+    const fnWrapper = (...args) => run(...args);
+    fnWrapper.then = (onF, onR) => run().then(onF, onR);
+    fnWrapper.catch = (onR) => run().catch(onR);
+    return fnWrapper;
+  };
+
+  db.transaction = makeTx(async (fn) => {
+    db.exec('BEGIN');
+    try {
+      const res = await fn();
+      db.exec('COMMIT');
+      return res;
+    } catch (err) {
+      try { db.exec('ROLLBACK'); } catch {}
+      throw err;
+    }
+  });
+
   return db;
+}
+
+function openPgDb(url) {
+  const pool = new Pool({
+    connectionString: url,
+    ssl: { rejectUnauthorized: false },
+    max: 10,
+  });
+
+  const makeTx = (execTx) => (fn) => {
+    let executed = false;
+    let promise = null;
+    const run = () => {
+      if (executed) return promise;
+      executed = true;
+      promise = execTx(fn);
+      return promise;
+    };
+    const fnWrapper = (...args) => run(...args);
+    fnWrapper.then = (onF, onR) => run().then(onF, onR);
+    fnWrapper.catch = (onR) => run().catch(onR);
+    return fnWrapper;
+  };
+
+  const db = {
+    isPg: true,
+    pool,
+    _secoesCache: [],
+    async refreshSecoes() {
+      try {
+        const res = await pool.query('select id, pai_id from secoes where ativa = 1');
+        db._secoesCache = res.rows;
+      } catch {}
+    },
+    prepare(sql) {
+      return {
+        all: async (...p) => {
+          const res = await pool.query(toPgSql(sql), p);
+          return res.rows;
+        },
+        get: async (...p) => {
+          const res = await pool.query(toPgSql(sql), p);
+          return res.rows[0] || null;
+        },
+        run: async (...p) => {
+          let s = toPgSql(sql);
+          const isInsert = /^\s*insert\s+into/i.test(sql);
+          if (isInsert && !/returning/i.test(sql) && !/\binto\s+config\b/i.test(sql)) {
+            s += ' RETURNING id';
+          }
+          const res = await pool.query(s, p);
+          return {
+            changes: res.rowCount,
+            lastInsertRowid: res.rows[0]?.id,
+          };
+        },
+      };
+    },
+    transaction: makeTx(async (fn) => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const res = await fn();
+        await client.query('COMMIT');
+        return res;
+      } catch (err) {
+        try { await client.query('ROLLBACK'); } catch {}
+        throw err;
+      } finally {
+        client.release();
+      }
+    }),
+    async close() {
+      await pool.end();
+    },
+  };
+
+  // Inicializa cache de seções
+  db.refreshSecoes();
+  return db;
+}
+
+export function openDb(target = process.env.SGC_DB || 'data/sgc.db') {
+  const dbUrl = process.env.DATABASE_URL;
+  if (target !== ':memory:' && dbUrl) {
+    return openPgDb(dbUrl);
+  }
+  return openSqliteDb(target);
 }
 
 /** Ids da seção e de todas as suas descendentes (árvore de seções). */
 export function subarvore(db, id) {
+  if (db?.isPg) {
+    const secoes = db._secoesCache || [];
+    const res = [];
+    const fila = [id];
+    while (fila.length > 0) {
+      const atual = fila.shift();
+      res.push(atual);
+      for (const s of secoes) {
+        if (s.pai_id === atual) fila.push(s.id);
+      }
+    }
+    return res.length > 0 ? res : [id];
+  }
+
   return db
     .prepare(
       `with recursive t(id) as (
@@ -156,6 +298,13 @@ export function subarvore(db, id) {
 export function nivel(db, id) {
   let n = 0;
   let atual = id;
+  if (db?.isPg && db._secoesCache?.length) {
+    while (atual) {
+      n += 1;
+      atual = db._secoesCache.find((s) => s.id === atual)?.pai_id;
+    }
+    return n;
+  }
   while (atual) {
     n += 1;
     atual = db.prepare('select pai_id from secoes where id = ?').get(atual)?.pai_id;
@@ -166,6 +315,14 @@ export function nivel(db, id) {
 /** Ancestrais (do pai até o Centro), útil para permissões. */
 export function ancestrais(db, id) {
   const lista = [];
+  if (db?.isPg && db._secoesCache?.length) {
+    let atual = db._secoesCache.find((s) => s.id === id)?.pai_id;
+    while (atual) {
+      lista.push(atual);
+      atual = db._secoesCache.find((s) => s.id === atual)?.pai_id;
+    }
+    return lista;
+  }
   let atual = db.prepare('select pai_id from secoes where id = ?').get(id)?.pai_id;
   while (atual) {
     lista.push(atual);
@@ -175,5 +332,8 @@ export function ancestrais(db, id) {
 }
 
 export function estaVazio(db) {
+  if (db?.isPg) {
+    return false; // dados já migrados no Supabase
+  }
   return db.prepare('select count(*) n from usuarios').get().n === 0;
 }
