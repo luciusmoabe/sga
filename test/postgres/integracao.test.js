@@ -43,6 +43,12 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     assert.equal(removidas.length,1);
     assert.equal((await db.prepare('select count(*) as n from auth_contas').get()).n,1);
     assert.equal((await db.prepare("select count(*) as n from usuarios where email like 'novo%@example.org'").get()).n,1);
+    const anterior = (await db.prepare('select chefe_id from secoes where id=1').get()).chefe_id;
+    const novo = await cadastrarChefe(db,{supabaseUrl:'https://projeto.supabase.co'}, {
+      criar:async()=> 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    },{nome:'Substituto',email:'substituto@example.org',senha:'Senha inicial longa',secao_id:1,substituir_chefe_id:anterior});
+    assert.equal((await db.prepare('select chefe_id from secoes where id=1').get()).chefe_id,novo.id);
+    assert.equal((await db.prepare('select secao_id from usuarios where id=?').get(anterior)).secao_id,null);
   });
 
   await t.test('integridade: chefes e históricos têm a mesma proteção do SQLite', async t => {

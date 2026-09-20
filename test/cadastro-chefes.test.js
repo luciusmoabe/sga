@@ -68,3 +68,18 @@ test('cadastro HTTP: somente Diretor pode criar; mantém CSRF e origem obrigató
  }
  assert.equal(chamadas,1);
 });
+
+test('cadastro: substituição explícita retira seção do chefe antigo e preserva usuário',async t=>{
+ const db=await ambiente(t);
+ await db.prepare('update secoes set chefe_id=3 where id=1').run();
+ await db.prepare('update usuarios set secao_id=1 where id=3').run();
+ const novo=await cadastrarChefe(db,config,{criar:async()=>subject},{...dados,substituir_chefe_id:3});
+ assert.equal((await db.prepare('select chefe_id from secoes where id=1').get()).chefe_id,novo.id);
+ const antigo=await db.prepare('select ativo,secao_id from usuarios where id=3').get();
+ assert.equal(antigo.ativo,1);assert.equal(antigo.secao_id,null);
+});
+test('cadastro: confirmação antiga não autoriza substituir outro chefe',async t=>{
+ const db=await ambiente(t);
+ await db.prepare('update secoes set chefe_id=4 where id=1').run();
+ await assert.rejects(cadastrarChefe(db,config,{criar:()=>assert.fail('Não criar')},{...dados,substituir_chefe_id:3}),{status:409});
+});

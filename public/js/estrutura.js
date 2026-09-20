@@ -143,9 +143,15 @@ export async function estrutura(raiz, { refresh }) {
           corpo: `<div class="campo"><label for="ca-nome">Nome</label><input id="ca-nome" name="nome" maxlength="120" required></div>
             <div class="campo"><label for="ca-email">E-mail de login</label><input id="ca-email" name="email" type="email" maxlength="160" autocomplete="off" required></div>
             <div class="campo"><label for="ca-senha">Senha inicial</label><input id="ca-senha" name="senha" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><div class="dica">De 12 a 128 caracteres. Entregue a senha diretamente ao usuário.</div></div>
-            <div class="campo"><label for="ca-secao">Seção</label><select id="ca-secao" name="secao_id" required><option value="">Escolha uma seção</option>${secoes.filter(s => s.ativa && !s.chefe_id).map(s => `<option value="${s.id}">${esc(s.nome)}${s.sigla ? ` (${esc(s.sigla)})` : ''}</option>`).join('')}</select><div class="dica">Somente seções ativas e sem chefe. Para substituir um chefe, remova antes a atribuição pelo botão Chefe.</div></div>
+            <div class="campo"><label for="ca-secao">Seção</label><select id="ca-secao" name="secao_id" required><option value="">Escolha uma seção</option>${secoes.filter(s => s.ativa).map(s => `<option value="${s.id}">${esc(s.nome)}${s.sigla ? ` (${esc(s.sigla)})` : ''}${s.chefe_id ? ` — chefe atual: ${esc(s.chefe_nome || 'atribuído')}` : ''}</option>`).join('')}</select><div class="dica">Todas as seções ativas estão disponíveis. Se já houver chefe, será solicitada confirmação para substituí-lo.</div></div>
             <p>Perfil: <strong>Chefe de seção</strong>. Confira o e-mail: a conta será criada com acesso imediato, sem envio de convite.</p>`,
           aoEnviar: async (d, form) => {
+            const selecionada = secoes.find(s => s.id === Number(d.secao_id));
+            if (selecionada?.chefe_id) {
+              const ok = await confirmar({ titulo: 'Substituir chefe da seção', texto: `O novo usuário assumirá ${esc(selecionada.nome)} no lugar de ${esc(selecionada.chefe_nome || 'seu chefe atual')}. O chefe anterior perderá a atribuição à seção; o histórico será preservado.`, rotulo: 'Confirmar substituição' });
+              if (!ok) throw new Error('Substituição cancelada. Escolha outra seção ou confirme para continuar.');
+              d.substituir_chefe_id = selecionada.chefe_id;
+            }
             try { await post('/usuarios/chefes', d); salvo('Chefe criado com login e seção atribuída.'); }
             finally { form.querySelector('[name="senha"]').value = ''; d.senha = ''; }
           },

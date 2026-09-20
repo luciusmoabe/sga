@@ -37,10 +37,12 @@ export async function cadastrarChefe(db, config, admin, dados) {
   if (email.length > 160 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw falha(400, 'Informe um e-mail válido.');
   if (typeof senha !== 'string' || senha.length < 12 || senha.length > 128) throw falha(400, 'A senha inicial deve ter entre 12 e 128 caracteres.');
   if (!Number.isSafeInteger(secaoId) || secaoId < 1) throw falha(400, 'Escolha uma seção.');
+  const anterior = dados.substituir_chefe_id == null ? null : Number(dados.substituir_chefe_id);
+  if (anterior !== null && (!Number.isSafeInteger(anterior) || anterior < 1)) throw falha(400, 'Confirmação de substituição inválida.');
   const validar = async () => {
     const s = await db.prepare('select id, ativa, chefe_id from secoes where id = ?').get(secaoId);
     if (!s?.ativa) throw falha(400, 'Escolha uma seção ativa.');
-    if (s.chefe_id) throw falha(409, 'A seção já possui chefe. Remova a atribuição atual pelo botão Chefe antes de cadastrar outro.');
+    if ((s.chefe_id ?? null) !== anterior) throw falha(409, 'A chefia da seção mudou ou precisa de confirmação. Atualize a página e confirme a substituição.');
     if (await db.prepare('select id from usuarios where lower(email) = ?').get(email)) throw falha(409, 'E-mail já cadastrado no Agilis.');
   };
   await validar();
@@ -50,8 +52,11 @@ export async function cadastrarChefe(db, config, admin, dados) {
     return await db.transaction(async () => {
       await validar();
       const id = (await db.prepare("insert into usuarios (nome,email,perfil,secao_id) values (?,?,'chefe',?)").run(nome,email,secaoId)).lastInsertRowid;
-      const alteracao = await db.prepare('update secoes set chefe_id = ? where id = ? and ativa = 1 and chefe_id is null').run(id,secaoId);
+      const alteracao = anterior === null
+        ? await db.prepare('update secoes set chefe_id = ? where id = ? and ativa = 1 and chefe_id is null').run(id,secaoId)
+        : await db.prepare('update secoes set chefe_id = ? where id = ? and ativa = 1 and chefe_id = ?').run(id,secaoId,anterior);
       if (alteracao.changes !== 1) throw falha(409, 'A seção foi alterada por outra operação. Atualize a página.');
+      if (anterior !== null) await db.prepare('update usuarios set secao_id = null where id = ? and secao_id = ?').run(anterior,secaoId);
       await db.prepare('insert into auth_contas (usuario_id,projeto,subject) values (?,?,?)').run(id,config.supabaseUrl,subject);
       return { id, nome, email, perfil: 'chefe', secao_id: secaoId, ativo: 1 };
     });
