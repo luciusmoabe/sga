@@ -7,6 +7,7 @@ import { seed } from '../../server/seed.js';
 import { createApp } from '../../server/app.js';
 import { openDb } from '../../server/db.js';
 import { conferirIntegridade, semearLegado } from '../integridade-cenarios.js';
+import { cadastrarChefe } from '../../server/cadastro-chefes.js';
 
 process.env.SGC_NOW = '2026-09-19T10:00:00';
 
@@ -26,6 +27,23 @@ async function servir(t, db) {
 test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => {
   const cluster = await clusterTemporario(t);
   t.diagnostic(cluster.versao);
+
+  await t.test('cadastro: concorrência de chefes mantém uma atribuição e um vínculo', async t => {
+    const [db, outro] = await cluster.banco(t);
+    await seed(db);
+    await db.prepare('update secoes set chefe_id=null where id=1').run();
+    let criadas=0, liberar;
+    const barreira=new Promise(resolve=>{liberar=resolve;});
+    const removidas=[];
+    const resultados=await Promise.allSettled([db,outro].map((b,i)=>cadastrarChefe(b,{supabaseUrl:'https://projeto.supabase.co'},{
+      criar:async()=>{ if(++criadas===2) liberar(); await barreira; return `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa${i}`; },
+      remover:async id=>{removidas.push(id);},
+    },{nome:`Novo ${i}`,email:`novo${i}@example.org`,senha:'Senha inicial longa',secao_id:1})));
+    assert.equal(resultados.filter(r=>r.status==='fulfilled').length,1);
+    assert.equal(removidas.length,1);
+    assert.equal((await db.prepare('select count(*) as n from auth_contas').get()).n,1);
+    assert.equal((await db.prepare("select count(*) as n from usuarios where email like 'novo%@example.org'").get()).n,1);
+  });
 
   await t.test('integridade: chefes e históricos têm a mesma proteção do SQLite', async t => {
     const [db] = await cluster.banco(t);

@@ -101,3 +101,13 @@ Execute em ambiente de homologação, depois da configuração e da migração. 
 Testes locais cobrem provedor simulado, CSRF, origem, limite de tentativas, vínculo inexistente, sessão expirada/desativada, logout, regras de perfil, cache do cliente e TLS. PostgreSQL real verifica permissões e RLS com papéis `anon`/`authenticated` e sessões em conexões independentes.
 
 Ainda é necessário configurar o projeto Supabase, criar e vincular as contas autorizadas e executar o login real. A tela de entrada não teve inspeção visual.
+
+## Cadastro de chefes pelo Diretor
+
+Em Estrutura → Usuários → Novo chefe com acesso, o Diretor informa nome, e-mail, senha inicial (12–128 caracteres) e seção ativa sem chefe. O servidor cria a conta confirmada via Auth Admin API, cadastra o perfil fixo `chefe`, vincula o UUID e atribui a seção em transação. Não envia convite nem devolve ou armazena a senha no banco Agilis. A senha não tem troca obrigatória no primeiro acesso nesta versão.
+
+Configure `SUPABASE_SERVICE_ROLE_KEY` no servidor com a chave legada `service_role` do mesmo projeto Supabase. Na Vercel, cadastre-a em Production e faça redeploy. É uma chave administrativa exclusiva do backend; mantenha `SUPABASE_PUBLISHABLE_KEY`/`SUPABASE_ANON_KEY` para login. Sem a chave administrativa, os logins existentes continuam funcionando, mas a criação retorna indisponibilidade.
+
+E-mail já existente não é apropriado nem tem a senha substituída. Se a seção já possui chefe, remova antes a atribuição pelo botão Chefe. Falha na transação local tenta excluir somente a nova conta criada. Se essa compensação falhar, ou uma chamada remota expirar após criar a conta, revise a conta no Supabase antes de repetir; sem vínculo ela não ganha acesso ao Agilis. A criação remota e o banco local não compartilham uma transação distribuída.
+
+Referência: https://supabase.com/docs/reference/javascript/auth-admin-createuser

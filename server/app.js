@@ -10,10 +10,11 @@ import {
 import { atualizacaoDe, cartoesReuniao, falha, h, marks, painelSemana, permit, texto, ultimaAtualizacao } from './helpers.js';
 import { rotasReunioes } from './reunioes.js';
 import { configurarAuth, instalarAuth } from './auth.js';
+import { administradorAuth, cadastrarChefe } from './cadastro-chefes.js';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-export function createApp(db, { auth = configurarAuth(), provedor } = {}) {
+export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } = {}) {
   const app = express();
   app.use(compression({ threshold: 512 })); // gzip/brotli: reduz JSON em ~70-80%
   app.use(express.json({ limit: '200kb' }));
@@ -218,6 +219,12 @@ export function createApp(db, { auth = configurarAuth(), provedor } = {}) {
   }));
 
   // ---------- Usuários (cadastro mínimo) ----------
+  app.post('/api/usuarios/chefes', permit('diretor'), h(async (req, res) => {
+    if (auth.mode !== 'supabase') throw falha(400, 'Criação de login disponível somente com Supabase Auth.');
+    const usuario = await cadastrarChefe(db, auth, adminAuth || administradorAuth(auth), req.body || {});
+    res.status(201);
+    return usuario;
+  }));
   app.get('/api/usuarios', permit('diretor', 'apoio'), h(async () =>
     await q(`select u.*, s.nome as secao_nome from usuarios u left join secoes s on s.id = u.secao_id order by u.ativo desc, u.perfil, u.nome`)));
   app.post('/api/usuarios', permit('diretor'), h(async (req, res) => {

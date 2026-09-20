@@ -59,11 +59,11 @@ export async function estrutura(raiz, { refresh }) {
       </form>
     </div>
     <div class="espaco"></div>
-    <div class="cartao"><div class="linha entre"><h2>Usuários</h2><button class="btn btn-sec" data-a="usuario">Novo usuário</button></div>
+    <div class="cartao"><div class="linha entre"><h2>Usuários</h2><div><button class="btn btn-primario" data-a="chefe-acesso">Novo chefe com acesso</button> <button class="btn btn-sec" data-a="usuario">Cadastro sem login</button></div></div>
       <div class="tabela-rolagem"><table><thead><tr><th>Nome</th><th>Perfil</th><th>Seção</th><th></th></tr></thead><tbody>
       ${usuarios.map((u) => `<tr><td>${esc(u.nome)}${u.ativo ? '' : ' <span class="pilula enc">Inativo</span>'}</td><td>${PERFIL[u.perfil]}</td><td>${esc(u.secao_nome || '—')}</td>
         <td>${u.perfil === 'diretor' ? '' : `<button class="btn btn-fantasma btn-mini" data-u="${u.id}" data-ativo="${u.ativo ? 0 : 1}">${u.ativo ? 'Desativar' : 'Reativar'}</button>`}</td></tr>`).join('')}</tbody></table></div>
-      <p class="suave pequeno" style="margin-top:8px">Protótipo: não há senha nem envio de convite. O acesso é escolhido na tela de entrada.</p></div>`;
+      <p class="suave pequeno" style="margin-top:8px">Use Novo chefe com acesso para criar o login e atribuir uma seção. Entregue a senha inicial diretamente ao usuário.</p></div>`;
   const erro = (e) => toast(e.message, 'erro');
   const salvo = (msg) => { toast(msg); refresh(); };
 
@@ -137,6 +137,19 @@ export async function estrutura(raiz, { refresh }) {
             salvo('Seção criada.');
           },
         });
+      } else if (a === 'chefe-acesso') {
+        abrirForm({
+          titulo: 'Novo chefe com acesso', rotulo: 'Criar chefe e login',
+          corpo: `<div class="campo"><label for="ca-nome">Nome</label><input id="ca-nome" name="nome" maxlength="120" required></div>
+            <div class="campo"><label for="ca-email">E-mail de login</label><input id="ca-email" name="email" type="email" maxlength="160" autocomplete="off" required></div>
+            <div class="campo"><label for="ca-senha">Senha inicial</label><input id="ca-senha" name="senha" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><div class="dica">De 12 a 128 caracteres. Entregue a senha diretamente ao usuário.</div></div>
+            <div class="campo"><label for="ca-secao">Seção</label><select id="ca-secao" name="secao_id" required><option value="">Escolha uma seção</option>${secoes.filter(s => s.ativa && !s.chefe_id).map(s => `<option value="${s.id}">${esc(s.nome)}${s.sigla ? ` (${esc(s.sigla)})` : ''}</option>`).join('')}</select><div class="dica">Somente seções ativas e sem chefe. Para substituir um chefe, remova antes a atribuição pelo botão Chefe.</div></div>
+            <p>Perfil: <strong>Chefe de seção</strong>. Confira o e-mail: a conta será criada com acesso imediato, sem envio de convite.</p>`,
+          aoEnviar: async (d, form) => {
+            try { await post('/usuarios/chefes', d); salvo('Chefe criado com login e seção atribuída.'); }
+            finally { form.querySelector('[name="senha"]').value = ''; d.senha = ''; }
+          },
+        });
       } else if (a === 'usuario') {
         abrirForm({
           titulo: 'Novo usuário',
@@ -149,4 +162,3 @@ export async function estrutura(raiz, { refresh }) {
     } catch (e) { erro(e); }
   });
 }
-
