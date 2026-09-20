@@ -83,3 +83,29 @@ test('cadastro: confirmação antiga não autoriza substituir outro chefe',async
  await db.prepare('update secoes set chefe_id=4 where id=1').run();
  await assert.rejects(cadastrarChefe(db,config,{criar:()=>assert.fail('Não criar')},{...dados,substituir_chefe_id:3}),{status:409});
 });
+
+test('cadastro: Apoio recebe login sem assumir seção; Diretor não pode ser criado',async t=>{
+ const db=await ambiente(t);
+ const admin={criar:async()=>subject};
+ const u=await cadastrarChefe(db,config,admin,{...dados,secao_id:undefined},'apoio');
+ assert.equal(u.perfil,'apoio');assert.equal(u.secao_id,null);
+ await assert.rejects(cadastrarChefe(db,config,admin,dados,'diretor'),{status:400});
+});
+test('login administrativo: altera credenciais, encerra sessões e recusa Chefe',async t=>{
+ const {once}=await import('node:events');const {createApp}=await import('../server/app.js');const {hash}=await import('../server/auth.js');
+ const db=await ambiente(t);const origin='https://agilis.example';let atualizacao;
+ const server=createApp(db,{auth:{...config,mode:'supabase',origin,secure:true},adminAuth:{atualizar:async(id,d)=>{atualizacao={id,...d};}}}).listen(0,'127.0.0.1');
+ await once(server,'listening');t.after(()=>new Promise(r=>server.close(r)));
+ for(const id of [1,3]) {
+  const c=(await db.prepare('insert into auth_contas(usuario_id,projeto,subject) values (?,?,?)').run(id,config.supabaseUrl,subject+id)).lastInsertRowid;
+  await db.prepare('insert into auth_sessoes_senha(id,conta_id,csrf,expira_em) values (?,?,?,?)').run(hash(String(id).repeat(43)),c,'csrf-teste',Math.floor(Date.now()/1000)+3600);
+ }
+ const call=(id,body)=>fetch(`http://127.0.0.1:${server.address().port}/api/usuarios/3/login`,{method:'PATCH',headers:{'content-type':'application/json',origin,'x-csrf-token':'csrf-teste',cookie:`__Host-sgc_senha=${String(id).repeat(43)}`},body:JSON.stringify(body)});
+ assert.equal((await call(3,{senha:'Nova senha longa'})).status,403);
+ assert.equal(atualizacao,undefined);
+ assert.equal((await call(1,{senha:'curta'})).status,400);
+ assert.equal((await call(1,{email:'alterado@example.org',senha:'Nova senha longa'})).status,200);
+ assert.equal(atualizacao.email,'alterado@example.org');assert.equal(atualizacao.password,'Nova senha longa');
+ assert.equal((await db.prepare('select email from usuarios where id=3').get()).email,'alterado@example.org');
+ assert.equal((await db.prepare('select count(*) as n from auth_sessoes_senha where id=?').get(hash('3'.repeat(43)))).n,0);
+});

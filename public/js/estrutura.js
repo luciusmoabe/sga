@@ -1,5 +1,5 @@
 // Estrutura: o Diretor cria e organiza as seções em árvore (Centros, Coordenação e subseções) e o cadastro mínimo de usuários.
-import { get, patch, post, put } from './api.js';
+import { get, patch, post, put, del } from './api.js';
 import { atualizarSessao, est } from './estado.js';
 import { abrirForm, confirmar, esc, on, toast } from './ui.js';
 
@@ -22,9 +22,9 @@ export async function estrutura(raiz, { refresh }) {
       <span class="chefe">${s.chefe_nome ? esc(s.chefe_nome) : 'sem chefe'}${s.ativa ? '' : ' · desativada'}</span>
       <span class="fim">
         <button class="btn btn-fantasma btn-mini" data-a="cima" aria-label="Subir">↑</button><button class="btn btn-fantasma btn-mini" data-a="baixo" aria-label="Descer">↓</button>
-        <button class="btn btn-fantasma btn-mini" data-a="renomear">Renomear</button><button class="btn btn-fantasma btn-mini" data-a="chefe">Chefe</button>
+        <button class="btn btn-fantasma btn-mini" data-a="renomear">Editar</button><button class="btn btn-fantasma btn-mini" data-a="chefe">Chefe</button>
         ${s.ativa && s.nivel < LIMITE ? '<button class="btn btn-fantasma btn-mini" data-a="sub">Nova subseção</button>' : ''}
-        <button class="btn btn-fantasma btn-mini" data-a="${s.ativa ? 'desativar' : 'reativar'}">${s.ativa ? 'Desativar' : 'Reativar'}</button></span></div>
+        <button class="btn btn-fantasma btn-mini" data-a="${s.ativa ? 'desativar' : 'reativar'}">${s.ativa ? 'Desativar' : 'Reativar'}</button><button class="btn btn-fantasma btn-mini" data-a="excluir-secao">Excluir</button></span></div>
       ${sub.length ? `<ul>${sub.map(no).join('')}</ul>` : ''}</li>`;
   };
   raiz.innerHTML = `
@@ -59,11 +59,11 @@ export async function estrutura(raiz, { refresh }) {
       </form>
     </div>
     <div class="espaco"></div>
-    <div class="cartao"><div class="linha entre"><h2>Usuários</h2><div><button class="btn btn-primario" data-a="chefe-acesso">Novo chefe com acesso</button> <button class="btn btn-sec" data-a="usuario">Cadastro sem login</button></div></div>
-      <div class="tabela-rolagem"><table><thead><tr><th>Nome</th><th>Perfil</th><th>Seção</th><th></th></tr></thead><tbody>
-      ${usuarios.map((u) => `<tr><td>${esc(u.nome)}${u.ativo ? '' : ' <span class="pilula enc">Inativo</span>'}</td><td>${PERFIL[u.perfil]}</td><td>${esc(u.secao_nome || '—')}</td>
-        <td>${u.perfil === 'diretor' ? '' : `<button class="btn btn-fantasma btn-mini" data-u="${u.id}" data-ativo="${u.ativo ? 0 : 1}">${u.ativo ? 'Desativar' : 'Reativar'}</button>`}</td></tr>`).join('')}</tbody></table></div>
-      <p class="suave pequeno" style="margin-top:8px">Use Novo chefe com acesso para criar o login e atribuir uma seção. Entregue a senha inicial diretamente ao usuário.</p></div>`;
+    <div class="cartao"><div class="linha entre"><h2>Usuários</h2><div><button class="btn btn-primario" data-a="chefe-acesso">Novo usuário com acesso</button> <button class="btn btn-sec" data-a="usuario">Cadastro sem login</button></div></div>
+      <div class="tabela-rolagem"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Seção</th><th></th></tr></thead><tbody>
+      ${usuarios.map((u) => `<tr><td>${esc(u.nome)}${u.ativo ? '' : ' <span class="pilula enc">Inativo</span>'}</td><td>${esc(u.email || '—')}</td><td>${PERFIL[u.perfil]}</td><td>${esc(u.secao_nome || '—')}</td>
+        <td><button class="btn btn-fantasma btn-mini" data-editar-u="${u.id}">Editar</button> ${u.tem_login ? `<button class="btn btn-fantasma btn-mini" data-login-u="${u.id}">Login</button>` : ''} ${u.perfil === 'diretor' ? '' : `<button class="btn btn-fantasma btn-mini" data-u="${u.id}" data-ativo="${u.ativo ? 0 : 1}">${u.ativo ? 'Desativar' : 'Reativar'}</button> <button class="btn btn-fantasma btn-mini" data-excluir-u="${u.id}">Excluir</button>`}</td></tr>`).join('')}</tbody></table></div>
+      <p class="suave pequeno" style="margin-top:8px">Use Novo usuário com acesso para criar o login e atribuir uma seção. Entregue a senha inicial diretamente ao usuário.</p></div>`;
   const erro = (e) => toast(e.message, 'erro');
   const salvo = (msg) => { toast(msg); refresh(); };
 
@@ -91,6 +91,31 @@ export async function estrutura(raiz, { refresh }) {
     }
   });
 
+  on(raiz, 'click', '[data-editar-u]', el => {
+    const u=usuarios.find(x=>x.id===Number(el.dataset.editarU));
+    abrirForm({titulo:'Editar usuário', corpo:`
+      <div class="campo"><label for="eu-nome">Nome</label><input id="eu-nome" name="nome" value="${esc(u.nome)}" maxlength="120" required></div>
+      <div class="campo"><label for="eu-email">E-mail</label><input id="eu-email" name="email" type="email" value="${esc(u.email || '')}" ${u.tem_login ? 'disabled' : ''}><div class="dica">Para contas vinculadas, altere e-mail e senha pelo botão Login.</div></div>
+      ${u.perfil==='diretor' ? '<p>Perfil Diretor protegido.</p>' : `<div class="campo"><label for="eu-perfil">Perfil</label><select id="eu-perfil" name="perfil"><option value="chefe" ${u.perfil==='chefe'?'selected':''}>Chefe</option><option value="apoio" ${u.perfil==='apoio'?'selected':''}>Apoio</option></select></div>
+      <div class="campo"><label for="eu-secao">Seção (Chefe)</label><select id="eu-secao" name="secao_id"><option value="">Sem seção</option>${secoes.filter(s=>s.ativa && (!s.chefe_id || s.chefe_id===u.id)).map(s=>`<option value="${s.id}" ${s.id===u.secao_id?'selected':''}>${esc(s.nome)}</option>`).join('')}</select></div>`}`,
+      aoEnviar:async d=>{await patch(`/usuarios/${u.id}`,d);salvo('Usuário atualizado.');}
+    });
+  });
+  on(raiz, 'click', '[data-login-u]', el => {
+    const u=usuarios.find(x=>x.id===Number(el.dataset.loginU));
+    abrirForm({titulo:`Login de ${u.nome}`,corpo:`
+      <div class="campo"><label for="lu-email">Novo e-mail (opcional)</label><input id="lu-email" name="email" type="email" autocomplete="off"></div>
+      <div class="campo"><label for="lu-senha">Nova senha (opcional)</label><input id="lu-senha" name="senha" type="password" autocomplete="new-password" minlength="12" maxlength="128"></div>
+      <p>As sessões atuais serão encerradas. Entregue a nova senha diretamente ao usuário.</p>`,
+      aoEnviar:async(d,form)=>{try{await patch(`/usuarios/${u.id}/login`,d);salvo('Login atualizado. Entre novamente se alterou sua própria conta.');}finally{form.querySelector('[name="senha"]').value='';d.senha='';}}
+    });
+  });
+  on(raiz, 'click', '[data-excluir-u]', async el => {
+    const u=usuarios.find(x=>x.id===Number(el.dataset.excluirU));
+    if(await confirmar({titulo:'Excluir usuário',texto:`Excluir ${esc(u.nome)} do Agilis? O acesso ao app será removido. Cadastros com histórico não podem ser excluídos. A conta no provedor de login será preservada.`,rotulo:'Excluir',perigo:true})) {
+      try{await del(`/usuarios/${u.id}`);salvo('Usuário excluído.');}catch(e){erro(e);}
+    }
+  });
   on(raiz, 'click', '[data-u]', async (el) => {
     try { await patch(`/usuarios/${el.dataset.u}`, { ativo: el.dataset.ativo === '1' }); salvo('Usuário atualizado.'); } catch (e) { erro(e); }
   });
@@ -99,7 +124,9 @@ export async function estrutura(raiz, { refresh }) {
     const id = el.closest('[data-id]')?.dataset.id;
     const s = id ? secoes.find((x) => x.id === Number(id)) : null;
     try {
-      if (a === 'cima' || a === 'baixo') { await patch(`/secoes/${id}`, { mover: a }); refresh(); }
+      if (a === 'excluir-secao') {
+        if(await confirmar({titulo:'Excluir seção',texto:`Excluir ${esc(s.nome)}? Seções com usuários, subseções ou histórico não podem ser excluídas.`,rotulo:'Excluir',perigo:true})) {await del(`/secoes/${id}`);salvo('Seção excluída.');}
+      } else if (a === 'cima' || a === 'baixo') { await patch(`/secoes/${id}`, { mover: a }); refresh(); }
       else if (a === 'reativar') { await patch(`/secoes/${id}`, { ativa: true }); salvo('Seção reativada.'); }
       else if (a === 'desativar') {
         try { await patch(`/secoes/${id}`, { ativa: false }); salvo('Seção desativada.'); }
@@ -113,9 +140,11 @@ export async function estrutura(raiz, { refresh }) {
         }
       } else if (a === 'renomear') {
         abrirForm({
-          titulo: 'Renomear seção',
+          titulo: 'Editar seção',
           corpo: `<div class="campo"><label for="r-nome">Nome</label><input id="r-nome" name="nome" value="${esc(s.nome)}"></div>
-                  <div class="campo"><label for="r-sigla">Sigla</label><input id="r-sigla" name="sigla" maxlength="12" value="${esc(s.sigla || '')}"></div>`,
+                  <div class="campo"><label for="r-sigla">Sigla</label><input id="r-sigla" name="sigla" maxlength="12" value="${esc(s.sigla || '')}"></div>
+                  <div class="campo"><label for="r-tipo">Tipo</label><select id="r-tipo" name="tipo">${Object.entries(TIPO).map(([k,v])=>`<option value="${k}" ${s.tipo===k?'selected':''}>${v}</option>`).join('')}</select></div>
+                  <div class="campo"><label for="r-pai">Seção superior (somente Subseção)</label><select id="r-pai" name="pai_id"><option value="">Primeiro nível</option>${secoes.filter(x=>x.ativa && x.id!==s.id).map(x=>`<option value="${x.id}" ${s.pai_id===x.id?'selected':''}>${esc(x.nome)}</option>`).join('')}</select></div>`,
           aoEnviar: async (d) => { await patch(`/secoes/${id}`, d); salvo('Seção atualizada.'); },
         });
       } else if (a === 'chefe') {
@@ -139,20 +168,20 @@ export async function estrutura(raiz, { refresh }) {
         });
       } else if (a === 'chefe-acesso') {
         abrirForm({
-          titulo: 'Novo chefe com acesso', rotulo: 'Criar chefe e login',
+          titulo: 'Novo usuário com acesso', rotulo: 'Criar usuário e login',
           corpo: `<div class="campo"><label for="ca-nome">Nome</label><input id="ca-nome" name="nome" maxlength="120" required></div>
             <div class="campo"><label for="ca-email">E-mail de login</label><input id="ca-email" name="email" type="email" maxlength="160" autocomplete="off" required></div>
             <div class="campo"><label for="ca-senha">Senha inicial</label><input id="ca-senha" name="senha" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><div class="dica">De 12 a 128 caracteres. Entregue a senha diretamente ao usuário.</div></div>
             <div class="campo"><label for="ca-secao">Seção</label><select id="ca-secao" name="secao_id" required><option value="">Escolha uma seção</option>${secoes.filter(s => s.ativa).map(s => `<option value="${s.id}">${esc(s.nome)}${s.sigla ? ` (${esc(s.sigla)})` : ''}${s.chefe_id ? ` — chefe atual: ${esc(s.chefe_nome || 'atribuído')}` : ''}</option>`).join('')}</select><div class="dica">Todas as seções ativas estão disponíveis. Se já houver chefe, será solicitada confirmação para substituí-lo.</div></div>
-            <p>Perfil: <strong>Chefe de seção</strong>. Confira o e-mail: a conta será criada com acesso imediato, sem envio de convite.</p>`,
+            <div class="campo"><label for="ca-perfil">Perfil</label><select id="ca-perfil" name="perfil"><option value="chefe">Chefe de seção</option><option value="apoio">Apoio (sem seção)</option></select></div><p>Confira o e-mail: a conta será criada com acesso imediato, sem envio de convite.</p>`,
           aoEnviar: async (d, form) => {
             const selecionada = secoes.find(s => s.id === Number(d.secao_id));
-            if (selecionada?.chefe_id) {
+            if (d.perfil === 'chefe' && selecionada?.chefe_id) {
               const ok = await confirmar({ titulo: 'Substituir chefe da seção', texto: `O novo usuário assumirá ${esc(selecionada.nome)} no lugar de ${esc(selecionada.chefe_nome || 'seu chefe atual')}. O chefe anterior perderá a atribuição à seção; o histórico será preservado.`, rotulo: 'Confirmar substituição' });
               if (!ok) throw new Error('Substituição cancelada. Escolha outra seção ou confirme para continuar.');
               d.substituir_chefe_id = selecionada.chefe_id;
             }
-            try { await post('/usuarios/chefes', d); salvo('Chefe criado com login e seção atribuída.'); }
+            try { await post('/usuarios/acesso', d); salvo('Usuário criado com acesso.'); }
             finally { form.querySelector('[name="senha"]').value = ''; d.senha = ''; }
           },
         });

@@ -28,6 +28,22 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
   const cluster = await clusterTemporario(t);
   t.diagnostic(cluster.versao);
 
+  await t.test('CRUD: transações, edição de hierarquia e exclusão respeitam vínculos', async t => {
+    const [db] = await cluster.banco(t);
+    await seed(db);
+    const call = await servir(t,db);
+    const s = await call('POST','/secoes',{nome:'Nova CRUD',tipo:'centro'});
+    assert.equal(s.status,201);
+    const u = await call('POST','/usuarios',{nome:'Novo CRUD',perfil:'chefe'});
+    assert.equal((await call('PATCH',`/usuarios/${u.data.id}`,{secao_id:s.data.id})).status,200);
+    assert.equal((await call('DELETE',`/usuarios/${u.data.id}`)).status,409);
+    assert.equal((await call('DELETE',`/secoes/${s.data.id}`)).status,409);
+    assert.equal((await call('PATCH',`/usuarios/${u.data.id}`,{perfil:'apoio'})).status,200);
+    assert.equal((await call('PATCH',`/secoes/${s.data.id}`,{tipo:'subsecao',pai_id:s.data.id})).status,400);
+    assert.equal((await call('DELETE',`/usuarios/${u.data.id}`)).status,200);
+    assert.equal((await call('DELETE',`/secoes/${s.data.id}`)).status,200);
+  });
+
   await t.test('cadastro: concorrência de chefes mantém uma atribuição e um vínculo', async t => {
     const [db, outro] = await cluster.banco(t);
     await seed(db);

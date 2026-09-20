@@ -10,6 +10,7 @@ import {
 import { atualizacaoDe, cartoesReuniao, falha, h, marks, painelSemana, permit, texto, ultimaAtualizacao } from './helpers.js';
 import { rotasReunioes } from './reunioes.js';
 import { configurarAuth, instalarAuth } from './auth.js';
+import { editarHierarquia, excluirCadastro } from './crud-cadastros.js';
 import { administradorAuth, cadastrarChefe } from './cadastro-chefes.js';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -141,7 +142,8 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
     await run('update secoes set chefe_id = ? where id = ?', chefeId, secaoId);
   };
 
-  app.post('/api/secoes', permit('diretor'), h(async (req, res) => {
+  app.post('/api/secoes', permit('diretor'), h(async (req, res) => db.transaction(async () => {
+    if (db.isPg) await db.prepare('select pg_advisory_xact_lock(7319, 2)').get();
     const b = req.body || {};
     const nome = texto(b.nome, 120);
     if (!nome) throw falha(400, 'Informe o nome da seção.');
@@ -166,13 +168,18 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
     if (chefe) await atribuirChefe(id, chefe);
     res.status(201);
     return (await listaSecoes(req.user)).find((s) => s.id === id);
-  }));
+  })));
 
-  app.patch('/api/secoes/:id', permit('diretor'), h(async (req) => {
+  app.patch('/api/secoes/:id', permit('diretor'), h(async (req) => db.transaction(async () => {
+    if (db.isPg) await db.prepare('select pg_advisory_xact_lock(7319, 2)').get();
     const id = Number(req.params.id);
     const s = await q1('select * from secoes where id = ?', id);
     if (!s) throw falha(404, 'Seção não encontrada.');
     const b = req.body || {};
+    if ('tipo' in b || 'pai_id' in b) {
+      await editarHierarquia(db,id,b);
+      Object.assign(s, await q1('select * from secoes where id=?',id));
+    }
     if ('nome' in b) {
       const nome = texto(b.nome, 120);
       if (!nome) throw falha(400, 'O nome da seção não pode ficar vazio.');
@@ -216,7 +223,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
       }
     }
     return (await listaSecoes(req.user)).find((x) => x.id === id);
-  }));
+  })));
 
   // ---------- Usuários (cadastro mínimo) ----------
   app.post('/api/usuarios/chefes', permit('diretor'), h(async (req, res) => {
@@ -225,8 +232,37 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
     res.status(201);
     return usuario;
   }));
+  app.post('/api/usuarios/acesso', permit('diretor'), h(async(req,res)=>{
+    if(auth.mode!=='supabase') throw falha(400,'Login requer Supabase Auth.');
+    const u=await cadastrarChefe(db,auth,adminAuth || administradorAuth(auth),req.body || {},req.body?.perfil);
+    res.status(201); return u;
+  }));
+  app.patch('/api/usuarios/:id/login', permit('diretor'), h(async(req)=>{
+    if(auth.mode!=='supabase') throw falha(400,'Login requer Supabase Auth.');
+    const id=Number(req.params.id), b=req.body || {};
+    const conta=await q1('select * from auth_contas where usuario_id=? and projeto=?',id,auth.supabaseUrl);
+    if(!conta) throw falha(404,'Usuário sem login vinculado.');
+    const dados={};
+    if(b.email) {
+      const email=String(b.email).trim().toLowerCase();
+      if(email.length>160 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw falha(400,'E-mail inválido.');
+      if(await q1('select id from usuarios where lower(email)=? and id!=?',email,id)) throw falha(409,'E-mail já cadastrado.');
+      dados.email=email; dados.email_confirm=true;
+    }
+    if(b.senha) {
+      if(typeof b.senha!=='string' || b.senha.length<12 || b.senha.length>128) throw falha(400,'Senha deve ter entre 12 e 128 caracteres.');
+      dados.password=b.senha;
+    }
+    if(!Object.keys(dados).length) throw falha(400,'Informe novo e-mail ou senha.');
+    await (adminAuth || administradorAuth(auth)).atualizar(conta.subject,dados);
+    await db.transaction(async()=>{
+      if(dados.email) await run('update usuarios set email=? where id=?',dados.email,id);
+      await run('delete from auth_sessoes_senha where conta_id=?',conta.id);
+    });
+    return {ok:true};
+  }));
   app.get('/api/usuarios', permit('diretor', 'apoio'), h(async () =>
-    await q(`select u.*, s.nome as secao_nome from usuarios u left join secoes s on s.id = u.secao_id order by u.ativo desc, u.perfil, u.nome`)));
+    await q(`select u.*, s.nome as secao_nome, (select count(*) from auth_contas c where c.usuario_id=u.id) as tem_login from usuarios u left join secoes s on s.id = u.secao_id order by u.ativo desc, u.perfil, u.nome`)));
   app.post('/api/usuarios', permit('diretor'), h(async (req, res) => {
     const b = req.body || {};
     const nome = texto(b.nome, 120);
@@ -236,14 +272,44 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
     res.status(201);
     return await q1('select * from usuarios where id = ?', id);
   }));
-  app.patch('/api/usuarios/:id', permit('diretor'), h(async (req) => {
-    const id = Number(req.params.id);
-    const u = await q1('select * from usuarios where id = ?', id);
+  app.patch('/api/usuarios/:id', permit('diretor'), h(async (req) => db.transaction(async () => {
+    const id = Number(req.params.id), b=req.body || {};
+    const u = await q1('select * from usuarios where id = ?' + (db.isPg ? ' for update' : ''), id);
     if (!u) throw falha(404, 'Usuário não encontrado.');
-    if (u.perfil === 'diretor') throw falha(400, 'O perfil de Diretor não pode ser alterado aqui.');
-    if ('ativo' in (req.body || {})) await run('update usuarios set ativo = ? where id = ?', req.body.ativo ? 1 : 0, id);
+    if (u.perfil === 'diretor' && ('perfil' in b || 'ativo' in b || 'secao_id' in b)) throw falha(400, 'Perfil e acesso do Diretor são protegidos.');
+    const perfil=b.perfil ?? u.perfil;
+    if (!['diretor','chefe','apoio'].includes(perfil) || (u.perfil !== 'diretor' && perfil === 'diretor')) throw falha(400,'Escolha Chefe ou Apoio.');
+    if ('nome' in b) {
+      const nome=texto(b.nome,120);
+      if(!nome) throw falha(400,'Informe o nome.');
+      await run('update usuarios set nome=? where id=?',nome,id);
+    }
+    if ('email' in b) {
+      const email=texto(b.email,160).toLowerCase();
+      if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw falha(400,'E-mail inválido.');
+      if(email && await q1('select id from usuarios where lower(email)=? and id!=?',email,id)) throw falha(409,'E-mail já cadastrado.');
+      const conta=await q1('select id from auth_contas where usuario_id=?',id);
+      if(conta && email !== u.email) throw falha(409,'Para uma conta vinculada, altere o e-mail pelo botão Login.');
+      await run('update usuarios set email=? where id=?',email || null,id);
+    }
+    if ('ativo' in b && typeof b.ativo !== 'boolean') throw falha(400,'Estado inválido.');
+    const ativo='ativo' in b ? Number(b.ativo) : u.ativo;
+    const secao='secao_id' in b ? (b.secao_id ? Number(b.secao_id) : null) : u.secao_id;
+    if(perfil==='chefe' && ativo && secao) {
+      const s=await q1('select * from secoes where id=?',secao);
+      if(!s?.ativa) throw falha(400,'Escolha uma seção ativa.');
+      if(s.chefe_id && s.chefe_id!==id) throw falha(409,'A seção já possui outro chefe. Use o botão Chefe para substituir.');
+    }
+    await run('update secoes set chefe_id=null where chefe_id=?',id);
+    await run('update usuarios set perfil=?,ativo=?,secao_id=? where id=?',perfil,ativo,perfil==='chefe' && ativo ? secao : null,id);
+    if(perfil==='chefe' && ativo && secao) {
+      const r=await run('update secoes set chefe_id=? where id=? and chefe_id is null and ativa=1',id,secao);
+      if(r.changes!==1) throw falha(409,'Seção alterada por outra operação. Atualize a página.');
+    }
     return await q1('select * from usuarios where id = ?', id);
-  }));
+  })));
+  app.delete('/api/usuarios/:id', permit('diretor'), h(req => excluirCadastro(db,'usuarios',Number(req.params.id))));
+  app.delete('/api/secoes/:id', permit('diretor'), h(req => excluirCadastro(db,'secoes',Number(req.params.id))));
 
   // ---------- Diretrizes e ações ----------
   async function criarDiretriz(user, b, reuniaoId = null) {

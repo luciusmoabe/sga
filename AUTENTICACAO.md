@@ -111,3 +111,14 @@ Configure `SUPABASE_SERVICE_ROLE_KEY` no servidor com a chave legada `service_ro
 E-mail já existente não é apropriado nem tem a senha substituída. Na substituição, o chefe anterior perde a atribuição à seção, mas seu cadastro e histórico são preservados. A confirmação vale somente para o chefe exibido; alterações concorrentes exigem atualizar a página. Falha na transação local tenta excluir somente a nova conta criada. Se essa compensação falhar, ou uma chamada remota expirar após criar a conta, revise a conta no Supabase antes de repetir; sem vínculo ela não ganha acesso ao Agilis. A criação remota e o banco local não compartilham uma transação distribuída.
 
 Referência: https://supabase.com/docs/reference/javascript/auth-admin-createuser
+
+## Gestão completa de seções e usuários
+
+O Diretor gerencia os cadastros em **Estrutura**:
+
+- **Seções:** criar, listar, editar nome/sigla/tipo/seção superior, atribuir chefia, ordenar, desativar/reativar e excluir. Alterações da hierarquia recusam ciclos e profundidade acima de três níveis; gravações compostas são transacionais.
+- **Usuários:** criar Chefe ou Apoio com login, listar e-mail/perfil/seção, editar nome, perfil e atribuição, desativar/reativar e excluir. O Diretor pode editar o próprio nome e login, mas não excluir ou rebaixar seu perfil. Desativar ou mudar para Apoio libera a chefia anterior; reativar não restaura automaticamente essa atribuição.
+- **Login:** alterar e-mail e/ou senha pelo botão Login para contas vinculadas. As alterações usam a API administrativa Supabase e revogam as sessões Agilis do usuário. A chave administrativa já exigida para criação é usada também aqui. Alterações remotas de credenciais e persistência local não compartilham transação: se ocorrer falha depois da resposta do Supabase, confira as credenciais no provedor antes de repetir.
+- **Exclusão:** somente cadastros sem referências podem ser removidos. Usuários com chefia atribuída ou histórico e seções com subseções, usuários ou registros relacionados retornam conflito com orientação para desativar. Exclusão de usuário remove seus vínculos e sessões Agilis na mesma transação, mas preserva a conta no Supabase Auth, que pode servir a outros aplicativos. Essa conta fica sem acesso ao Agilis.
+
+Contas vinculadas alteram e-mail pelo botão Login para atualizar também o provedor. O cadastro sem login permanece disponível para organizar os dados; não cria credenciais. As operações de escrita exigem Diretor, sessão válida, origem e CSRF. Não há migração de esquema nesta entrega.
