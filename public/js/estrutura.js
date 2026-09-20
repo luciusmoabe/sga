@@ -1,6 +1,6 @@
 // Estrutura: o Diretor cria e organiza as seções em árvore (Centros, Coordenação e subseções) e o cadastro mínimo de usuários.
 import { get, patch, post, put } from './api.js';
-import { est } from './estado.js';
+import { atualizarSessao, est } from './estado.js';
 import { abrirForm, confirmar, esc, on, toast } from './ui.js';
 
 const TIPO = { centro: 'Centro', coordenacao: 'Coordenação', subsecao: 'Subseção' };
@@ -76,14 +76,12 @@ export async function estrutura(raiz, { refresh }) {
     erroEl.classList.add('oculto');
     btn.disabled = true;
     try {
-      const cfgAtualizada = await put('/config', {
+      await put('/config', {
         combinados_frequencia: config.combinados_frequencia || 'sempre',
         reuniao_dia: Number(formReuniao.reuniao_dia.value),
         reuniao_hora: formReuniao.reuniao_hora.value,
       });
-      // Atualiza o bootstrap em memória para refletir no trilho imediatamente
-      est.boot.reuniao_dia = cfgAtualizada.reuniao_dia != null ? Number(cfgAtualizada.reuniao_dia) : 2;
-      est.boot.reuniao_hora = cfgAtualizada.reuniao_hora || '10:00';
+      atualizarSessao(await get('/bootstrap'));
       toast('Configuração da reunião salva.');
       refresh();
     } catch (ex) {

@@ -148,7 +148,6 @@ function openSqliteDb(file) {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
-  try { db.prepare('alter table acoes add column arquivada integer not null default 0').run(); } catch {}
   // Toda operação externa passa pela fila, inclusive leituras. Assim nenhuma
   // requisição entra na transação aberta por outra enquanto seu callback aguarda.
   const transacao = new AsyncLocalStorage();
@@ -167,25 +166,34 @@ function openSqliteDb(file) {
 
   return {
     isPg: false,
+    exec: (sql) => executar(() => { db.exec(sql); }),
     prepare(sql) {
       return Object.fromEntries(['all', 'get', 'run'].map(metodo => [
         metodo, (...params) => executar(() => db.prepare(sql)[metodo](...params)),
       ]));
     },
-    async transaction(fn) {
+    async transaction(fn, { rebuildForeignKeys = false } = {}) {
       if (transacao.getStore()) throw new Error('Transações aninhadas não são suportadas.');
       return enfileirar(async () => {
         const contexto = { ativa: true };
-        db.exec('BEGIN');
         try {
+          // Apenas o migrador usa este modo. A fila impede consultas externas
+          // enquanto as FKs estão desligadas para reconstruir uma tabela.
+          if (rebuildForeignKeys) db.pragma('foreign_keys = OFF');
+          db.exec(rebuildForeignKeys ? 'BEGIN IMMEDIATE' : 'BEGIN');
           const resultado = await transacao.run(contexto, fn);
+          if (rebuildForeignKeys) {
+            const invalidas = db.pragma('foreign_key_check');
+            if (invalidas.length) throw new Error(`Migração interrompida: referências inválidas ${JSON.stringify(invalidas)}.`);
+          }
           db.exec('COMMIT');
           return resultado;
         } catch (err) {
-          db.exec('ROLLBACK');
+          if (db.inTransaction) db.exec('ROLLBACK');
           throw err;
         } finally {
           contexto.ativa = false;
+          if (rebuildForeignKeys) db.pragma('foreign_keys = ON');
         }
       });
     },
@@ -193,14 +201,32 @@ function openSqliteDb(file) {
   };
 }
 
-function openPgDb(url) {
-  const pool = new Pool({
-    connectionString: url,
-    ssl: { rejectUnauthorized: false },
-    max: Number(process.env.PG_POOL_MAX) || 10,
+export function configurarPg(url, env = process.env) {
+  const destino = new URL(url);
+  if (!['postgres:', 'postgresql:'].includes(destino.protocol)) throw new Error('URL PostgreSQL inválida.');
+  const modo = destino.searchParams.get('sslmode');
+  if (modo && !['require', 'verify-ca', 'verify-full'].includes(modo)) throw new Error('A conexão PostgreSQL exige TLS verificado.');
+  for (const chave of ['ssl', 'sslcert', 'sslkey', 'sslrootcert']) {
+    if (destino.searchParams.has(chave)) throw new Error('Configure TLS pelo ambiente; use SGC_PG_CA_FILE para a CA.');
+  }
+  destino.searchParams.delete('sslmode'); // Impede que pg substitua a configuração explícita de TLS.
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(destino.hostname);
+  if (env.SGC_PG_SSL && !['verify', 'disable'].includes(env.SGC_PG_SSL)) throw new Error('SGC_PG_SSL deve ser verify ou disable (somente loopback).');
+  if (env.SGC_PG_SSL === 'disable' && !local) throw new Error('TLS só pode ser desativado para PostgreSQL local.');
+  return {
+    connectionString: destino.href,
+    ssl: env.SGC_PG_SSL === 'disable' ? false : {
+      rejectUnauthorized: true,
+      ...(env.SGC_PG_CA_FILE ? { ca: fs.readFileSync(env.SGC_PG_CA_FILE, 'utf8') } : {}),
+    },
+    max: Number(env.PG_POOL_MAX) || 10,
     idleTimeoutMillis: 30_000,       // fecha conexões ociosas após 30s
     connectionTimeoutMillis: 5_000,  // erro se não conectar em 5s
-  });
+  };
+}
+
+function openPgDb(url) {
+  const pool = new Pool(configurarPg(url));
 
   return createPgDb(pool);
 }
@@ -217,6 +243,7 @@ export function createPgDb(pool) {
   const db = {
     isPg: true,
     pool,
+    exec: async (sql) => { await query(sql); },
     prepare(sql) {
       return {
         all: async (...p) => {
@@ -267,8 +294,8 @@ export function createPgDb(pool) {
   return db;
 }
 
-export function openDb(target = process.env.SGC_DB || 'data/sgc.db') {
-  const dbUrl = process.env.DATABASE_URL;
+export function openDb(target = process.env.SGC_DB || 'data/sgc.db', { databaseUrl = process.env.DATABASE_URL } = {}) {
+  const dbUrl = databaseUrl;
   if (target !== ':memory:' && dbUrl) {
     return openPgDb(dbUrl);
   }

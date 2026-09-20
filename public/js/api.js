@@ -1,17 +1,44 @@
-// Cliente da API. O "login" do protótipo só guarda o id do usuário escolhido.
-export const sessao = { userId: null };
+// Login por e-mail e senha usa cookie HttpOnly; IDs locais só existem no modo demo.
+export const sessao = { userId: null, modo: null, csrf: null, geracao: 0 };
+let configuracao;
+export function modoAuth() {
+  return configuracao ||= fetch('/api/auth/config', { cache: 'no-store' }).then(async r => {
+    if (!r.ok) throw new Error('Não foi possível consultar a configuração de acesso.');
+    const { modo } = await r.json();
+    if (!['demo', 'supabase'].includes(modo)) throw new Error('Configuração de acesso inválida.');
+    sessao.modo = modo;
+    return modo;
+  }).catch(e => { configuracao = null; throw e; });
+}
 try {
   sessao.userId = localStorage.getItem('agilis-usuario');
 } catch { /* armazenamento indisponível: segue sem lembrar o usuário */ }
 
 export function entrar(id) {
+  if (sessao.modo !== 'demo') return;
+  sessao.geracao++;
+  _cache.clear();
   sessao.userId = String(id);
   try { localStorage.setItem('agilis-usuario', String(id)); } catch { /* ignora */ }
 }
-export function sair() {
+export function limparSessao() {
+  sessao.geracao++;
+  sessao.csrf = null;
   sessao.userId = null;
   _cache.clear();
   try { localStorage.removeItem('agilis-usuario'); } catch { /* ignora */ }
+}
+export async function entrarSenha(email, senha) {
+  const dados = await post('/auth/entrar', { email, senha });
+  limparSessao();
+  sessao.csrf = dados.csrf;
+}
+export async function sair() {
+  if (sessao.modo === 'supabase') {
+    try { await post('/auth/sair'); }
+    catch (e) { if (e.status !== 401) throw e; }
+  }
+  limparSessao();
 }
 
 // ── Cache em memória para GETs (TTL = 5 segundos) ──────────────────────────
@@ -21,7 +48,7 @@ const _cache = new Map();
 const TTL_MS = 5_000;
 
 function _cacheKey(caminho) {
-  return `${sessao.userId}:${caminho}`;
+  return `${sessao.geracao}:${sessao.userId}:${caminho}`;
 }
 
 function _invalidarCache() {
@@ -41,6 +68,7 @@ function _setCache(caminho, dados) {
 // ────────────────────────────────────────────────────────────────────────────
 
 export async function api(caminho, { method = 'GET', corpo } = {}) {
+  const geracao = sessao.geracao;
   // Serve do cache para GETs
   if (method === 'GET') {
     const cached = _getCache(caminho);
@@ -51,13 +79,17 @@ export async function api(caminho, { method = 'GET', corpo } = {}) {
   try {
     r = await fetch(`/api${caminho}`, {
       method,
-      headers: { 'content-type': 'application/json', 'x-user-id': sessao.userId || '' },
+      cache: 'no-store', credentials: 'same-origin',
+      headers: { 'content-type': 'application/json',
+        ...(sessao.modo === 'demo' ? { 'x-user-id': sessao.userId || '' } : {}),
+        ...(sessao.csrf ? { 'x-csrf-token': sessao.csrf } : {}) },
       body: corpo ? JSON.stringify(corpo) : undefined,
     });
   } catch {
     throw new Error('Não foi possível falar com o servidor. Verifique se o Agilis está em execução.');
   }
   const dados = await r.json().catch(() => ({}));
+  if (geracao !== sessao.geracao) throw new Error('A sessão mudou. Atualize a tela.');
   if (!r.ok) {
     const e = new Error(dados.erro || 'Algo deu errado. Tente novamente.');
     e.status = r.status;
@@ -65,6 +97,7 @@ export async function api(caminho, { method = 'GET', corpo } = {}) {
     throw e;
   }
 
+  if (caminho === '/bootstrap') sessao.csrf = dados.csrf || null;
   if (method === 'GET') _setCache(caminho, dados);
   else _invalidarCache(); // mutação invalida todo o cache
 

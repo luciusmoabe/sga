@@ -36,6 +36,7 @@ test('PostgreSQL: leituras e escritas usam o cliente da transação, mesmo prepa
   const { db, eventos, gravados } = bancoSimulado();
   const consulta = db.prepare('select id from acoes where id = ?');
   const resultado = await db.transaction(async () => {
+    await db.exec('create table exemplo (id integer)');
     await consulta.all(1);
     assert.equal((await consulta.get(1)).id, 42);
     return db.prepare('insert into acoes (titulo) values (?)').run('Teste');

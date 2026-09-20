@@ -16,7 +16,7 @@ export async function combinados(raiz, { refresh }) {
   let n = 0;
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>Combinados da reunião</h1>
-      <div class="sub">${gere ? 'Aparecem em uma tela curta quando a reunião começa. Mudanças valem a partir da próxima reunião.' : 'Como conduzimos a reunião de terça.'}</div></div></div>
+      <div class="sub">${gere ? 'Aparecem em uma tela curta quando a reunião começa. Mudanças valem a partir da próxima reunião.' : 'Como conduzimos a reunião semanal.'}</div></div></div>
     ${gere && c.aviso ? `<div class="aviso">${esc(c.aviso)}</div>` : ''}
     <div class="cartao">
       ${c.itens.length ? `<ol class="combinados">${c.itens.map((i) => {

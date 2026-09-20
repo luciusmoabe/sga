@@ -8,7 +8,7 @@ import { seed } from '../server/seed.js';
 process.env.SGC_NOW = '2026-09-19T10:00:00';
 
 async function servir(t, db) {
-  const server = createApp(db).listen(0, '127.0.0.1');
+  const server = createApp(db, { auth: { mode: 'demo' } }).listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(() => new Promise((resolve, reject) => {
     server.close(err => err ? reject(err) : resolve());
@@ -252,4 +252,139 @@ test('API: decisão exige booleano e recusa pedido cujo prazo de origem mudou', 
   assert.equal((await db.prepare('select status from pedidos_prazo where id = ?').get(pedido.id)).status, 'pendente');
   assert.equal((await call('POST', `/pedidos-prazo/${pedido.id}/decidir`, { aprovar: false })).status, 200);
   assert.equal((await db.prepare('select prazo from acoes where id = ?').get(pedido.acao_id)).prazo, '2026-12-31');
+});
+
+test('API: inícios simultâneos retomam uma única reunião e encerramento tem um vencedor', async (t) => {
+  const db = openDb(':memory:');
+  t.after(() => db.close());
+  await seed(db);
+  const call = await servir(t, db);
+  const inicios = await Promise.all(Array.from({ length: 8 }, () => call('POST', '/reunioes/iniciar')));
+  assert.equal(inicios.filter(r => r.status === 201).length, 1);
+  assert.equal(inicios.filter(r => r.status === 200 && r.data.retomada).length, 7);
+  assert.equal(new Set(inicios.map(r => r.data.reuniao.id)).size, 1);
+  const id = inicios[0].data.reuniao.id;
+  const finais = await Promise.all([call('POST', `/reunioes/${id}/encerrar`), call('POST', `/reunioes/${id}/encerrar`)]);
+  assert.deepEqual(finais.map(r => r.status).sort(), [200, 409]);
+  assert.equal((await db.prepare("select count(*) n from reunioes where status = 'em_andamento'").get()).n, 0);
+});
+
+test('API: reaberturas simultâneas de rascunhos distintos não abrem duas reuniões', async (t) => {
+  const db = openDb(':memory:');
+  t.after(() => db.close());
+  await seed(db);
+  const call = await servir(t, db);
+  const ids = [];
+  for (let i = 0; i < 2; i++) {
+    const id = (await call('POST', '/reunioes/iniciar')).data.reuniao.id;
+    await call('POST', `/reunioes/${id}/encerrar`);
+    ids.push(id);
+  }
+  const resultados = await Promise.all(ids.map(id => call('POST', `/reunioes/${id}/reabrir`)));
+  assert.deepEqual(resultados.map(r => r.status).sort(), [200, 409]);
+  assert.equal((await db.prepare("select count(*) n from reunioes where status = 'em_andamento'").get()).n, 1);
+});
+
+test('API: edição concorrente ao envio não modifica ata já publicada', async (t) => {
+  const db = openDb(':memory:');
+  t.after(() => db.close());
+  await seed(db);
+  const call = await servir(t, db);
+  const id = (await call('POST', '/reunioes/iniciar')).data.reuniao.id;
+  await call('POST', `/reunioes/${id}/encerrar`);
+  const [enviada, edicao] = await Promise.all([
+    call('POST', `/reunioes/${id}/enviar-ata`),
+    call('PUT', `/reunioes/${id}/ata`, { ata_texto: 'Edição concorrente' }),
+  ]);
+  assert.equal(enviada.status, 200);
+  assert.ok([200, 409].includes(edicao.status));
+  const atual = (await call('GET', `/reunioes/${id}`)).data;
+  assert.equal(atual.status, 'enviada');
+  assert.equal(atual.ata_texto, enviada.data.ata_texto);
+  assert.equal((await call('PUT', `/reunioes/${id}/ata`, { ata_texto: 'Edição tardia' })).status, 409);
+  assert.equal((await call('POST', `/reunioes/${id}/reabrir`)).status, 409);
+});
+
+test('API: ações e decisões concorrentes ao encerramento entram na ata ou são recusadas', async (t) => {
+  const db = openDb(':memory:');
+  t.after(() => db.close());
+  await seed(db);
+  const call = await servir(t, db);
+  const id = (await call('POST', '/reunioes/iniciar')).data.reuniao.id;
+  const [acao, decisao, encerrada] = await Promise.all([
+    call('POST', `/reunioes/${id}/acoes`, { titulo: 'Ação concorrente', destino: 'todos', prazo: '2026-12-31' }),
+    call('POST', `/reunioes/${id}/decisoes`, { texto: 'Decisão concorrente' }),
+    call('POST', `/reunioes/${id}/encerrar`),
+  ]);
+  assert.equal(encerrada.status, 200);
+  for (const [resposta, texto] of [[acao, 'Ação concorrente'], [decisao, 'Decisão concorrente']]) {
+    assert.ok([201, 409].includes(resposta.status));
+    assert.equal(encerrada.data.ata_texto.includes(texto), resposta.status === 201);
+  }
+  assert.equal((await call('POST', `/reunioes/${id}/acoes`, { titulo: 'Ação tardia', destino: 'todos', prazo: '2026-12-31' })).status, 409);
+  assert.equal((await db.prepare("select count(*) n from diretrizes where titulo = 'Ação tardia'").get()).n, 0);
+});
+
+test('API: configuração inválida ou falha de gravação não deixa alterações parciais', async (t) => {
+  const db = openDb(':memory:');
+  t.after(() => db.close());
+  t.mock.method(console, 'error', () => {});
+  await seed(db);
+  const call = await servir(t, db);
+  const antes = (await call('GET', '/config')).data;
+  for (const invalido of [{ reuniao_dia: 7 }, { reuniao_dia: false }, { reuniao_dia: '' }, { reuniao_dia: 4, reuniao_hora: '25:00' }]) {
+    assert.equal((await call('PUT', '/config', { combinados_frequencia: 'quando_mudarem', ...invalido })).status, 400);
+    assert.deepEqual((await call('GET', '/config')).data, antes);
+  }
+  const preparar = db.prepare.bind(db);
+  db.prepare = sql => {
+    const stmt = preparar(sql);
+    if (!sql.startsWith('insert into config')) return stmt;
+    return { ...stmt, run: async (...params) => {
+      if (params[0] === 'reuniao_hora') throw new Error('Falha de gravação');
+      return stmt.run(...params);
+    } };
+  };
+  assert.equal((await call('PUT', '/config', { combinados_frequencia: 'quando_mudarem', reuniao_dia: 4, reuniao_hora: '11:00' })).status, 500);
+  db.prepare = preparar;
+  assert.deepEqual((await call('GET', '/config')).data, antes);
+});
+
+test('API: novo dia atualiza bootstrap e preserva consulta das semanas históricas', async (t) => {
+  const db = openDb(':memory:');
+  t.after(() => db.close());
+  await seed(db);
+  const call = await servir(t, db);
+  assert.equal((await call('PUT', '/config', { combinados_frequencia: 'sempre', reuniao_dia: 4, reuniao_hora: '11:30' })).status, 200);
+  const boot = (await call('GET', '/bootstrap')).data;
+  assert.equal(boot.fuso, 'America/Bahia');
+  assert.equal(boot.reuniao_dia, 4);
+  assert.equal(boot.reuniao_hora, '11:30');
+  assert.equal(boot.semana, '2026-09-24');
+  assert.equal(boot.fechamento, '2026-09-23T18:00:00');
+  assert.equal(boot.config.reuniao_dia, '4');
+  assert.equal((await call('GET', '/painel?semana=2026-09-22')).status, 200);
+  assert.equal((await call('GET', '/pauta?semana=2026-09-22')).status, 200);
+  assert.equal((await call('GET', '/atualizacao?semana=2026-09-22', undefined, 3)).status, 200);
+  assert.equal((await call('GET', '/painel?semana=2026-09-23')).status, 400);
+});
+
+test('API: configurações concorrentes retornam conjuntos coerentes', async (t) => {
+  const db = openDb(':memory:');
+  t.after(() => db.close());
+  await seed(db);
+  const call = await servir(t, db);
+  const opcoes = [
+    { combinados_frequencia: 'sempre', reuniao_dia: 0, reuniao_hora: '09:30' },
+    { combinados_frequencia: 'quando_mudarem', reuniao_dia: 4, reuniao_hora: '11:00' },
+  ];
+  const respostas = await Promise.all(opcoes.map(o => call('PUT', '/config', o)));
+  respostas.forEach((r, i) => {
+    assert.equal(r.status, 200);
+    assert.equal(r.data.combinados_frequencia, opcoes[i].combinados_frequencia);
+    assert.equal(r.data.reuniao_dia, String(opcoes[i].reuniao_dia));
+    assert.equal(r.data.reuniao_hora, opcoes[i].reuniao_hora);
+  });
+  const final = (await call('GET', '/config')).data;
+  assert.ok(respostas.some(r => JSON.stringify(r.data) === JSON.stringify(final)));
 });

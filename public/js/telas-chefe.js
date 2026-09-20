@@ -2,7 +2,7 @@
 import { del, get, patch, post, put } from './api.js';
 import { est } from './estado.js';
 import {
-  $, abrirForm, addDias, br, dataHora, esc, fmtMin, on, pilulaStatus, plural, PRIO, STATUS, toast, vazio,
+  $, abrirForm, addDias, br, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, STATUS, toast, vazio,
 } from './ui.js';
 import { abrirAcao } from './acao-comum.js';
 import { relatoHTML } from './telas-diretor.js';
@@ -60,7 +60,7 @@ export async function atualizacao(raiz) {
     apoio: at?.apoio || '',
   };
   raiz.innerHTML = `
-    <div class="cabeca"><div><h1>Minha atualização</h1><div class="sub">Para a reunião de terça, ${br(semana)} · fecha segunda, ${br(addDias(semana, -1))}, às 18h</div></div></div>
+    <div class="cabeca"><div><h1>Minha atualização</h1><div class="sub">Para a reunião de ${diaSemana(semana)}, ${br(semana)} · prazo regular ${diaSemana(addDias(semana, -1))}, ${br(addDias(semana, -1))}, às 18h</div></div></div>
     ${at ? `<div class="info">Você já enviou esta atualização (versão ${at.versao}). Ao enviar de novo, a nova versão substitui a anterior e o histórico é mantido.</div>` : ''}
     <form id="form-at" novalidate>
       <div class="erro-form oculto" role="alert"></div>

@@ -1,29 +1,24 @@
 // Utilidades de interface: formatação, diálogos, avisos e o Trilho da Semana.
 import { agora, isoDe } from './estado.js';
+import { instante, parseData, partesNoFuso, somarDias } from './datas.js';
 
 export const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 export const $ = (sel, raiz = document) => raiz.querySelector(sel);
 export const $$ = (sel, raiz = document) => [...raiz.querySelectorAll(sel)];
 
-export const parseISO = (s) => {
-  const [y, m, d] = s.slice(0, 10).split('-').map(Number);
-  return new Date(y, m - 1, d);
-};
-export const addDias = (s, n) => {
-  const d = parseISO(s);
-  d.setDate(d.getDate() + n);
-  return isoDe(d);
-};
+export const parseISO = parseData;
+export const addDias = somarDias;
 export const br = (s) => (s ? s.slice(0, 10).split('-').reverse().join('/') : '');
 export const brCurto = (s) => (s ? s.slice(0, 10).split('-').reverse().slice(0, 2).join('/') : '');
 export const dataHora = (s) => {
   if (!s) return '';
-  const d = new Date(s);
-  return `${br(isoDe(d))} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const d = instante(s);
+  const p = partesNoFuso(d);
+  return `${br(isoDe(d))} ${p.hour}:${p.minute}`;
 };
 const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
-export const diaSemana = (s) => DIAS[parseISO(s).getDay()];
+export const diaSemana = (s) => DIAS[parseISO(s).getUTCDay()];
 export const fmtMin = (m) => {
   m = Number(m) || 0;
   if (m < 60) return `${m} min`;
@@ -107,11 +102,10 @@ export function trilho(boot) {
   const semana = boot.semana;
   const diaSemana = boot.reuniao_dia ?? 2;   // dia da semana da reunião (0 = dom … 6 = sáb)
   const horaReuniao = boot.reuniao_hora || '10:00'; // horário da reunião (HH:MM)
-  const [hReuniao, mReuniao] = horaReuniao.split(':').map(Number);
   const NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
   const NOMES_DIA_COMPLETO = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
   const nomeDia = NOMES_DIA[diaSemana];
-  const ts = (dia, hora) => new Date(`${dia}T${hora}:00`).getTime();
+  const ts = (dia, hora) => instante(`${dia}T${hora}:00`).getTime();
   const ini = ts(addDias(semana, -7), horaReuniao);
   const fim = ts(semana, horaReuniao);
   const pos = (t) => Math.min(1, Math.max(0, (t - ini) / (fim - ini)));
@@ -124,7 +118,7 @@ export function trilho(boot) {
     { t: ini, rot: 'Reunião anterior', sub: `${nomeDia} ${horaReuniao}`, marco: true },
     { t: ts(addDias(semana, -4), '15:00'), rot: 'Lembrete', sub: `${NOMES_DIA[(diaSemana + 3) % 7]} 15h` },
     { t: ts(diaAntes, '09:00'), rot: '', sub: '' },
-    { t: fechamento, rot: 'Fechamento', sub: `${NOMES_DIA[diaSemana === 1 ? 0 : diaSemana - 1]} 18h`, marco: true },
+    { t: fechamento, rot: 'Fechamento', sub: `${NOMES_DIA[(diaSemana + 6) % 7]} 18h`, marco: true },
     { t: fim, rot: 'Reunião', sub: `${nomeDia} ${horaReuniao}`, marco: true },
   ];
   const falta = (ms) => {
@@ -136,7 +130,7 @@ export function trilho(boot) {
   };
   let estado;
   if (agoraMs < fechamento) estado = `Atualizações abertas até ${NOMES_DIA_COMPLETO[(diaSemana + 6) % 7]}, ${br(diaAntes)}, às 18h · faltam ${falta(fechamento - agoraMs)}`;
-  else if (agoraMs < fim) estado = `Atualizações fechadas · reunião em ${falta(fim - agoraMs)}`;
+  else if (agoraMs < fim) estado = `Prazo regular encerrado; correções disponíveis · reunião em ${falta(fim - agoraMs)}`;
   else estado = 'Hoje é dia de reunião';
   const p = pos(agoraMs) * 100;
   return `<section class="trilho" aria-label="Trilho da semana">

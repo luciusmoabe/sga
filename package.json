@@ -5,13 +5,16 @@
   "type": "module",
   "private": true,
   "engines": {
-    "node": ">=18"
+    "node": ">=22.12"
   },
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "seed": "node server/seed.js --reset",
-    "test": "node --test test/*.test.js"
+    "migrate": "node server/migrate.js",
+    "check:auth": "node server/verificar-auth.js",
+    "test": "node --test test/*.test.js",
+    "test:postgres": "node --test test/postgres/*.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.0.0",

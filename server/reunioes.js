@@ -22,6 +22,18 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
     };
   };
 
+  // Serializa abertura/reabertura e mutações da reunião entre instâncias.
+  // A trava de linha também coordena decisões de prazo feitas em app.js.
+  const travarCiclo = async () => {
+    if (db.isPg) await q1('select pg_advisory_xact_lock(7319, 2)');
+  };
+  const comReuniao = (id, fn) => db.transaction(async () => {
+    await travarCiclo();
+    const r = await q1(`select * from reunioes where id = ?${db.isPg ? ' for update' : ''}`, Number(id));
+    if (!r) throw falha(404, 'Reunião não encontrada.');
+    return fn(r);
+  });
+
   // ---------- Combinados da reunião ----------
   app.get('/api/combinados', h(async (req) => {
     const gere = req.user.perfil !== 'chefe';
@@ -77,23 +89,27 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
   app.put('/api/config', gestao, h(async (req) => {
     const f = req.body?.combinados_frequencia;
     if (!FREQUENCIAS.includes(f)) throw falha(400, 'Escolha quando os combinados aparecem: sempre, na primeira reunião do mês ou quando mudarem.');
-    await run('insert into config (chave, valor) values (?, ?) on conflict(chave) do update set valor = excluded.valor', 'combinados_frequencia', f);
-
-    // Dia da semana da reunião (0 = domingo … 6 = sábado)
+    const valores = [['combinados_frequencia', f]];
     if (req.body?.reuniao_dia != null) {
-      const dia = Number(req.body.reuniao_dia);
-      if (!Number.isInteger(dia) || dia < 0 || dia > 6) throw falha(400, 'O dia da reunião deve ser um número entre 0 (domingo) e 6 (sábado).');
-      await run('insert into config (chave, valor) values (?, ?) on conflict(chave) do update set valor = excluded.valor', 'reuniao_dia', String(dia));
+      const valor = req.body.reuniao_dia;
+      const dia = Number(valor);
+      if (!['string', 'number'].includes(typeof valor) || String(valor).trim() === '' || !Number.isInteger(dia) || dia < 0 || dia > 6) {
+        throw falha(400, 'O dia da reunião deve ser um número entre 0 (domingo) e 6 (sábado).');
+      }
+      valores.push(['reuniao_dia', String(dia)]);
     }
-
-    // Horário de início da reunião (HH:MM)
     if (req.body?.reuniao_hora != null) {
       const hora = String(req.body.reuniao_hora).trim();
       if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) throw falha(400, 'O horário da reunião deve estar no formato HH:MM (ex.: 10:00).');
-      await run('insert into config (chave, valor) values (?, ?) on conflict(chave) do update set valor = excluded.valor', 'reuniao_hora', hora);
+      valores.push(['reuniao_hora', hora]);
     }
-
-    return await cfg();
+    return db.transaction(async () => {
+      // Ordem fixa das chaves para serializar mudanças concorrentes no PostgreSQL.
+      for (const [chave, valor] of valores) {
+        await run('insert into config (chave, valor) values (?, ?) on conflict(chave) do update set valor = excluded.valor', chave, valor);
+      }
+      return cfg();
+    });
   }));
 
   // ---------- Reunião ----------
@@ -108,17 +124,20 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
   };
 
   app.post('/api/reunioes/iniciar', gestao, h(async (req, res) => {
-    const aberta = await q1(`select * from reunioes where status = 'em_andamento' order by id desc limit 1`);
-    if (aberta) return { reuniao: fmt(aberta), retomada: true, mostrar_combinados: false };
-    const mostrar = await mostrarCombinados();
-    const snapshot = await q('select id, texto, ordem from combinados where ativo = 1 and arquivado = 0 order by ordem, id');
-    const { dia } = await cfgAoVivo();
-    const id = (await run(
-      `insert into reunioes (data, semana, iniciada_em, status, combinados_snapshot, criada_por) values (?,?,?,?,?,?)`,
-      hoje(), refDiaReuniao(agora(), dia), agoraISO(), 'em_andamento', JSON.stringify(snapshot), req.user.id,
-    )).lastInsertRowid;
-    res.status(201);
-    return { reuniao: fmt(await q1('select * from reunioes where id = ?', id)), retomada: false, mostrar_combinados: mostrar };
+    return db.transaction(async () => {
+      await travarCiclo();
+      const aberta = await q1(`select * from reunioes where status = 'em_andamento' order by id desc limit 1`);
+      if (aberta) return { reuniao: fmt(aberta), retomada: true, mostrar_combinados: false };
+      const mostrar = await mostrarCombinados();
+      const snapshot = await q('select id, texto, ordem from combinados where ativo = 1 and arquivado = 0 order by ordem, id');
+      const { dia } = await cfgAoVivo();
+      const id = (await run(
+        `insert into reunioes (data, semana, iniciada_em, status, combinados_snapshot, criada_por) values (?,?,?,?,?,?)`,
+        hoje(), refDiaReuniao(agora(), dia), agoraISO(), 'em_andamento', JSON.stringify(snapshot), req.user.id,
+      )).lastInsertRowid;
+      res.status(201);
+      return { reuniao: fmt(await q1('select * from reunioes where id = ?', id)), retomada: false, mostrar_combinados: mostrar };
+    });
   }));
 
   app.get('/api/reunioes', h(async (req) => {
@@ -161,37 +180,38 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
   }));
 
   app.post('/api/reunioes/:id/decisoes', gestao, h(async (req, res) => {
-    const r = await reuniaoOuErro(req.params.id);
-    emAndamento(r);
-    const t = texto(req.body?.texto, 600);
-    if (!t) throw falha(400, 'Escreva a decisão.');
-    let secaoId = null;
-    if (req.body?.secao_id) {
-      secaoId = (await q1('select id from secoes where id = ?', Number(req.body.secao_id)))?.id;
-      if (!secaoId) throw falha(400, 'Seção inválida.');
-    }
-    await run('insert into decisoes (reuniao_id, secao_id, texto, criada_em, criada_por) values (?,?,?,?,?)', r.id, secaoId, t, agoraISO(), req.user.id);
-    res.status(201);
-    return { ok: true };
+    return comReuniao(req.params.id, async (r) => {
+      emAndamento(r);
+      const t = texto(req.body?.texto, 600);
+      if (!t) throw falha(400, 'Escreva a decisão.');
+      let secaoId = null;
+      if (req.body?.secao_id) {
+        secaoId = (await q1('select id from secoes where id = ?', Number(req.body.secao_id)))?.id;
+        if (!secaoId) throw falha(400, 'Seção inválida.');
+      }
+      await run('insert into decisoes (reuniao_id, secao_id, texto, criada_em, criada_por) values (?,?,?,?,?)', r.id, secaoId, t, agoraISO(), req.user.id);
+      res.status(201);
+      return { ok: true };
+    });
   }));
   app.delete('/api/reunioes/:id/decisoes/:decisaoId', gestao, h(async (req) => {
-    const r = await reuniaoOuErro(req.params.id);
-    emAndamento(r);
-    await run('delete from decisoes where id = ? and reuniao_id = ?', Number(req.params.decisaoId), r.id);
-    return { ok: true };
+    return comReuniao(req.params.id, async (r) => {
+      emAndamento(r);
+      await run('delete from decisoes where id = ? and reuniao_id = ?', Number(req.params.decisaoId), r.id);
+      return { ok: true };
+    });
   }));
 
   app.post('/api/reunioes/:id/acoes', gestao, h(async (req, res) => {
-    const r = await reuniaoOuErro(req.params.id);
-    emAndamento(r);
+    const resultado = await criarDiretriz(req.user, req.body || {}, Number(req.params.id));
     res.status(201);
-    return await criarDiretriz(req.user, req.body || {}, r.id);
+    return resultado;
   }));
 
   async function gerarAta(r) {
     const { dia, hora } = await cfgAoVivo();
     const d = parseISO(r.data);
-    const linhas = [`ATA DA REUNIÃO SEMANAL — ${br(r.data)} (${DIAS[d.getDay()]})`, ''];
+    const linhas = [`ATA DA REUNIÃO SEMANAL — ${br(r.data)} (${DIAS[d.getUTCDay()]})`, ''];
     const comb = json(r.combinados_snapshot, []);
     if (comb.length) {
       linhas.push('Combinados vigentes:');
@@ -230,32 +250,36 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
   }
 
   app.post('/api/reunioes/:id/encerrar', gestao, h(async (req) => {
-    const r = await reuniaoOuErro(req.params.id);
-    emAndamento(r);
-    const ataTexto = await gerarAta(r);
-    await run(`update reunioes set status = 'rascunho', encerrada_em = ?, ata_texto = ? where id = ?`, agoraISO(), ataTexto, r.id);
-    return fmt(await q1('select * from reunioes where id = ?', r.id));
+    return comReuniao(req.params.id, async (r) => {
+      emAndamento(r);
+      const ataTexto = await gerarAta(r);
+      await run(`update reunioes set status = 'rascunho', encerrada_em = ?, ata_texto = ? where id = ?`, agoraISO(), ataTexto, r.id);
+      return fmt(await q1('select * from reunioes where id = ?', r.id));
+    });
   }));
   app.post('/api/reunioes/:id/reabrir', gestao, h(async (req) => {
-    const r = await reuniaoOuErro(req.params.id);
-    if (r.status !== 'rascunho') throw falha(409, 'Só é possível reabrir uma reunião cuja ata ainda está em rascunho.');
-    if (await q1(`select 1 from reunioes where status = 'em_andamento'`)) throw falha(409, 'Já existe outra reunião em andamento.');
-    await run(`update reunioes set status = 'em_andamento', encerrada_em = null where id = ?`, r.id);
-    return fmt(await q1('select * from reunioes where id = ?', r.id));
+    return comReuniao(req.params.id, async (r) => {
+      if (r.status !== 'rascunho') throw falha(409, 'Só é possível reabrir uma reunião cuja ata ainda está em rascunho.');
+      if (await q1(`select 1 from reunioes where status = 'em_andamento'`)) throw falha(409, 'Já existe outra reunião em andamento.');
+      await run(`update reunioes set status = 'em_andamento', encerrada_em = null where id = ?`, r.id);
+      return fmt(await q1('select * from reunioes where id = ?', r.id));
+    });
   }));
   app.put('/api/reunioes/:id/ata', gestao, h(async (req) => {
-    const r = await reuniaoOuErro(req.params.id);
-    if (r.status !== 'rascunho') throw falha(409, 'A ata só pode ser editada enquanto está em rascunho.');
-    const t = texto(req.body?.ata_texto, 20000);
-    if (!t) throw falha(400, 'A ata não pode ficar vazia.');
-    await run('update reunioes set ata_texto = ? where id = ?', t, r.id);
-    return fmt(await q1('select * from reunioes where id = ?', r.id));
+    return comReuniao(req.params.id, async (r) => {
+      if (r.status !== 'rascunho') throw falha(409, 'A ata só pode ser editada enquanto está em rascunho.');
+      const t = texto(req.body?.ata_texto, 20000);
+      if (!t) throw falha(400, 'A ata não pode ficar vazia.');
+      await run('update reunioes set ata_texto = ? where id = ?', t, r.id);
+      return fmt(await q1('select * from reunioes where id = ?', r.id));
+    });
   }));
   app.post('/api/reunioes/:id/enviar-ata', gestao, h(async (req) => {
-    const r = await reuniaoOuErro(req.params.id);
-    if (r.status !== 'rascunho') throw falha(409, 'A ata precisa estar em rascunho para ser enviada.');
-    // Protótipo: não há envio de e-mail. A ata passa a ficar visível aos chefes na tela "Atas".
-    await run(`update reunioes set status = 'enviada', enviada_em = ? where id = ?`, agoraISO(), r.id);
-    return fmt(await q1('select * from reunioes where id = ?', r.id));
+    return comReuniao(req.params.id, async (r) => {
+      if (r.status !== 'rascunho') throw falha(409, 'A ata precisa estar em rascunho para ser enviada.');
+      // Protótipo: não há envio de e-mail. A ata passa a ficar visível aos chefes na tela "Atas".
+      await run(`update reunioes set status = 'enviada', enviada_em = ? where id = ?`, agoraISO(), r.id);
+      return fmt(await q1('select * from reunioes where id = ?', r.id));
+    });
   }));
 }

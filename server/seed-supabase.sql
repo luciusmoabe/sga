@@ -1,48 +1,14 @@
--- Script de carga de dados para Supabase PostgreSQL
-
--- Desabilitar RLS para que o backend/API gerencie as permissões
-alter table if exists secoes disable row level security;
-grant all on secoes to anon, authenticated, service_role;
-alter table if exists usuarios disable row level security;
-grant all on usuarios to anon, authenticated, service_role;
-alter table if exists diretrizes disable row level security;
-grant all on diretrizes to anon, authenticated, service_role;
-alter table if exists acoes disable row level security;
-grant all on acoes to anon, authenticated, service_role;
-alter table if exists acao_comentarios disable row level security;
-grant all on acao_comentarios to anon, authenticated, service_role;
-alter table if exists tempo disable row level security;
-grant all on tempo to anon, authenticated, service_role;
-alter table if exists pedidos_prazo disable row level security;
-grant all on pedidos_prazo to anon, authenticated, service_role;
-alter table if exists atualizacoes disable row level security;
-grant all on atualizacoes to anon, authenticated, service_role;
-alter table if exists combinados disable row level security;
-grant all on combinados to anon, authenticated, service_role;
-alter table if exists config disable row level security;
-grant all on config to anon, authenticated, service_role;
-alter table if exists reunioes disable row level security;
-grant all on reunioes to anon, authenticated, service_role;
-alter table if exists decisoes disable row level security;
-grant all on decisoes to anon, authenticated, service_role;
-
--- Limpar dados anteriores caso existam
-truncate table decisoes cascade;
-truncate table reunioes cascade;
-truncate table config cascade;
-truncate table combinados cascade;
-truncate table atualizacoes cascade;
-truncate table pedidos_prazo cascade;
-truncate table tempo cascade;
-truncate table acao_comentarios cascade;
-truncate table acoes cascade;
-truncate table diretrizes cascade;
-truncate table usuarios cascade;
-truncate table secoes cascade;
-
+-- Dados fictícios legados. Aplicar apenas em banco vazio, provisionado e migrado.
 begin;
+set standard_conforming_strings = on;
 set constraints all deferred;
-
+lock table secoes, usuarios, diretrizes, acoes, acao_comentarios, tempo, pedidos_prazo, atualizacoes, combinados, config, reunioes, decisoes in access exclusive mode;
+do $carga$ declare tabela text; ocupado boolean; begin
+ foreach tabela in array array['secoes', 'usuarios', 'diretrizes', 'acoes', 'acao_comentarios', 'tempo', 'pedidos_prazo', 'atualizacoes', 'combinados', 'config', 'reunioes', 'decisoes'] loop
+ execute format('select exists(select 1 from %I)', tabela) into ocupado;
+ if ocupado then raise exception 'Carga exige destino vazio: %', tabela; end if;
+ end loop;
+end $carga$;
 -- Tabela secoes (9 registros)
 insert into secoes (id, nome, sigla, tipo, pai_id, ordem, ativa, chefe_id, criada_em) values (1, 'Centro de Planejamento e Gestão', 'CPG', 'centro', NULL, 1, 1, 3, '2026-07-17T09:00:00');
 insert into secoes (id, nome, sigla, tipo, pai_id, ordem, ativa, chefe_id, criada_em) values (2, 'Centro de Planejamento Orçamentário e Financeiro', 'CPOF', 'centro', NULL, 2, 1, 4, '2026-07-17T09:00:00');
@@ -199,17 +165,11 @@ insert into reunioes (id, data, semana, iniciada_em, encerrada_em, status, combi
 insert into decisoes (id, reuniao_id, secao_id, texto, criada_em, criada_por) values (1, 1, 2, 'Priorizar a proposta de remanejamento; nova data de entrega definida pelo Diretor.', '2026-09-15T10:30:00', 2);
 insert into decisoes (id, reuniao_id, secao_id, texto, criada_em, criada_por) values (2, 1, 5, 'Diretor enviará ofício aos parceiros que não responderam.', '2026-09-15T10:50:00', 2);
 
+set constraints all immediate;
+do $sequencias$ declare tabela text; proximo bigint; begin
+ foreach tabela in array array['secoes', 'usuarios', 'diretrizes', 'acoes', 'acao_comentarios', 'tempo', 'pedidos_prazo', 'atualizacoes', 'combinados', 'reunioes', 'decisoes'] loop
+ execute format('select coalesce(max(id), 0) + 1 from %I', tabela) into proximo;
+ execute format('alter table %I alter column id restart with %s', tabela, proximo);
+ end loop;
+end $sequencias$;
 commit;
-
--- Atualizar sequências das chaves primárias
-select setval(pg_get_serial_sequence('secoes', 'id'), coalesce(max(id), 1)) from secoes;
-select setval(pg_get_serial_sequence('usuarios', 'id'), coalesce(max(id), 1)) from usuarios;
-select setval(pg_get_serial_sequence('diretrizes', 'id'), coalesce(max(id), 1)) from diretrizes;
-select setval(pg_get_serial_sequence('acoes', 'id'), coalesce(max(id), 1)) from acoes;
-select setval(pg_get_serial_sequence('acao_comentarios', 'id'), coalesce(max(id), 1)) from acao_comentarios;
-select setval(pg_get_serial_sequence('tempo', 'id'), coalesce(max(id), 1)) from tempo;
-select setval(pg_get_serial_sequence('pedidos_prazo', 'id'), coalesce(max(id), 1)) from pedidos_prazo;
-select setval(pg_get_serial_sequence('atualizacoes', 'id'), coalesce(max(id), 1)) from atualizacoes;
-select setval(pg_get_serial_sequence('combinados', 'id'), coalesce(max(id), 1)) from combinados;
-select setval(pg_get_serial_sequence('reunioes', 'id'), coalesce(max(id), 1)) from reunioes;
-select setval(pg_get_serial_sequence('decisoes', 'id'), coalesce(max(id), 1)) from decisoes;

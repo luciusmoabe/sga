@@ -850,3 +850,10 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
   .tv-blocos { grid-template-columns: 1fr; }
   .tv-relato { grid-template-columns: 1fr; }
 }
+
+/* Entrada por e-mail e senha */
+#login-senha { display: grid; gap: .75rem; margin-top: 1.5rem; }
+#login-senha input { width: 100%; min-width: 0; box-sizing: border-box; }
+#login-erro { margin: 0; color: #a4262c; }
+#login-erro:empty { display: none; }
+.login-ajuda { margin-top: 1rem; font-size: .9rem; }

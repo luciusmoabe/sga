@@ -1,7 +1,7 @@
 // Ponto de entrada: entrada simulada, casca da aplicação e roteamento por hash.
-import { entrar, get, sair, sessao } from './api.js';
-import { est } from './estado.js';
-import { $, esc, on, trilho } from './ui.js';
+import { entrar, entrarSenha, get, sair, sessao, limparSessao, modoAuth } from './api.js';
+import { atualizarSessao, est } from './estado.js';
+import { $, esc, on, trilho, toast } from './ui.js';
 import { acoes, centro, direcionar, painel, pauta, prazos } from './telas-diretor.js';
 import { atualizacao, historico, inicio, minhasAcoes } from './telas-chefe.js';
 import { combinados } from './combinados.js';
@@ -65,13 +65,46 @@ function lerRota() {
 const casaDe = () => (est.user.perfil === 'chefe' ? '#/inicio' : '#/painel');
 
 async function carregarSessao() {
-  est.boot = await get('/bootstrap');
-  est.user = est.boot.user;
-  est.offset = new Date(est.boot.agora).getTime() - Date.now();
+  atualizarSessao(await get('/bootstrap'));
 }
 
 async function telaEntrada() {
   document.body.classList.remove('tv');
+  if (await modoAuth() === 'supabase') {
+    app.innerHTML = `<div class="entrada"><div class="entrada-caixa"><h1>Agilis</h1>
+      <p class="lema">Entre com seu e-mail e senha.</p>
+      <form id="login-senha">
+        <label for="login-email">E-mail</label>
+        <input id="login-email" name="email" type="email" autocomplete="username" maxlength="254" required>
+        <label for="login-password">Senha</label>
+        <input id="login-password" name="senha" type="password" autocomplete="current-password" maxlength="1024" required>
+        <p id="login-erro" role="alert" aria-live="polite"></p>
+        <button class="btn btn-primario" type="submit">Entrar</button>
+      </form><p class="login-ajuda">Para solicitar acesso ou redefinir sua senha, contate o administrador do Agilis.</p>
+      </div></div>`;
+    const form = $('#login-senha');
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const botao = form.querySelector('button');
+      if (botao.disabled) return;
+      botao.disabled = true;
+      botao.textContent = 'Entrando…';
+      const erro = form.querySelector('#login-erro');
+      erro.textContent = '';
+      try {
+        await entrarSenha(form.elements.email.value, form.elements.senha.value);
+        form.elements.senha.value = '';
+        est.user = null;
+        location.hash = '#/';
+        await render();
+      } catch (err) {
+        form.elements.senha.value = '';
+        erro.textContent = err.message;
+        form.elements.senha.focus();
+      } finally { botao.disabled = false; botao.textContent = 'Entrar'; }
+    });
+    return;
+  }
   const us = await fetch('/api/usuarios-demo').then((r) => r.json());
   const card = (u) => `<button class="perfil" data-u="${u.id}"><b>${esc(u.nome)}</b><span>${u.perfil === 'chefe' ? esc(u.secao_nome || 'Sem seção atribuída') : PERFIL[u.perfil]}</span></button>`;
   app.innerHTML = `<div class="entrada"><div class="entrada-caixa">
@@ -97,9 +130,12 @@ function casca() {
     <nav class="menu" aria-label="Principal">${menu.map((m) => m[0].startsWith('#')
       ? `<div class="grupo"><b>${esc(m[0].slice(1))}</b></div>`
       : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}">${esc(m[1])}${m[2] === 'selo' ? '<span class="selo oculto" id="selo-prazos"></span>' : ''}</a>`).join('')}</nav>
-    <div class="usuario"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}<br><button class="btn btn-fantasma btn-mini" id="sair">Trocar usuário</button></div></aside>
+    <div class="usuario"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}<br><button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></div></aside>
     <main class="principal"><div id="trilho"></div><div id="conteudo"></div></main></div>`;
-  $('#sair').addEventListener('click', () => { sair(); est.user = null; location.hash = '#/'; render(); });
+  $('#sair').addEventListener('click', async () => {
+    try { await sair(); est.user = null; est.boot = null; location.hash = '#/'; render(); }
+    catch (e) { toast(e.message); }
+  });
 }
 
 async function atualizarSelo() {
@@ -115,8 +151,11 @@ let gen = 0;
 export async function render() {
   const minha = ++gen;
   try {
-    if (!sessao.userId) return await telaEntrada();
-    if (!est.user) await carregarSessao();
+    const modo = await modoAuth();
+    if (minha !== gen) return;
+    if (modo === 'demo' && !sessao.userId) return await telaEntrada();
+    await carregarSessao();
+    if (minha !== gen) return;
     const { rota, id, q } = lerRota();
     const def = ROTAS[rota];
     if (!def || !def.perfis.includes(est.user.perfil)) { location.hash = casaDe(); return; }
@@ -144,7 +183,7 @@ export async function render() {
     atualizarSelo();
   } catch (e) {
     if (minha !== gen) return;
-    if (e.status === 401) { sair(); est.user = null; return telaEntrada(); }
+    if (e.status === 401) { limparSessao(); est.user = null; est.boot = null; return telaEntrada(); }
     const alvo = $('#conteudo') || app;
     alvo.innerHTML = `<div class="cartao"><h2>Não foi possível abrir esta tela</h2><p>${esc(e.message)}</p><a class="btn btn-sec" href="${est.user ? casaDe() : '#/'}">Voltar ao início</a></div>`;
     console.error(e);

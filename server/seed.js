@@ -3,8 +3,10 @@ import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 import { openDb, estaVazio } from './db.js';
 import { addDays, agora, hojeISO, refTerca } from './logic.js';
+import { aplicarMigracoes } from './migrations.js';
 
 export async function seed(db) {
+  await aplicarMigracoes(db);
   const hoje = hojeISO();
   const ref = refTerca(agora());
   const ant = addDays(ref, -7);
@@ -148,6 +150,17 @@ export async function seed(db) {
     const insDec = db.prepare('insert into decisoes (reuniao_id,secao_id,texto,criada_em,criada_por) values (?,?,?,?,?)');
     await insDec.run(rid, 2, 'Priorizar a proposta de remanejamento; nova data de entrega definida pelo Diretor.', ts(ant, '10:30:00'), 2);
     await insDec.run(rid, 5, 'Diretor enviará ofício aos parceiros que não responderam.', ts(ant, '10:50:00'), 2);
+    // IDs explícitos não avançam identities PostgreSQL. RESTART participa do
+    // rollback desta carga, ao contrário de setval em uma sequência existente.
+    if (db.isPg) {
+      // Valida as referências adiadas antes do ALTER TABLE, que não admite
+      // eventos de constraint pendentes na mesma transação.
+      await db.exec('set constraints all immediate');
+      for (const tabela of ['secoes', 'usuarios']) {
+        const { proximo } = await db.prepare(`select max(id) + 1 as proximo from ${tabela}`).get();
+        await db.exec(`alter table ${tabela} alter column id restart with ${proximo}`);
+      }
+    }
   });
 }
 

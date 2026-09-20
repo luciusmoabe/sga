@@ -9,12 +9,16 @@ Idioma do produto, dos textos da interface, dos commits e dos comentários: port
 - `npm install` · `npm start` (porta 3000) · `npm run dev` · `npm run seed` (recria dados fictícios) · `npm test`
 - `SGC_NOW=2026-09-22T09:30:00` muda o "agora" do servidor. Use em testes e demonstrações; nunca chame `new Date()` direto nas regras, use `agora()` de `server/logic.js`.
 - Sempre rode `npm test` depois de mexer em `server/`. Para a interface não há teste automatizado: suba o servidor e confira no navegador (telas de 1920x1080 para o Modo Reunião e 390 px para o chefe).
+- Datas: use as funções de `server/logic.js` e `public/js/datas.js`. O fuso de negócio é `America/Bahia`; datas civis usam aritmética UTC, e timestamps sem offset são interpretados nesse fuso. Não use getters locais de `Date` nas regras.
+- Migrações: veja `MIGRACOES.md`. PostgreSQL verifica a versão ao iniciar e exige execução explícita do migrador. SQLite aplica as migrações ao iniciar. Nunca remova dados duplicados automaticamente para instalar uma constraint.
+- Integração PostgreSQL: `PG_BIN=/caminho/bin npm run test:postgres` cria um cluster descartável, sem usar `DATABASE_URL`. Veja `TESTES_POSTGRESQL.md`. Execute ao alterar transações, migrações ou SQL compartilhado; `npm test` continua sem exigir PostgreSQL.
 
 ## Arquitetura
 
 - `server/`: Express 4 + adaptadores SQLite (better-sqlite3, WAL, `foreign_keys` ligado) e PostgreSQL (pg). ES modules. Sem ORM; SQL direto. A interface de ambos os bancos é assíncrona: aguarde `get`, `all`, `run`, `seed` e os helpers de árvore. Use `await db.transaction(async () => { ... })`; transações aninhadas são rejeitadas. SQLite serializa consultas externas durante uma transação; PostgreSQL mantém o cliente por contexto assíncrono. A hierarquia é consultada no banco, sem cache local.
   - `app.js` rotas gerais; `reunioes.js` combinados, reuniões, decisões e ata; `helpers.js` painel, pauta e montagem de cartões; `logic.js` regras puras; `db.js` esquema e árvore de seções (CTE recursiva); `seed.js` dados fictícios.
-  - Autenticação simulada: o cabeçalho `x-user-id` identifica o usuário. `/api/usuarios-demo` é a única rota sem usuário.
+  - Autenticação: `auth.js` implementa Entra ID, sessão HttpOnly persistida por hash e CSRF. `configurarAuth()` falha sem configuração institucional; `SGC_AUTH_MODE=demo` permite `x-user-id` somente fora de produção. Nunca vincule identidades por e-mail nem confie em perfil enviado pelo cliente. Permissões de perfil/propriedade continuam nas rotas. Veja `AUTENTICACAO.md`.
+  - Segurança usa `Date.now()` real, independentemente de `SGC_NOW`. Migração 4 habilita RLS e revoga acesso público aos objetos Agilis em PostgreSQL/public. Mudanças futuras exigem nova versão, inclusive para os arquivos auxiliares de migração.
 - `public/`: SPA em JavaScript puro (módulos ES, sem build), rota por hash em `js/main.js`. Cada tela é uma função `(raiz, {id, q, refresh})` que preenche um elemento. Dialogs com `<dialog>` via `abrirForm` em `js/ui.js`. Delegação de eventos com `on(raiz, tipo, seletor, fn)`.
   - Ao buscar elementos numa tela, use sempre `$('#id', raiz)`: a tela é montada num elemento ainda solto do documento, então `document.querySelector` não o encontra.
   - `estilo.css` traz o sistema visual (paleta petróleo, títulos em serifa, semáforo com forma + texto), o modo TV (`body.tv`, classes `.tv-*`) e regras de impressão.

@@ -4,15 +4,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { subarvore, nivel } from './db.js';
 import {
-  DIA_PADRAO, HORA_PADRAO, HORA_CORTE_PADRAO, LIMITE_NIVEIS, PRIORIDADES, TRANSICOES,
+  DIA_PADRAO, FUSO_NEGOCIO, HORA_PADRAO, HORA_CORTE_PADRAO, LIMITE_NIVEIS, PRIORIDADES, TRANSICOES,
   agora, ehISO, ehDiaReuniao, fechamentoDe, hojeISO, refDiaReuniao,
 } from './logic.js';
 import { atualizacaoDe, cartoesReuniao, falha, h, marks, painelSemana, permit, texto, ultimaAtualizacao } from './helpers.js';
 import { rotasReunioes } from './reunioes.js';
+import { configurarAuth, instalarAuth } from './auth.js';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-export function createApp(db) {
+export function createApp(db, { auth = configurarAuth(), provedor } = {}) {
   const app = express();
   app.use(compression({ threshold: 512 })); // gzip/brotli: reduz JSON em ~70-80%
   app.use(express.json({ limit: '200kb' }));
@@ -23,24 +24,7 @@ export function createApp(db) {
   const run = async (sql, ...p) => await db.prepare(sql).run(...p);
   const agoraISO = () => agora().toISOString();
 
-  // ---------- Entrada simulada (protótipo): escolhe o usuário; não há senha ----------
-  app.get('/api/usuarios-demo', h(async () =>
-    await q(`select u.id, u.nome, u.perfil, u.secao_id, s.nome as secao_nome, s.sigla as secao_sigla
-       from usuarios u left join secoes s on s.id = u.secao_id where u.ativo = 1
-       order by case u.perfil when 'diretor' then 0 when 'apoio' then 1 else 2 end, u.nome`)));
-
-  app.use('/api', async (req, res, next) => {
-    try {
-      if (req.path === '/usuarios-demo') return next();
-      const id = Number(req.get('x-user-id'));
-      const u = id ? await q1('select * from usuarios where id = ? and ativo = 1', id) : null;
-      if (!u) return next(falha(401, 'Escolha um usuário para entrar.'));
-      req.user = u;
-      next();
-    } catch (err) {
-      next(err);
-    }
-  });
+  instalarAuth(app, db, auth, provedor);
 
   const hoje = () => hojeISO();
   /** Lê dia e hora da reunião a partir da config, com fallback para os padrões. */
@@ -49,12 +33,16 @@ export function createApp(db) {
     const c = Object.fromEntries(rows.map((r) => [r.chave, r.valor]));
     const dia = c.reuniao_dia != null ? Number(c.reuniao_dia) : DIA_PADRAO;
     const hora = c.reuniao_hora || HORA_PADRAO;
-    return { dia, hora };
+    return { dia, hora, config: c };
   };
   const semanaDe = async (req) => {
     const { dia } = await cfgReuniao();
     const s = req.query.semana || refDiaReuniao(agora(), dia, HORA_CORTE_PADRAO);
-    if (!ehDiaReuniao(s, dia)) throw falha(400, `A semana deve ser informada como a data do dia da reunião (AAAA-MM-DD).`);
+    if (!ehISO(s)) throw falha(400, 'Informe uma data válida para a semana (AAAA-MM-DD).');
+    if (!ehDiaReuniao(s, dia)) {
+      const historica = await q1('select semana from atualizacoes where semana = ? union select semana from reunioes where semana = ?', s, s);
+      if (!historica) throw falha(400, 'A semana deve corresponder ao dia configurado ou a uma semana já registrada.');
+    }
     return s;
   };
   const cfg = async () => Object.fromEntries((await q('select chave, valor from config')).map((r) => [r.chave, r.valor]));
@@ -105,17 +93,19 @@ export function createApp(db) {
 
   // ---------- Bootstrap ----------
   app.get('/api/bootstrap', h(async (req) => {
-    const { dia, hora } = await cfgReuniao();
+    const { dia, hora, config } = await cfgReuniao();
     const semana = refDiaReuniao(agora(), dia, HORA_CORTE_PADRAO);
     const secao = req.user.secao_id ? await q1('select id, nome, sigla, tipo from secoes where id = ?', req.user.secao_id) : null;
     return {
       user: req.user,
+      csrf: req.csrf,
       secao,
       agora: agoraISO(),
       hoje: hoje(),
       semana,
       fechamento: fechamentoDe(semana),
-      config: await cfg(),
+      config,
+      fuso: FUSO_NEGOCIO,
       reuniao_dia: dia,
       reuniao_hora: hora,
     };
@@ -271,6 +261,12 @@ export function createApp(db) {
     if (!alvos.length) throw falha(400, 'Escolha ao menos uma seção para receber a ação.');
     const detalhe = texto(b.detalhe, 2000) || null;
     return await db.transaction(async () => {
+      if (reuniaoId !== null) {
+        const r = await q1(`select status from reunioes where id = ?${db.isPg ? ' for update' : ''}`, reuniaoId);
+        if (!r) throw falha(404, 'Reunião não encontrada.');
+        if (r.status !== 'em_andamento') throw falha(409, 'Esta reunião já foi encerrada.');
+      }
+
       const d = (await run(
         'insert into diretrizes (titulo, detalhe, destino, prazo, prioridade, criado_por, criado_em, reuniao_id) values (?,?,?,?,?,?,?,?)',
         titulo, detalhe, destino, b.prazo, prioridade, user.id, agoraISO(), reuniaoId,

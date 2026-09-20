@@ -1,21 +1,16 @@
 // Regras puras do SGC: datas, semana da reunião e semáforo.
 // Para testes e demonstrações, defina SGC_NOW (ex.: 2026-09-21T17:00:00) e o "agora" do servidor muda.
+import { dataNoFuso, dataValida, instante, parseData, partesNoFuso, somarDias } from '../public/js/datas.js';
+export { FUSO_NEGOCIO } from '../public/js/datas.js';
 
 export const pad = (n) => String(n).padStart(2, '0');
-export const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-export const parseISO = (s) => {
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, m - 1, d);
-};
-export const addDays = (s, n) => {
-  const d = parseISO(s);
-  d.setDate(d.getDate() + n);
-  return iso(d);
-};
-export const agora = () => (process.env.SGC_NOW ? new Date(process.env.SGC_NOW) : new Date());
+export const iso = dataNoFuso;
+export const parseISO = parseData;
+export const addDays = somarDias;
+export const agora = () => (process.env.SGC_NOW ? instante(process.env.SGC_NOW) : new Date());
 export const hojeISO = () => iso(agora());
-export const ehISO = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && iso(parseISO(s)) === s;
-export const ehTerca = (s) => ehISO(s) && parseISO(s).getDay() === 2;
+export const ehISO = dataValida;
+export const ehTerca = (s) => ehISO(s) && parseISO(s).getUTCDay() === 2;
 export const br = (s) => (s ? s.split('-').reverse().join('/') : '');
 
 /** Padrões para o dia/hora da reunião quando não há config salva. */
@@ -32,17 +27,16 @@ export const HORA_FECHAMENTO = 18;   // hora do fechamento (dia anterior à reun
  * Mantém compatibilidade retroativa: sem argumentos, funciona como a antiga refTerca().
  */
 export function refDiaReuniao(now = agora(), diaSemana = DIA_PADRAO, horaCorte = HORA_CORTE_PADRAO) {
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  let diff = (diaSemana - d.getDay() + 7) % 7;
-  if (diff === 0 && now.getHours() >= horaCorte) diff = 7;
-  d.setDate(d.getDate() + diff);
-  return iso(d);
+  const data = dataNoFuso(now);
+  let diff = (diaSemana - parseISO(data).getUTCDay() + 7) % 7;
+  if (diff === 0 && Number(partesNoFuso(now).hour) >= horaCorte) diff = 7;
+  return addDays(data, diff);
 }
 
 /**
  * Verifica se a string ISO corresponde ao dia configurado para a reunião.
  */
-export const ehDiaReuniao = (s, diaSemana = DIA_PADRAO) => ehISO(s) && parseISO(s).getDay() === diaSemana;
+export const ehDiaReuniao = (s, diaSemana = DIA_PADRAO) => ehISO(s) && parseISO(s).getUTCDay() === diaSemana;
 
 /**
  * Terça-feira da reunião à qual as atualizações de hoje se referem.

@@ -11,7 +11,7 @@ const { createApp } = await import('../server/app.js');
 
 const db = openDb(':memory:');
 await seed(db);
-const server = createApp(db).listen(0);
+const server = createApp(db, { auth: { mode: 'demo' } }).listen(0);
 await once(server, 'listening');
 const base = `http://127.0.0.1:${server.address().port}`;
 test.after(async () => {

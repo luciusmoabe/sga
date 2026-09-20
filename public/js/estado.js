@@ -1,9 +1,15 @@
 // Estado global da sessão e relógio sincronizado com o servidor (útil para demonstrações com SGC_NOW).
+import { dataNoFuso } from './datas.js';
 export const est = { user: null, boot: null, offset: 0, secoes: [] };
 
 export const agora = () => new Date(Date.now() + est.offset);
-const pad = (n) => String(n).padStart(2, '0');
-export const isoDe = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+export const isoDe = dataNoFuso;
 export const hoje = () => isoDe(agora());
 export const ehGestao = () => est.user && est.user.perfil !== 'chefe';
 export const ehDiretor = () => est.user?.perfil === 'diretor';
+
+export function atualizarSessao(boot) {
+  est.boot = boot;
+  est.user = boot.user;
+  est.offset = new Date(boot.agora).getTime() - Date.now();
+}

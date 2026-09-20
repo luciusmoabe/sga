@@ -7,25 +7,39 @@ Este é um **protótipo com dados fictícios**, feito para validar o fluxo com o
 
 ## Como rodar
 
-Requisitos: Node.js 18 ou superior (testado em Node 22).
+Requisitos: Node.js 22.12 ou superior (testado em Node 24.11.1).
 
 ```bash
 npm install
-npm start
+SGC_AUTH_MODE=demo DATABASE_URL="" npm start
 ```
 
-Abra http://localhost:3000. Na primeira execução o banco (`data/sgc.db`, SQLite) é criado com dados fictícios.
+Abra http://127.0.0.1:3000. Nesse modo local, o banco (`data/sgc.db`, SQLite) é criado com dados fictícios. O modo demo escuta apenas loopback e é recusado com `NODE_ENV=production` ou na Vercel.
+
+O modo padrão usa Microsoft Entra ID e exige configuração institucional antes de iniciar. Veja [AUTENTICACAO.md](AUTENTICACAO.md) para registrar a aplicação, configurar o ambiente, migrar e vincular contas. As credenciais de demonstração não funcionam nesse modo.
 
 | Comando | O que faz |
 | --- | --- |
 | `npm start` | Sobe o servidor (porta 3000; mude com `PORT=3100 npm start`) |
 | `npm run dev` | Igual, reiniciando ao alterar arquivos do servidor |
 | `npm run seed` | Apaga o banco e recria os dados fictícios |
+| `npm run migrate -- --sqlite CAMINHO` | Aplica migrações ao arquivo SQLite indicado |
+| `npm run migrate -- --postgres` | Aplica migrações usando `SGC_MIGRATION_DATABASE_URL` explícita |
+| `npm run check:auth` | Verifica configuração Entra sem exibir segredos; `-- --online` consulta a descoberta pública do tenant |
 | `npm test` | Roda os testes de regras, API e concorrência SQLite em memória, além do adaptador PostgreSQL com pool simulado |
+| `npm run test:postgres` | Cria PostgreSQL temporário e valida migrações, rollback e concorrência entre duas APIs; requer binários locais ([instruções](TESTES_POSTGRESQL.md)) |
 
-Com `DATABASE_URL` preenchida, a aplicação usa PostgreSQL e o comando de seed é recusado. Para uma demonstração SQLite isolada, use `DATABASE_URL="" SGC_DB=/tmp/sgc-demo.db npm run seed` e inicie com as mesmas variáveis. O seed aguarda o commit completo antes de terminar.
+Com `DATABASE_URL` preenchida, a aplicação usa PostgreSQL e o comando de seed é recusado. Para uma demonstração SQLite isolada, use `DATABASE_URL="" SGC_DB=/tmp/sgc-demo.db npm run seed` e inicie com as mesmas variáveis e `SGC_AUTH_MODE=demo`. O seed aguarda o commit completo antes de terminar. No modo institucional não há carga fictícia automática.
+
+PostgreSQL precisa estar migrado antes de iniciar esta versão; SQLite aplica as migrações ao iniciar. Consulte [MIGRACOES.md](MIGRACOES.md) para provisionamento, verificação de duplicidades e procedimento de atualização.
 
 Variáveis de ambiente: `PORT`, `SGC_DB` (caminho do arquivo SQLite) e `SGC_NOW` (data e hora "de mentira", útil para demonstrar o fechamento de segunda 18h ou a terça da reunião, por exemplo `SGC_NOW=2026-09-22T09:30:00 npm start`; para os dados de exemplo fazerem sentido, use `npm run seed` com a mesma variável).
+
+## Calendário e fuso
+
+A API e a interface usam `America/Bahia` para datas operacionais e horários. `SGC_NOW=2026-09-22T10:00:00` significa 10h na Bahia, mesmo em servidor UTC; valores com `Z` ou offset explícito representam o instante indicado. Timestamps antigos sem offset também são interpretados como horários de Bahia. Datas civis (`AAAA-MM-DD`) não mudam conforme o fuso do navegador.
+
+A configuração do dia/horário é gravada integralmente ou desfeita em caso de erro. Consultas de semanas já registradas continuam disponíveis após mudar o dia da reunião. O corte semanal permanece às 12h no dia configurado, e o prazo regular segue no dia anterior às 18h; a política de corte para reuniões à tarde e as exceções de fechamento ainda precisam de validação. Correções após o prazo continuam permitidas nesta versão.
 
 ## Como explorar
 
@@ -56,7 +70,7 @@ Teclas: seta direita avança, seta esquerda volta. Há também a "Versão para i
 
 ## Limites conhecidos desta versão
 
-- Sem autenticação real (perfil escolhido na entrada; o servidor confia no cabeçalho `x-user-id`).
+- Login Microsoft Entra ID implementado e testado com provedor simulado e tokens assinados em teste; a validação no tenant institucional e a inspeção visual da nova entrada ainda estão pendentes. A escolha de perfil por `x-user-id` só existe no modo demo local explícito.
 - Sem e-mail nem lembretes. "Enviar ata" apenas libera a leitura no sistema.
 - O chefe não tem tela própria para gerir subseções e ações internas (a estrutura existe no banco e é criada pelo Diretor).
 - Sem trava automática do envio após segunda 18h (o chefe ainda consegue enviar correção).
@@ -71,6 +85,8 @@ server/   API Express + SQLite (better-sqlite3) ou PostgreSQL (pg)
   reunioes.js  combinados, reuniões, decisões, ata
   logic.js     regras puras: semana, fechamento, semáforo
   db.js        esquema e consultas de árvore
+  migrations.js migrações incrementais e verificação da versão
+  migrate.js   comando de migração com destino explícito
   seed.js      dados fictícios
 public/   interface (JavaScript puro, sem build)
   js/          uma tela por arquivo; main.js faz roteamento por hash
