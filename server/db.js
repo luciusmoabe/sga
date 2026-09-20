@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { createRequire } from 'node:module';
 import pg from 'pg';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -144,6 +144,8 @@ export function toPgSql(sql) {
 
 function openSqliteDb(file) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
+  // Carregado só no modo SQLite: em PostgreSQL (Vercel) o binário nativo não é necessário.
+  const Database = createRequire(import.meta.url)('better-sqlite3');
   const db = new Database(file);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
