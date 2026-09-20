@@ -16,7 +16,7 @@ SGC_AUTH_MODE=demo DATABASE_URL="" npm start
 
 Abra http://127.0.0.1:3000. Nesse modo local, o banco (`data/sgc.db`, SQLite) é criado com dados fictícios. O modo demo escuta apenas loopback e é recusado com `NODE_ENV=production` ou na Vercel.
 
-O modo padrão usa Microsoft Entra ID e exige configuração institucional antes de iniciar. Veja [AUTENTICACAO.md](AUTENTICACAO.md) para registrar a aplicação, configurar o ambiente, migrar e vincular contas. As credenciais de demonstração não funcionam nesse modo.
+O modo padrão usa Supabase Auth (e-mail e senha) e exige configuração institucional antes de iniciar. Veja [AUTENTICACAO.md](AUTENTICACAO.md) para configurar o projeto, migrar e vincular contas. As credenciais de demonstração não funcionam nesse modo.
 
 | Comando | O que faz |
 | --- | --- |
@@ -25,7 +25,7 @@ O modo padrão usa Microsoft Entra ID e exige configuração institucional antes
 | `npm run seed` | Apaga o banco e recria os dados fictícios |
 | `npm run migrate -- --sqlite CAMINHO` | Aplica migrações ao arquivo SQLite indicado |
 | `npm run migrate -- --postgres` | Aplica migrações usando `SGC_MIGRATION_DATABASE_URL` explícita |
-| `npm run check:auth` | Verifica configuração Entra sem exibir segredos; `-- --online` consulta a descoberta pública do tenant |
+| `npm run check:auth` | Verifica configuração Supabase sem exibir a chave; `-- --online` consulta as configurações públicas do projeto |
 | `npm test` | Roda os testes de regras, API e concorrência SQLite em memória, além do adaptador PostgreSQL com pool simulado |
 | `npm run test:postgres` | Cria PostgreSQL temporário e valida migrações, rollback e concorrência entre duas APIs; requer binários locais ([instruções](TESTES_POSTGRESQL.md)) |
 
@@ -70,7 +70,7 @@ Teclas: seta direita avança, seta esquerda volta. Há também a "Versão para i
 
 ## Limites conhecidos desta versão
 
-- Login Microsoft Entra ID implementado e testado com provedor simulado e tokens assinados em teste; a validação no tenant institucional e a inspeção visual da nova entrada ainda estão pendentes. A escolha de perfil por `x-user-id` só existe no modo demo local explícito.
+- Login Supabase Auth (e-mail e senha) implementado e testado com provedor simulado; a validação no projeto Supabase real e a inspeção visual da nova entrada ainda estão pendentes. A escolha de perfil por `x-user-id` só existe no modo demo local explícito.
 - Sem e-mail nem lembretes. "Enviar ata" apenas libera a leitura no sistema.
 - O chefe não tem tela própria para gerir subseções e ações internas (a estrutura existe no banco e é criada pelo Diretor).
 - Sem trava automática do envio após segunda 18h (o chefe ainda consegue enviar correção).

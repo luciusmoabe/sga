@@ -152,7 +152,7 @@ O diagnóstico local confirmou ausência de `SGC_PUBLIC_ORIGIN`, `ENTRA_TENANT_I
 
 ## Decisões de produto pendentes
 
-- Provedor definido: Microsoft Entra ID institucional. Configuração do registro e vínculos pendentes.
+- Provedor definido: Supabase Auth (e-mail e senha), substituindo a integração Entra ID inicial. Configuração do projeto e vínculos pendentes.
 - Política de correções após o fechamento semanal.
 - Momento de mudança da semana de referência para reuniões com horário configurável.
 - Efeito da falta de atualização de uma subseção no semáforo do Centro.

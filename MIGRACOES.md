@@ -33,7 +33,8 @@ O migrador não utiliza `DATABASE_URL` como destino implícito. Não registre a 
 | 1 | `acoes_arquivadas` | Adiciona `acoes.arquivada` se estiver ausente, preservando as linhas existentes |
 | 2 | `unicidade_pedidos_e_reunioes` | Cria índices únicos para um pedido pendente por ação e uma reunião em andamento |
 | 3 | `integridade_referencial` | Acrescenta FK adiada de chefe no SQLite e remove quatro cascatas PostgreSQL, preservando os registros |
-| 4 | `identidade_institucional` | Cria vínculos Entra, sessões e fluxos OAuth; em PostgreSQL/public habilita RLS e revoga permissões públicas aos objetos Agilis |
+| 4 | `identidade_institucional` | Cria tabelas de identidade da integração OAuth anterior (Entra), hoje sem uso; em PostgreSQL/public habilita RLS e revoga permissões públicas aos objetos Agilis |
+| 5 | `login_email_senha` | Cria `auth_contas` (vínculo com usuário Supabase), `auth_sessoes_senha` e `auth_tentativas`; reaplica RLS e revogações em PostgreSQL/public |
 
 A unicidade das versões semanais já faz parte do esquema base (`secao_id`, `semana`, `versao`). Os destinos e as regras de exclusão/atualização de todas as FKs do esquema migrado são comparados automaticamente entre SQLite e PostgreSQL.
 
@@ -51,7 +52,7 @@ Esta versão alinha os vínculos existentes. Não acrescenta novas regras de dom
 
 ## Atualização de ambiente existente
 
-Para a versão 4, configure o registro Entra e prepare os vínculos antes de reabrir a aplicação. A migração PostgreSQL altera permissões: acessos diretos de `anon` e `authenticated` deixam de funcionar. O backend deve usar papel proprietário ou administrado com `BYPASSRLS`; veja [AUTENTICACAO.md](AUTENTICACAO.md). Dados existentes não são vinculados por e-mail automaticamente. Nenhuma sessão nem identidade fictícia é criada pela migração.
+Para as versões 4 e 5, configure o projeto Supabase Auth e prepare os vínculos antes de reabrir a aplicação. A migração PostgreSQL altera permissões: acessos diretos de `anon` e `authenticated` deixam de funcionar. O backend deve usar papel proprietário ou administrado com `BYPASSRLS`; veja [AUTENTICACAO.md](AUTENTICACAO.md). Dados existentes não são vinculados por e-mail automaticamente. Nenhuma sessão nem identidade fictícia é criada pela migração.
 
 1. Faça backup e confirme o procedimento de restauração.
 2. Teste a migração em uma cópia isolada dos dados.
