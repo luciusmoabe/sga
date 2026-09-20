@@ -12,7 +12,7 @@ Idioma do produto, dos textos da interface, dos commits e dos comentários: port
 
 ## Arquitetura
 
-- `server/`: Express 4 + better-sqlite3 (síncrono, WAL, `foreign_keys` ligado). ES modules. Sem ORM; SQL direto.
+- `server/`: Express 4 + adaptadores SQLite (better-sqlite3, WAL, `foreign_keys` ligado) e PostgreSQL (pg). ES modules. Sem ORM; SQL direto. A interface de ambos os bancos é assíncrona: aguarde `get`, `all`, `run`, `seed` e os helpers de árvore. Use `await db.transaction(async () => { ... })`; transações aninhadas são rejeitadas. SQLite serializa consultas externas durante uma transação; PostgreSQL mantém o cliente por contexto assíncrono. A hierarquia é consultada no banco, sem cache local.
   - `app.js` rotas gerais; `reunioes.js` combinados, reuniões, decisões e ata; `helpers.js` painel, pauta e montagem de cartões; `logic.js` regras puras; `db.js` esquema e árvore de seções (CTE recursiva); `seed.js` dados fictícios.
   - Autenticação simulada: o cabeçalho `x-user-id` identifica o usuário. `/api/usuarios-demo` é a única rota sem usuário.
 - `public/`: SPA em JavaScript puro (módulos ES, sem build), rota por hash em `js/main.js`. Cada tela é uma função `(raiz, {id, q, refresh})` que preenche um elemento. Dialogs com `<dialog>` via `abrirForm` em `js/ui.js`. Delegação de eventos com `on(raiz, tipo, seletor, fn)`.

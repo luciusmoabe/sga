@@ -14,7 +14,7 @@ export const addDays = (s, n) => {
 };
 export const agora = () => (process.env.SGC_NOW ? new Date(process.env.SGC_NOW) : new Date());
 export const hojeISO = () => iso(agora());
-export const ehISO = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(parseISO(s).getTime());
+export const ehISO = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && iso(parseISO(s)) === s;
 export const ehTerca = (s) => ehISO(s) && parseISO(s).getDay() === 2;
 export const br = (s) => (s ? s.split('-').reverse().join('/') : '');
 

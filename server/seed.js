@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { openDb, estaVazio } from './db.js';
 import { addDays, agora, hojeISO, refTerca } from './logic.js';
 
-export function seed(db) {
+export async function seed(db) {
   const hoje = hojeISO();
   const ref = refTerca(agora());
   const ant = addDays(ref, -7);
@@ -34,16 +34,16 @@ export function seed(db) {
     [9, 'Gabriela Sena', 'chefe', 7],
   ];
 
-  db.transaction(() => {
+  await db.transaction(async () => {
     const insS = db.prepare('insert into secoes (id,nome,sigla,tipo,pai_id,ordem,criada_em) values (?,?,?,?,?,?,?)');
-    for (const s of secoes) insS.run(...s, ts(addDays(ant, -60)));
+    for (const s of secoes) await insS.run(...s, ts(addDays(ant, -60)));
     const insU = db.prepare('insert into usuarios (id,nome,email,perfil,secao_id) values (?,?,?,?,?)');
     for (const [id, nome, perfil, secao] of usuarios) {
       const email = `${nome.toLowerCase().normalize('NFD').replace(/[^a-z ]/g, '').replace(/ /g, '.')}@exemplo.invalid`;
-      insU.run(id, nome, email, perfil, secao);
+      await insU.run(id, nome, email, perfil, secao);
     }
     const setChefe = db.prepare('update secoes set chefe_id = ? where id = ?');
-    for (const [id, , perfil, secao] of usuarios) if (perfil === 'chefe') setChefe.run(id, secao);
+    for (const [id, , perfil, secao] of usuarios) if (perfil === 'chefe') await setChefe.run(id, secao);
 
     const insD = db.prepare(
       'insert into diretrizes (titulo,detalhe,destino,prazo,prioridade,criado_por,criado_em) values (?,?,?,?,?,?,?)',
@@ -56,19 +56,19 @@ export function seed(db) {
     const insCom = db.prepare('insert into acao_comentarios (acao_id,usuario_id,texto,criado_em) values (?,?,?,?)');
     const chefeDe = { 1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 6: 8, 7: 9 };
 
-    const diretriz = (titulo, detalhe, destino, prazoOff, prio, alvos) => {
+    const diretriz = async (titulo, detalhe, destino, prazoOff, prio, alvos) => {
       const prazo = addDays(hoje, prazoOff);
-      const d = insD.run(titulo, detalhe, destino, prazo, prio, 1, ts(ant, '11:00:00')).lastInsertRowid;
+      const d = (await insD.run(titulo, detalhe, destino, prazo, prio, 1, ts(ant, '11:00:00'))).lastInsertRowid;
       for (const [secaoId, status, minutos, encerrada] of alvos) {
         const concl = status === 'concluida' ? ts(addDays(hoje, -1), '16:00:00') : null;
-        const a = insA.run(d, secaoId, titulo, detalhe, status, prazo, prazo, prio, 0, encerrada ? 1 : 0, concl, ts(ant, '11:00:00')).lastInsertRowid;
-        insCom.run(a, 1, 'Ação demandada pelo Diretor.', ts(ant, '11:00:00'));
-        if (minutos) insT.run(a, chefeDe[secaoId], addDays(hoje, -2), minutos, ts(addDays(hoje, -2), '15:00:00'));
+        const a = (await insA.run(d, secaoId, titulo, detalhe, status, prazo, prazo, prio, 0, encerrada ? 1 : 0, concl, ts(ant, '11:00:00'))).lastInsertRowid;
+        await insCom.run(a, 1, 'Ação demandada pelo Diretor.', ts(ant, '11:00:00'));
+        if (minutos) await insT.run(a, chefeDe[secaoId], addDays(hoje, -2), minutos, ts(addDays(hoje, -2), '15:00:00'));
       }
       return d;
     };
 
-    diretriz('Enviar o plano de trabalho do próximo trimestre', 'Usar o modelo padrão do Departamento, com metas, responsáveis e marcos.', 'todos', 10, 'alta', [
+    await diretriz('Enviar o plano de trabalho do próximo trimestre', 'Usar o modelo padrão do Departamento, com metas, responsáveis e marcos.', 'todos', 10, 'alta', [
       [1, 'em_andamento', 90],
       [2, 'a_fazer', 0],
       [3, 'em_andamento', 60],
@@ -76,12 +76,12 @@ export function seed(db) {
       [5, 'a_fazer', 0],
       [6, 'em_andamento', 45],
     ]);
-    diretriz('Consolidar a proposta de remanejamento orçamentário', 'Consolidar os saldos por programa e indicar as fontes de cobertura.', 'especificos', -2, 'alta', [
+    await diretriz('Consolidar a proposta de remanejamento orçamentário', 'Consolidar os saldos por programa e indicar as fontes de cobertura.', 'especificos', -2, 'alta', [
       [2, 'em_andamento', 150],
       [1, 'concluida', 240],
     ]);
-    diretriz('Revisar o fluxo de aprovação de convênios', 'Mapear as etapas atuais e propor a redução de pontos de espera.', 'especificos', 2, 'alta', [[3, 'a_fazer', 0]]);
-    diretriz('Atualizar o cadastro de contatos da seção', 'Conferir nomes, telefones e e-mails institucionais.', 'todos', -6, 'media', [
+    await diretriz('Revisar o fluxo de aprovação de convênios', 'Mapear as etapas atuais e propor a redução de pontos de espera.', 'especificos', 2, 'alta', [[3, 'a_fazer', 0]]);
+    await diretriz('Atualizar o cadastro de contatos da seção', 'Conferir nomes, telefones e e-mails institucionais.', 'todos', -6, 'media', [
       [1, 'concluida', 45, 1],
       [2, 'concluida', 40, 1],
       [3, 'concluida', 50, 0],
@@ -89,14 +89,14 @@ export function seed(db) {
       [5, 'bloqueada', 35],
       [6, 'concluida', 25, 0],
     ]);
-    diretriz('Publicar o painel de indicadores do mês', 'Painel validado com a Seção de Indicadores.', 'especificos', 5, 'media', [[4, 'em_andamento', 120]]);
+    await diretriz('Publicar o painel de indicadores do mês', 'Painel validado com a Seção de Indicadores.', 'especificos', 5, 'media', [[4, 'em_andamento', 120]]);
 
     // Ações internas de subseções: contam no semáforo do Centro, mas o Diretor só vê o resumo.
-    insA.run(null, 7, 'Padronizar as fichas de indicadores', 'Ação interna do Centro de Planejamento.', 'em_andamento', addDays(hoje, 1), addDays(hoje, 1), 'media', 1, 0, null, ts(ant));
-    insA.run(null, 8, 'Mapear o processo de solicitação de diárias', 'Ação interna do Centro de Gestão de Processos.', 'em_andamento', addDays(hoje, -1), addDays(hoje, -1), 'media', 1, 0, null, ts(ant));
+    await insA.run(null, 7, 'Padronizar as fichas de indicadores', 'Ação interna do Centro de Planejamento.', 'em_andamento', addDays(hoje, 1), addDays(hoje, 1), 'media', 1, 0, null, ts(ant));
+    await insA.run(null, 8, 'Mapear o processo de solicitação de diárias', 'Ação interna do Centro de Gestão de Processos.', 'em_andamento', addDays(hoje, -1), addDays(hoje, -1), 'media', 1, 0, null, ts(ant));
 
-    const pend = db.prepare('select id, prazo from acoes where secao_id = 5 and status = ?').get('bloqueada');
-    db.prepare(
+    const pend = await db.prepare('select id, prazo from acoes where secao_id = 5 and status = ?').get('bloqueada');
+    await db.prepare(
       `insert into pedidos_prazo (acao_id,usuario_id,prazo_atual,novo_prazo,justificativa,criado_em) values (?,?,?,?,?,?)`,
     ).run(pend.id, 7, pend.prazo, addDays(hoje, 7), 'Aguardamos o retorno de dois órgãos parceiros para concluir a conferência.', ts(addDays(hoje, -1), '10:30:00'));
 
@@ -112,11 +112,11 @@ export function seed(db) {
       [6, ['Cronograma do projeto especial validado'], ['Iniciar a etapa de homologação'], [], ''],
     ];
     for (const [secao, extras, prox, imp, apoio] of anterior) {
-      insAt.run(secao, ant, 1, j({ previstos: [], extras }), j(prox), j(imp), 0, apoio, chefeDe[secao], ts(addDays(ant, 6), '15:20:00'));
+      await insAt.run(secao, ant, 1, j({ previstos: [], extras }), j(prox), j(imp), 0, apoio, chefeDe[secao], ts(addDays(ant, 6), '15:20:00'));
     }
-    insAt.run(1, ref, 1, j({ previstos: [{ texto: 'Fechar o plano de trabalho do trimestre', cumprido: false }, { texto: 'Reunir a equipe de indicadores', cumprido: true }], extras: ['Apresentação ao gabinete'] }), j(['Enviar o plano de trabalho ao Diretor']), j([]), 0, '', 3, ts(addDays(ref, -2), '14:10:00'));
-    insAt.run(3, ref, 1, j({ previstos: [{ texto: 'Revisar o fluxo de aprovação de convênios', cumprido: false }], extras: ['Reunião com a Procuradoria sobre o fluxo'] }), j(['Concluir a revisão do fluxo']), j(['Sistema de convênios fora do ar desde segunda-feira']), 1, 'Preciso de apoio da TI para restabelecer o sistema.', 5, ts(addDays(ref, -2), '16:40:00'));
-    insAt.run(4, ref, 1, j({ previstos: [{ texto: 'Publicar o painel de indicadores do mês', cumprido: false }], extras: ['Validação dos dados com a Seção de Indicadores'] }), j(['Publicar o painel', 'Iniciar a carga de dados de agosto']), j([]), 0, '', 6, ts(addDays(ref, -3), '09:50:00'));
+    await insAt.run(1, ref, 1, j({ previstos: [{ texto: 'Fechar o plano de trabalho do trimestre', cumprido: false }, { texto: 'Reunir a equipe de indicadores', cumprido: true }], extras: ['Apresentação ao gabinete'] }), j(['Enviar o plano de trabalho ao Diretor']), j([]), 0, '', 3, ts(addDays(ref, -2), '14:10:00'));
+    await insAt.run(3, ref, 1, j({ previstos: [{ texto: 'Revisar o fluxo de aprovação de convênios', cumprido: false }], extras: ['Reunião com a Procuradoria sobre o fluxo'] }), j(['Concluir a revisão do fluxo']), j(['Sistema de convênios fora do ar desde segunda-feira']), 1, 'Preciso de apoio da TI para restabelecer o sistema.', 5, ts(addDays(ref, -2), '16:40:00'));
+    await insAt.run(4, ref, 1, j({ previstos: [{ texto: 'Publicar o painel de indicadores do mês', cumprido: false }], extras: ['Validação dos dados com a Seção de Indicadores'] }), j(['Publicar o painel', 'Iniciar a carga de dados de agosto']), j([]), 0, '', 6, ts(addDays(ref, -3), '09:50:00'));
 
     const insC = db.prepare('insert into combinados (texto,ordem,ativo,arquivado,criado_por,criado_em,alterado_em) values (?,?,?,?,?,?,?)');
     const combinados = [
@@ -126,10 +126,10 @@ export function seed(db) {
       'Decisões e prazos são registrados aqui, na hora.',
       'Pedidos de apoio são tratados ao final de cada seção.',
     ];
-    combinados.forEach((t, i) => insC.run(t, i + 1, 1, 0, 1, ts(addDays(ant, -30)), ts(addDays(ant, -30))));
-    db.prepare('insert into config (chave,valor) values (?,?)').run('combinados_frequencia', 'sempre');
+    for (const [i, t] of combinados.entries()) await insC.run(t, i + 1, 1, 0, 1, ts(addDays(ant, -30)), ts(addDays(ant, -30)));
+    await db.prepare('insert into config (chave,valor) values (?,?)').run('combinados_frequencia', 'sempre');
 
-    const rid = db
+    const rid = (await db
       .prepare(
         `insert into reunioes (data,semana,iniciada_em,encerrada_em,status,combinados_snapshot,ata_texto,enviada_em,criada_por)
          values (?,?,?,?,?,?,?,?,?)`,
@@ -144,23 +144,25 @@ export function seed(db) {
         `ATA DA REUNIÃO SEMANAL (exemplo)\n\nDecisões:\n- [COF] Priorizar a proposta de remanejamento; nova data de entrega definida pelo Diretor.\n- [CCP] Diretor enviará ofício aos parceiros que não responderam.\n\nNovas ações:\n- [Todos os Centros] Enviar o plano de trabalho do próximo trimestre.`,
         ts(ant, '15:00:00'),
         2,
-      ).lastInsertRowid;
+      )).lastInsertRowid;
     const insDec = db.prepare('insert into decisoes (reuniao_id,secao_id,texto,criada_em,criada_por) values (?,?,?,?,?)');
-    insDec.run(rid, 2, 'Priorizar a proposta de remanejamento; nova data de entrega definida pelo Diretor.', ts(ant, '10:30:00'), 2);
-    insDec.run(rid, 5, 'Diretor enviará ofício aos parceiros que não responderam.', ts(ant, '10:50:00'), 2);
-  })();
+    await insDec.run(rid, 2, 'Priorizar a proposta de remanejamento; nova data de entrega definida pelo Diretor.', ts(ant, '10:30:00'), 2);
+    await insDec.run(rid, 5, 'Diretor enviará ofício aos parceiros que não responderam.', ts(ant, '10:50:00'), 2);
+  });
 }
 
-export function semearSeVazio(db) {
-  if (estaVazio(db)) seed(db);
+export async function semearSeVazio(db) {
+  if (await estaVazio(db)) await seed(db);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  if (process.env.DATABASE_URL) throw new Error('O seed de demonstração exige DATABASE_URL vazia; use um SQLite isolado.');
   const arquivo = process.env.SGC_DB || 'data/sgc.db';
   if (process.argv.includes('--reset')) {
     for (const ext of ['', '-wal', '-shm']) fs.rmSync(arquivo + ext, { force: true });
   }
   const db = openDb(arquivo);
-  semearSeVazio(db);
+  await semearSeVazio(db);
+  await db.close();
   console.log(`Banco pronto em ${arquivo}`);
 }

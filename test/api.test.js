@@ -3,16 +3,21 @@ process.env.SGC_NOW = '2026-09-19T10:00:00';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 
 const { openDb } = await import('../server/db.js');
 const { seed } = await import('../server/seed.js');
 const { createApp } = await import('../server/app.js');
 
 const db = openDb(':memory:');
-seed(db);
+await seed(db);
 const server = createApp(db).listen(0);
+await once(server, 'listening');
 const base = `http://127.0.0.1:${server.address().port}`;
-test.after(() => server.close());
+test.after(async () => {
+  await new Promise((resolve, reject) => server.close(err => err ? reject(err) : resolve()));
+  await db.close();
+});
 
 const DIRETOR = 1;
 const APOIO = 2;
@@ -325,4 +330,3 @@ test('ações demandadas pelo Diretor NÃO podem ser arquivadas nem excluídas (
   assert.equal(del.status, 403);
   assert.match(del.data.erro, /Diretor/);
 });
-

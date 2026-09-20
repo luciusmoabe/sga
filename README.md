@@ -21,7 +21,9 @@ Abra http://localhost:3000. Na primeira execução o banco (`data/sgc.db`, SQLit
 | `npm start` | Sobe o servidor (porta 3000; mude com `PORT=3100 npm start`) |
 | `npm run dev` | Igual, reiniciando ao alterar arquivos do servidor |
 | `npm run seed` | Apaga o banco e recria os dados fictícios |
-| `npm test` | Roda os testes da API (16 testes, banco em memória) |
+| `npm test` | Roda os testes de regras, API e concorrência SQLite em memória, além do adaptador PostgreSQL com pool simulado |
+
+Com `DATABASE_URL` preenchida, a aplicação usa PostgreSQL e o comando de seed é recusado. Para uma demonstração SQLite isolada, use `DATABASE_URL="" SGC_DB=/tmp/sgc-demo.db npm run seed` e inicie com as mesmas variáveis. O seed aguarda o commit completo antes de terminar.
 
 Variáveis de ambiente: `PORT`, `SGC_DB` (caminho do arquivo SQLite) e `SGC_NOW` (data e hora "de mentira", útil para demonstrar o fechamento de segunda 18h ou a terça da reunião, por exemplo `SGC_NOW=2026-09-22T09:30:00 npm start`; para os dados de exemplo fazerem sentido, use `npm run seed` com a mesma variável).
 
@@ -64,7 +66,7 @@ Teclas: seta direita avança, seta esquerda volta. Há também a "Versão para i
 ## Estrutura do código
 
 ```
-server/   API Express + SQLite (better-sqlite3)
+server/   API Express + SQLite (better-sqlite3) ou PostgreSQL (pg)
   app.js       rotas de seções, usuários, ações, atualizações, painel, pauta
   reunioes.js  combinados, reuniões, decisões, ata
   logic.js     regras puras: semana, fechamento, semáforo
@@ -77,3 +79,5 @@ test/     testes da API
 ```
 
 Para continuar o desenvolvimento com o Claude Code, abra esta pasta e leia o `CLAUDE.md`.
+
+O andamento das correções e as limitações da validação estão em [ESTABILIZACAO.md](ESTABILIZACAO.md).

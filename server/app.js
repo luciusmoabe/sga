@@ -30,12 +30,16 @@ export function createApp(db) {
        order by case u.perfil when 'diretor' then 0 when 'apoio' then 1 else 2 end, u.nome`)));
 
   app.use('/api', async (req, res, next) => {
-    if (req.path === '/usuarios-demo') return next();
-    const id = Number(req.get('x-user-id'));
-    const u = id ? await q1('select * from usuarios where id = ? and ativo = 1', id) : null;
-    if (!u) return next(falha(401, 'Escolha um usuário para entrar.'));
-    req.user = u;
-    next();
+    try {
+      if (req.path === '/usuarios-demo') return next();
+      const id = Number(req.get('x-user-id'));
+      const u = id ? await q1('select * from usuarios where id = ? and ativo = 1', id) : null;
+      if (!u) return next(falha(401, 'Escolha um usuário para entrar.'));
+      req.user = u;
+      next();
+    } catch (err) {
+      next(err);
+    }
   });
 
   const hoje = () => hojeISO();
@@ -54,13 +58,11 @@ export function createApp(db) {
     return s;
   };
   const cfg = async () => Object.fromEntries((await q('select chave, valor from config')).map((r) => [r.chave, r.valor]));
-  const visiveisAcoes = (user) =>
-    user.perfil === 'chefe'
-      ? (() => {
-          const ids = user.secao_id ? subarvore(db, user.secao_id) : [-1];
-          return { where: `a.secao_id in (${marks(ids)})`, params: ids };
-        })()
-      : { where: '(a.interna = 0 or a.compartilhada = 1)', params: [] };
+  const visiveisAcoes = async (user) => {
+    if (user.perfil !== 'chefe') return { where: '(a.interna = 0 or a.compartilhada = 1)', params: [] };
+    const ids = user.secao_id ? await subarvore(db, user.secao_id) : [-1];
+    return { where: `a.secao_id in (${marks(ids)})`, params: ids };
+  };
 
   const SELECT_ACAO = `select a.*, s.nome as secao_nome, s.sigla as secao_sigla,
       d.criado_por as demandado_por_id,
@@ -90,13 +92,13 @@ export function createApp(db) {
     reuniao_semana: a.reuniao_semana,
   });
   const acaoVisivel = async (user, id) => {
-    const v = visiveisAcoes(user);
+    const v = await visiveisAcoes(user);
     const a = await q1(`${SELECT_ACAO} where a.id = ? and ${v.where}`, id, ...v.params);
     if (!a) throw falha(404, 'Ação não encontrada.');
     return a;
   };
-  const chefeGere = (user, acao) => {
-    if (user.perfil !== 'chefe' || !user.secao_id || !subarvore(db, user.secao_id).includes(acao.secao_id)) {
+  const chefeGere = async (user, acao) => {
+    if (user.perfil !== 'chefe' || !user.secao_id || !(await subarvore(db, user.secao_id)).includes(acao.secao_id)) {
       throw falha(403, 'Somente o chefe da seção responsável pode alterar esta ação.');
     }
   };
@@ -123,7 +125,7 @@ export function createApp(db) {
   const listaSecoes = async (user) => {
     let rows = await q(`select s.*, u.nome as chefe_nome from secoes s left join usuarios u on u.id = s.chefe_id order by s.ordem, s.id`);
     if (user.perfil === 'chefe') {
-      const ids = new Set(user.secao_id ? subarvore(db, user.secao_id) : []);
+      const ids = new Set(user.secao_id ? await subarvore(db, user.secao_id) : []);
       rows = rows.filter((r) => ids.has(r.id));
     }
     const porId = new Map(rows.map((r) => [r.id, r]));
@@ -146,7 +148,6 @@ export function createApp(db) {
       await run('update usuarios set secao_id = ? where id = ?', secaoId, chefeId);
     }
     await run('update secoes set chefe_id = ? where id = ?', chefeId, secaoId);
-    if (db.refreshSecoes) await db.refreshSecoes();
   };
 
   app.post('/api/secoes', permit('diretor'), h(async (req, res) => {
@@ -158,19 +159,20 @@ export function createApp(db) {
     if (b.tipo === 'subsecao') {
       pai = await q1('select * from secoes where id = ? and ativa = 1', Number(b.pai_id));
       if (!pai) throw falha(400, 'Escolha a seção à qual a subseção ficará ligada.');
-      if (nivel(db, pai.id) + 1 > LIMITE_NIVEIS) throw falha(400, `A estrutura aceita até ${LIMITE_NIVEIS} níveis abaixo do Departamento.`);
+      if (await nivel(db, pai.id) + 1 > LIMITE_NIVEIS) throw falha(400, `A estrutura aceita até ${LIMITE_NIVEIS} níveis abaixo do Departamento.`);
     } else if (b.pai_id) {
       throw falha(400, 'Centros e Coordenação ficam no primeiro nível.');
     }
     const chefe = await validarChefe(b.chefe_id);
-    const ordemRow = await q1('select coalesce(max(ordem), 0) + 1 o from secoes where pai_id is ?', pai?.id ?? null);
+    const ordemRow = pai
+      ? await q1('select coalesce(max(ordem), 0) + 1 o from secoes where pai_id = ?', pai.id)
+      : await q1('select coalesce(max(ordem), 0) + 1 o from secoes where pai_id is null');
     const ordem = ordemRow?.o ?? 1;
     const id = (await run(
       'insert into secoes (nome, sigla, tipo, pai_id, ordem, criada_em) values (?,?,?,?,?,?)',
       nome, texto(b.sigla, 12).toUpperCase() || null, b.tipo, pai?.id ?? null, ordem, agoraISO(),
     )).lastInsertRowid;
     if (chefe) await atribuirChefe(id, chefe);
-    if (db.refreshSecoes) await db.refreshSecoes();
     res.status(201);
     return (await listaSecoes(req.user)).find((s) => s.id === id);
   }));
@@ -188,7 +190,9 @@ export function createApp(db) {
     if ('sigla' in b) await run('update secoes set sigla = ? where id = ?', texto(b.sigla, 12).toUpperCase() || null, id);
     if ('chefe_id' in b) await atribuirChefe(id, await validarChefe(b.chefe_id));
     if (b.mover === 'cima' || b.mover === 'baixo') {
-      const irmas = await q('select id from secoes where pai_id is ? order by ordem, id', s.pai_id);
+      const irmas = s.pai_id == null
+        ? await q('select id from secoes where pai_id is null order by ordem, id')
+        : await q('select id from secoes where pai_id = ? order by ordem, id', s.pai_id);
       for (let i = 0; i < irmas.length; i++) {
         await run('update secoes set ordem = ? where id = ?', i + 1, irmas[i].id);
       }
@@ -205,10 +209,10 @@ export function createApp(db) {
         await run('update secoes set ativa = 1 where id = ?', id);
       } else {
         if (await q1('select 1 from secoes where pai_id = ? and ativa = 1', id)) throw falha(409, 'Desative antes as subseções que ficam abaixo desta seção.');
-        const abertas = (await q1(`select count(*) n from acoes where secao_id = ? and status != 'concluida' and encerrada = 0`, id))?.n ?? 0;
+        const abertas = (await q1(`select count(*) n from acoes where secao_id = ? and status != 'concluida' and encerrada = 0 and arquivada = 0`, id))?.n ?? 0;
         if (abertas > 0) {
           if (b.reatribuir && s.pai_id) {
-            await run(`update acoes set secao_id = ? where secao_id = ? and status != 'concluida' and encerrada = 0`, s.pai_id, id);
+            await run(`update acoes set secao_id = ? where secao_id = ? and status != 'concluida' and encerrada = 0 and arquivada = 0`, s.pai_id, id);
           } else {
             const e = falha(409, s.pai_id
               ? `Esta seção tem ${abertas} ação(ões) aberta(s). Reatribua-as à seção acima para desativar.`
@@ -220,7 +224,6 @@ export function createApp(db) {
         await run('update secoes set ativa = 0 where id = ?', id);
       }
     }
-    if (db.refreshSecoes) await db.refreshSecoes();
     return (await listaSecoes(req.user)).find((x) => x.id === id);
   }));
 
@@ -299,12 +302,12 @@ export function createApp(db) {
   const STATUS_OK = new Set(['a_fazer', 'em_andamento', 'bloqueada', 'concluida']);
 
   app.get('/api/acoes', h(async (req) => {
-    const v = visiveisAcoes(req.user);
+    const v = await visiveisAcoes(req.user);
     const where = [v.where];
     const params = [...v.params];
     const f = req.query;
     if (f.secao) {
-      const ids = subarvore(db, Number(f.secao));
+      const ids = await subarvore(db, Number(f.secao));
       where.push(`a.secao_id in (${marks(ids)})`);
       params.push(...ids);
     }
@@ -333,6 +336,9 @@ export function createApp(db) {
     const prioridade = PRIORIDADES.includes(b.prioridade) ? b.prioridade : 'media';
     const secaoId = req.user.perfil === 'chefe' ? req.user.secao_id : Number(b.secao_id);
     if (!secaoId) throw falha(400, 'Seção não informada.');
+    if (!(await q1('select id from secoes where id = ? and ativa = 1', secaoId))) {
+      throw falha(409, 'A seção precisa estar ativa para receber ações.');
+    }
     const detalhe = texto(b.detalhe, 2000) || null;
     const interna = b.interna !== undefined ? (b.interna ? 1 : 0) : 0;
     res.status(201);
@@ -350,7 +356,7 @@ export function createApp(db) {
 
   app.delete('/api/acoes/:id', h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
-    chefeGere(req.user, a);
+    await chefeGere(req.user, a);
     if (a.diretriz_id) {
       throw falha(403, 'Ações demandadas pelo Diretor não podem ser excluídas pela seção.');
     }
@@ -365,7 +371,7 @@ export function createApp(db) {
 
   app.post('/api/acoes/:id/arquivar', h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
-    chefeGere(req.user, a);
+    await chefeGere(req.user, a);
     if (a.diretriz_id) {
       throw falha(403, 'Ações demandadas pelo Diretor não podem ser arquivadas pela seção.');
     }
@@ -377,7 +383,10 @@ export function createApp(db) {
 
   app.post('/api/acoes/:id/desarquivar', h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
-    chefeGere(req.user, a);
+    await chefeGere(req.user, a);
+    if (!(await q1('select id from secoes where id = ? and ativa = 1', a.secao_id))) {
+      throw falha(409, 'Reative a seção antes de desarquivar a ação.');
+    }
     await run('update acoes set arquivada = 0 where id = ?', a.id);
     await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
       a.id, req.user.id, 'Ação desarquivada.', agoraISO());
@@ -396,7 +405,7 @@ export function createApp(db) {
 
   app.patch('/api/acoes/:id', h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
-    chefeGere(req.user, a);
+    await chefeGere(req.user, a);
     if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
 
     const p = req.body?.prioridade;
@@ -419,7 +428,7 @@ export function createApp(db) {
 
   app.post('/api/acoes/:id/tempo', h(async (req, res) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
-    chefeGere(req.user, a);
+    await chefeGere(req.user, a);
     if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
     const minutos = Number(req.body?.minutos);
     if (!Number.isInteger(minutos) || minutos <= 0 || minutos > 1440) throw falha(400, 'Informe o tempo em minutos inteiros, entre 1 e 1440.');
@@ -440,15 +449,21 @@ export function createApp(db) {
   }));
 
   app.post('/api/acoes/:id/pedido-prazo', h(async (req, res) => {
-    const a = await acaoVisivel(req.user, Number(req.params.id));
-    chefeGere(req.user, a);
-    const novo = req.body?.novo_prazo;
-    const just = texto(req.body?.justificativa, 600);
-    if (!ehISO(novo) || novo <= a.prazo) throw falha(400, 'O novo prazo deve ser posterior ao prazo atual.');
-    if (!just) throw falha(400, 'Explique o motivo do novo prazo.');
-    if (a.pedido_pendente) throw falha(409, 'Já existe um pedido de novo prazo aguardando decisão.');
-    await run('insert into pedidos_prazo (acao_id, usuario_id, prazo_atual, novo_prazo, justificativa, criado_em) values (?,?,?,?,?,?)',
-      a.id, req.user.id, a.prazo, novo, just, agoraISO());
+    const id = Number(req.params.id);
+    await chefeGere(req.user, await acaoVisivel(req.user, id));
+    await db.transaction(async () => {
+      if (db.isPg) await q1('select id from acoes where id = ? for update', id);
+      const a = await acaoVisivel(req.user, id);
+      await chefeGere(req.user, a);
+      if (a.arquivada || a.encerrada) throw falha(409, 'Não é possível pedir prazo para uma ação arquivada ou encerrada.');
+      const novo = req.body?.novo_prazo;
+      const just = texto(req.body?.justificativa, 600);
+      if (!ehISO(novo) || novo <= a.prazo) throw falha(400, 'O novo prazo deve ser posterior ao prazo atual.');
+      if (!just) throw falha(400, 'Explique o motivo do novo prazo.');
+      if (a.pedido_pendente) throw falha(409, 'Já existe um pedido de novo prazo aguardando decisão.');
+      await run('insert into pedidos_prazo (acao_id, usuario_id, prazo_atual, novo_prazo, justificativa, criado_em) values (?,?,?,?,?,?)',
+        a.id, req.user.id, a.prazo, novo, just, agoraISO());
+    });
     res.status(201);
     return { ok: true };
   }));
@@ -475,28 +490,41 @@ export function createApp(db) {
     return await q(`select p.*, a.titulo as acao_titulo, a.secao_id, s.nome as secao_nome, s.sigla as secao_sigla, u.nome as usuario_nome
               from pedidos_prazo p join acoes a on a.id = p.acao_id join secoes s on s.id = a.secao_id
               left join usuarios u on u.id = p.usuario_id
-              where (a.interna = 0 or a.compartilhada = 1) ${st ? `and p.status = '${st}'` : ''}
+              where (a.interna = 0 or a.compartilhada = 1) ${st ? `and p.status = '${st}' and a.arquivada = 0 and a.encerrada = 0` : ''}
               order by p.criado_em desc`);
   }));
   app.post('/api/pedidos-prazo/:id/decidir', permit('diretor', 'apoio'), h(async (req) => {
-    const p = await q1('select * from pedidos_prazo where id = ?', Number(req.params.id));
-    if (!p) throw falha(404, 'Pedido não encontrado.');
-    if (p.status !== 'pendente') throw falha(409, 'Este pedido já foi decidido.');
-    let reuniaoId = null;
-    if (req.user.perfil === 'apoio') {
-      const r = await q1(`select id from reunioes where id = ? and status = 'em_andamento'`, Number(req.body?.reuniao_id));
-      if (!r) throw falha(403, 'Somente o Diretor decide pedidos de prazo; o Apoio pode registrar a decisão durante a reunião.');
-      reuniaoId = r.id;
-    } else if (req.body?.reuniao_id) {
-      reuniaoId = (await q1(`select id from reunioes where id = ? and status = 'em_andamento'`, Number(req.body.reuniao_id)))?.id ?? null;
-    }
-    const aprovar = !!req.body?.aprovar;
-    await db.transaction(async () => {
-      await run('update pedidos_prazo set status = ?, decidido_em = ?, decidido_por = ?, reuniao_id = ? where id = ?',
+    const id = Number(req.params.id);
+    const visivel = await q1(`select p.acao_id from pedidos_prazo p join acoes a on a.id = p.acao_id
+      where p.id = ? and (a.interna = 0 or a.compartilhada = 1)`, id);
+    if (!visivel) throw falha(404, 'Pedido não encontrado.');
+    return db.transaction(async () => {
+      // Criar pedido e decidir pedido adquirem a mesma trava, sempre na ação.
+      if (db.isPg) await q1('select id from acoes where id = ? for update', visivel.acao_id);
+      const p = await q1(`select p.*, a.arquivada, a.encerrada, a.prazo from pedidos_prazo p join acoes a on a.id = p.acao_id
+        where p.id = ? and (a.interna = 0 or a.compartilhada = 1)`, id);
+      if (!p) throw falha(404, 'Pedido não encontrado.');
+      if (p.arquivada || p.encerrada) throw falha(409, 'Não é possível decidir prazo de uma ação arquivada ou encerrada.');
+      if (p.status !== 'pendente') throw falha(409, 'Este pedido já foi decidido.');
+      let reuniaoId = null;
+      if (req.body?.reuniao_id) {
+        const r = await q1(`select id from reunioes where id = ? and status = 'em_andamento'${db.isPg ? ' for update' : ''}`, Number(req.body.reuniao_id));
+        if (!r) throw falha(409, 'A reunião informada não está em andamento.');
+        reuniaoId = r.id;
+      }
+      if (req.user.perfil === 'apoio' && !reuniaoId) {
+        throw falha(403, 'Somente o Diretor decide pedidos de prazo; o Apoio pode registrar a decisão durante a reunião.');
+      }
+      const aprovar = req.body?.aprovar;
+      if (typeof aprovar !== 'boolean') throw falha(400, 'Informe se o pedido deve ser aprovado ou recusado.');
+      if (aprovar && p.prazo !== p.prazo_atual) throw falha(409, 'O prazo da ação mudou. Recuse este pedido e solicite um novo.');
+      const alterado = await run(`update pedidos_prazo set status = ?, decidido_em = ?, decidido_por = ?, reuniao_id = ?
+        where id = ? and status = 'pendente'`,
         aprovar ? 'aprovado' : 'recusado', agoraISO(), req.user.id, reuniaoId, p.id);
+      if (!alterado.changes) throw falha(409, 'Este pedido já foi decidido. Atualize a tela.');
       if (aprovar) await run('update acoes set prazo = ? where id = ?', p.novo_prazo, p.acao_id);
+      return { ok: true, status: aprovar ? 'aprovado' : 'recusado' };
     });
-    return { ok: true, status: aprovar ? 'aprovado' : 'recusado' };
   }));
 
   // ---------- Atualização semanal do chefe ----------
@@ -525,11 +553,16 @@ export function createApp(db) {
     const proximo = lista(b.proximo);
     const impedimentos = lista(b.impedimentos);
     if (!previstos.length && !feito.extras.length && !proximo.length) throw falha(400, 'Registre ao menos o que foi feito ou o que será feito.');
-    const versao = ((await q1('select coalesce(max(versao), 0) v from atualizacoes where secao_id = ? and semana = ?', req.user.secao_id, semana)).v) + 1;
-    await run(`insert into atualizacoes (secao_id, semana, versao, feito, proximo, impedimentos, critico, apoio, usuario_id, enviada_em) values (?,?,?,?,?,?,?,?,?,?)`,
-      req.user.secao_id, semana, versao, JSON.stringify(feito), JSON.stringify(proximo), JSON.stringify(impedimentos),
-      b.critico && impedimentos.length ? 1 : 0, texto(b.apoio, 600), req.user.id, agoraISO());
-    return await ultimaAtualizacao(db, req.user.secao_id, semana);
+    return db.transaction(async () => {
+      // A seção existe mesmo quando ainda não há atualização desta semana.
+      // Travá-la serializa a escolha da próxima versão entre instâncias PostgreSQL.
+      if (db.isPg) await q1('select id from secoes where id = ? for update', req.user.secao_id);
+      const versao = ((await q1('select coalesce(max(versao), 0) v from atualizacoes where secao_id = ? and semana = ?', req.user.secao_id, semana)).v) + 1;
+      await run(`insert into atualizacoes (secao_id, semana, versao, feito, proximo, impedimentos, critico, apoio, usuario_id, enviada_em) values (?,?,?,?,?,?,?,?,?,?)`,
+        req.user.secao_id, semana, versao, JSON.stringify(feito), JSON.stringify(proximo), JSON.stringify(impedimentos),
+        b.critico && impedimentos.length ? 1 : 0, texto(b.apoio, 600), req.user.id, agoraISO());
+      return await ultimaAtualizacao(db, req.user.secao_id, semana);
+    });
   }));
 
   const historicoDe = async (secaoId, limite = 12) =>
@@ -566,8 +599,8 @@ export function createApp(db) {
     if (!s) throw falha(404, 'Centro não encontrado.');
     const semana = await semanaDe(req);
     const item = (await painelSemana(db, semana, hoje())).find((i) => i.secao.id === id);
-    const ids = subarvore(db, id);
-    const acoes = (await q(`${SELECT_ACAO} where a.secao_id in (${marks(ids)}) and (a.interna = 0 or a.compartilhada = 1) and a.encerrada = 0
+    const ids = await subarvore(db, id);
+    const acoes = (await q(`${SELECT_ACAO} where a.secao_id in (${marks(ids)}) and (a.interna = 0 or a.compartilhada = 1) and a.encerrada = 0 and a.arquivada = 0
                      order by case a.status when 'concluida' then 1 else 0 end, a.prazo`, ...ids)).map(acaoOut);
     const tempoTotal = (await q1(`select coalesce(sum(t.minutos), 0) m from tempo t join acoes a on a.id = t.acao_id where a.secao_id in (${marks(ids)})`, ...ids))?.m ?? 0;
     return { semana, item, historico: await historicoDe(id), acoes, tempo_total: tempoTotal };

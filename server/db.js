@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import pg from 'pg';
 import fs from 'node:fs';
 import path from 'node:path';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import 'dotenv/config';
 
 const { Pool, types } = pg;
@@ -148,36 +149,48 @@ function openSqliteDb(file) {
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
   try { db.prepare('alter table acoes add column arquivada integer not null default 0').run(); } catch {}
-  db.isPg = false;
-
-  const makeTx = (execTx) => (fn) => {
-    let executed = false;
-    let promise = null;
-    const run = () => {
-      if (executed) return promise;
-      executed = true;
-      promise = execTx(fn);
-      return promise;
-    };
-    const fnWrapper = (...args) => run(...args);
-    fnWrapper.then = (onF, onR) => run().then(onF, onR);
-    fnWrapper.catch = (onR) => run().catch(onR);
-    return fnWrapper;
+  // Toda operação externa passa pela fila, inclusive leituras. Assim nenhuma
+  // requisição entra na transação aberta por outra enquanto seu callback aguarda.
+  const transacao = new AsyncLocalStorage();
+  let fila = Promise.resolve();
+  const enfileirar = (fn) => {
+    const resultado = fila.then(fn);
+    fila = resultado.catch(() => {});
+    return resultado;
+  };
+  const executar = (fn) => {
+    const contexto = transacao.getStore();
+    if (!contexto) return enfileirar(fn);
+    if (!contexto.ativa) return Promise.reject(new Error('A transação já terminou.'));
+    return Promise.resolve().then(fn);
   };
 
-  db.transaction = makeTx(async (fn) => {
-    db.exec('BEGIN');
-    try {
-      const res = await fn();
-      db.exec('COMMIT');
-      return res;
-    } catch (err) {
-      try { db.exec('ROLLBACK'); } catch {}
-      throw err;
-    }
-  });
-
-  return db;
+  return {
+    isPg: false,
+    prepare(sql) {
+      return Object.fromEntries(['all', 'get', 'run'].map(metodo => [
+        metodo, (...params) => executar(() => db.prepare(sql)[metodo](...params)),
+      ]));
+    },
+    async transaction(fn) {
+      if (transacao.getStore()) throw new Error('Transações aninhadas não são suportadas.');
+      return enfileirar(async () => {
+        const contexto = { ativa: true };
+        db.exec('BEGIN');
+        try {
+          const resultado = await transacao.run(contexto, fn);
+          db.exec('COMMIT');
+          return resultado;
+        } catch (err) {
+          db.exec('ROLLBACK');
+          throw err;
+        } finally {
+          contexto.ativa = false;
+        }
+      });
+    },
+    close: () => enfileirar(() => db.close()),
+  };
 }
 
 function openPgDb(url) {
@@ -189,40 +202,29 @@ function openPgDb(url) {
     connectionTimeoutMillis: 5_000,  // erro se não conectar em 5s
   });
 
-  const makeTx = (execTx) => (fn) => {
-    let executed = false;
-    let promise = null;
-    const run = () => {
-      if (executed) return promise;
-      executed = true;
-      promise = execTx(fn);
-      return promise;
-    };
-    const fnWrapper = (...args) => run(...args);
-    fnWrapper.then = (onF, onR) => run().then(onF, onR);
-    fnWrapper.catch = (onR) => run().catch(onR);
-    return fnWrapper;
+  return createPgDb(pool);
+}
+
+/** Adaptador separado da conexão para permitir testes sem acessar o banco real. */
+export function createPgDb(pool) {
+  const transacao = new AsyncLocalStorage();
+  const query = (sql, params) => {
+    const contexto = transacao.getStore();
+    if (contexto && !contexto.ativa) throw new Error('A transação já terminou.');
+    return (contexto?.client || pool).query(sql, params);
   };
 
   const db = {
     isPg: true,
     pool,
-    _secoesCache: [],
-    async refreshSecoes() {
-      try {
-        // Carrega id, pai_id e ativa para uso em subarvore() e nivel()
-        const res = await pool.query('select id, pai_id, ativa from secoes order by id');
-        db._secoesCache = res.rows;
-      } catch {}
-    },
     prepare(sql) {
       return {
         all: async (...p) => {
-          const res = await pool.query(toPgSql(sql), p);
+          const res = await query(toPgSql(sql), p);
           return res.rows;
         },
         get: async (...p) => {
-          const res = await pool.query(toPgSql(sql), p);
+          const res = await query(toPgSql(sql), p);
           return res.rows[0] || null;
         },
         run: async (...p) => {
@@ -231,7 +233,7 @@ function openPgDb(url) {
           if (isInsert && !/returning/i.test(sql) && !/\binto\s+config\b/i.test(sql)) {
             s += ' RETURNING id';
           }
-          const res = await pool.query(s, p);
+          const res = await query(s, p);
           return {
             changes: res.rowCount,
             lastInsertRowid: res.rows[0]?.id,
@@ -239,27 +241,29 @@ function openPgDb(url) {
         },
       };
     },
-    transaction: makeTx(async (fn) => {
+    async transaction(fn) {
+      if (transacao.getStore()) throw new Error('Transações aninhadas não são suportadas.');
       const client = await pool.connect();
+      const contexto = { client, ativa: true };
+      let descartar;
       try {
         await client.query('BEGIN');
-        const res = await fn();
+        const res = await transacao.run(contexto, fn);
         await client.query('COMMIT');
         return res;
       } catch (err) {
-        try { await client.query('ROLLBACK'); } catch {}
+        try { await client.query('ROLLBACK'); } catch (rollbackError) { descartar = rollbackError; }
         throw err;
       } finally {
-        client.release();
+        contexto.ativa = false;
+        client.release(descartar);
       }
-    }),
+    },
     async close() {
       await pool.end();
     },
   };
 
-  // Inicializa cache de seções
-  db.refreshSecoes();
   return db;
 }
 
@@ -271,72 +275,36 @@ export function openDb(target = process.env.SGC_DB || 'data/sgc.db') {
   return openSqliteDb(target);
 }
 
-/** Ids da seção e de todas as suas descendentes (árvore de seções). */
-export function subarvore(db, id) {
-  if (db?.isPg) {
-    const secoes = db._secoesCache || [];
-    const res = [];
-    const fila = [id];
-    while (fila.length > 0) {
-      const atual = fila.shift();
-      res.push(atual);
-      for (const s of secoes) {
-        if (s.pai_id === atual) fila.push(s.id);
-      }
-    }
-    return res.length > 0 ? res : [id];
-  }
-
-  return db
-    .prepare(
-      `with recursive t(id) as (
-         select ? union all select s.id from secoes s join t on s.pai_id = t.id
-       ) select id from t`,
-    )
-    .all(id)
-    .map((r) => r.id);
-}
-
-/** Nível da seção: Centro e Coordenação = 1, subseção = 2, subseção da subseção = 3. */
-export function nivel(db, id) {
-  let n = 0;
-  let atual = id;
-  if (db?.isPg && db._secoesCache?.length) {
-    while (atual) {
-      n += 1;
-      atual = db._secoesCache.find((s) => s.id === atual)?.pai_id;
-    }
-    return n;
-  }
-  while (atual) {
-    n += 1;
-    atual = db.prepare('select pai_id from secoes where id = ?').get(atual)?.pai_id;
-  }
-  return n;
+/** Ids da seção e descendentes, consultados no banco para todas as instâncias. */
+export async function subarvore(db, id) {
+  const rows = await db.prepare(
+    `with recursive t(id) as (
+       select cast(? as integer) union select s.id from secoes s join t on s.pai_id = t.id
+     ) select id from t`,
+  ).all(id);
+  return rows.map(r => r.id);
 }
 
 /** Ancestrais (do pai até o Centro), útil para permissões. */
-export function ancestrais(db, id) {
+export async function ancestrais(db, id) {
   const lista = [];
-  if (db?.isPg && db._secoesCache?.length) {
-    let atual = db._secoesCache.find((s) => s.id === id)?.pai_id;
-    while (atual) {
-      lista.push(atual);
-      atual = db._secoesCache.find((s) => s.id === atual)?.pai_id;
-    }
-    return lista;
-  }
-  let atual = db.prepare('select pai_id from secoes where id = ?').get(id)?.pai_id;
+  const vistos = new Set([id]);
+  let atual = (await db.prepare('select pai_id from secoes where id = ?').get(id))?.pai_id;
   while (atual) {
+    if (vistos.has(atual)) throw new Error('A estrutura de seções contém um ciclo.');
+    vistos.add(atual);
     lista.push(atual);
-    atual = db.prepare('select pai_id from secoes where id = ?').get(atual)?.pai_id;
+    atual = (await db.prepare('select pai_id from secoes where id = ?').get(atual))?.pai_id;
   }
   return lista;
 }
 
-export function estaVazio(db) {
-  if (db?.isPg) {
-    return false; // dados já migrados no Supabase
-  }
-  return db.prepare('select count(*) n from usuarios').get().n === 0;
+/** Centro = 1, subseção = 2, subseção da subseção = 3. */
+export async function nivel(db, id) {
+  return 1 + (await ancestrais(db, id)).length;
+}
+
+export async function estaVazio(db) {
+  if (db.isPg) return false; // PostgreSQL é provisionado por migrações/carga explícita.
+  return (await db.prepare('select count(*) n from usuarios').get()).n === 0;
 }

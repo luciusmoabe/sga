@@ -5,12 +5,12 @@ import { semearSeVazio } from './seed.js';
 
 const db = openDb();
 if (db.isPg) {
-  await db.refreshSecoes();
+  await db.prepare('select 1').get();
   if (process.env.NODE_ENV !== 'production') {
     console.log('Conectado ao Supabase PostgreSQL com sucesso!');
   }
 } else {
-  semearSeVazio(db);
+  await semearSeVazio(db);
 }
 
 export const app = createApp(db);

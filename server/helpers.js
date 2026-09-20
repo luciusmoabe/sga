@@ -69,7 +69,7 @@ export async function painelSemana(db, semana, hoje) {
   const ate = addDays(hoje, 2);
 
   // Monta mapa centroId → [ids da subárvore]
-  const arvores = new Map(centros.map((c) => [c.id, subarvore(db, c.id)]));
+  const arvores = new Map(await Promise.all(centros.map(async (c) => [c.id, await subarvore(db, c.id)])));
   // Todos os ids de seções (raízes + descendentes), achatados com mapeamento para centro raiz
   const todosIds = [];
   const idParaCentro = new Map();
@@ -90,23 +90,22 @@ export async function painelSemana(db, semana, hoje) {
            coalesce(sum(case when status != 'concluida' then 1 end), 0) abertas,
            coalesce(sum(case when status != 'concluida' and prazo < ? and interna = 1 and compartilhada = 0 then 1 end), 0) atrasadas_internas
          from acoes
-         where encerrada = 0 and secao_id in (${marks(todosIds)})
+         where encerrada = 0 and arquivada = 0 and secao_id in (${marks(todosIds)})
          group by secao_id`,
       ).all(hoje, hoje, ate, hoje, ...todosIds)
     : [];
 
-  // ── Query 2: última atualização por Centro (só raízes) ──
-  const centroIds = centros.map((c) => c.id);
-  const atualizacaoRows = centroIds.length
+  // ── Query 2: última atualização de cada seção, incluindo subseções ──
+  const atualizacaoRows = todosIds.length
     ? await db.prepare(
         `select a.*
          from atualizacoes a
-         where a.secao_id in (${marks(centroIds)}) and a.semana = ?
+         where a.secao_id in (${marks(todosIds)}) and a.semana = ?
            and a.versao = (
              select max(b.versao) from atualizacoes b
              where b.secao_id = a.secao_id and b.semana = a.semana
            )`,
-      ).all(...centroIds, semana)
+      ).all(...todosIds, semana)
     : [];
 
   // ── Query 3: tempo na semana, agrupado por seção ──
@@ -128,7 +127,7 @@ export async function painelSemana(db, semana, hoje) {
         `select a.secao_id, count(*) n
          from pedidos_prazo p
          join acoes a on a.id = p.acao_id
-         where p.status = 'pendente' and a.secao_id in (${marks(todosIds)})
+         where p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and a.secao_id in (${marks(todosIds)})
          group by a.secao_id`,
       ).all(...todosIds)
     : [];
@@ -164,13 +163,14 @@ export async function painelSemana(db, semana, hoje) {
   return centros.map((c) => {
     const st  = statsMap.get(c.id)   ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0 };
     const at  = atMap.get(c.id)      ?? null;
-    const cor = semaforo({ enviada: !!at, atrasadas: st.atrasadas, vencendo: st.vencendo, critico: at?.critico });
+    const critico = arvores.get(c.id).some(id => atMap.get(id)?.critico);
+    const cor = semaforo({ enviada: !!at, atrasadas: st.atrasadas, vencendo: st.vencendo, critico });
     return {
       secao: { id: c.id, nome: c.nome, sigla: c.sigla, tipo: c.tipo, chefe_nome: c.chefe_nome },
       cor,
       enviada:            !!at,
       enviada_em:         at?.enviada_em ?? null,
-      critico:            !!at?.critico,
+      critico,
       atrasadas:          st.atrasadas,
       vencendo:           st.vencendo,
       abertas:            st.abertas,
@@ -191,14 +191,14 @@ export async function cartoesReuniao(db, semana, hoje) {
   const itens = porNecessidade(painel);
   return Promise.all(
     itens.map(async (p) => {
-      const ids = subarvore(db, p.secao.id);
+      const ids = await subarvore(db, p.secao.id);
       const acoesRaw = (await db
         .prepare(
           `select a.id, a.titulo, a.prazo, a.status, a.prioridade, a.encerrada,
                   coalesce((select sum(minutos) from tempo where acao_id = a.id), 0) tempo_total,
                   s.sigla secao_sigla
            from acoes a join secoes s on s.id = a.secao_id
-           where a.secao_id in (${marks(ids)}) and a.encerrada = 0 and (a.interna = 0 or a.compartilhada = 1)
+           where a.secao_id in (${marks(ids)}) and a.encerrada = 0 and a.arquivada = 0 and (a.interna = 0 or a.compartilhada = 1)
            order by case a.status when 'concluida' then 1 else 0 end, a.prazo`,
         )
         .all(...ids)) || [];
@@ -207,7 +207,8 @@ export async function cartoesReuniao(db, semana, hoje) {
         .prepare(
           `select p.id, p.acao_id, p.novo_prazo, p.prazo_atual, p.justificativa, a.titulo acao_titulo
            from pedidos_prazo p join acoes a on a.id = p.acao_id
-           where p.status = 'pendente' and a.secao_id in (${marks(ids)}) order by p.criado_em`,
+           where p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and (a.interna = 0 or a.compartilhada = 1)
+             and a.secao_id in (${marks(ids)}) order by p.criado_em`,
         )
         .all(...ids)) || [];
       const at = await ultimaAtualizacao(db, p.secao.id, semana);

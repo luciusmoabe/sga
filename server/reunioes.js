@@ -151,7 +151,7 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       decisoes: await q(`select d.*, s.sigla secao_sigla, s.nome secao_nome from decisoes d left join secoes s on s.id = d.secao_id where d.reuniao_id = ? order by d.id`, r.id),
       novas_acoes: await q(`select g.*, (select count(*) from acoes a where a.diretriz_id = g.id) total_acoes from diretrizes g where g.reuniao_id = ? order by g.id`, r.id),
       pedidos_decididos: await q(
-        `select p.*, a.titulo acao_titulo, s.sigla secao_sigla from pedidos_prazo p join acoes a on a.id = p.acao_id join secoes s on s.id = a.secao_id where p.reuniao_id = ? order by p.decidido_em`, r.id),
+        `select p.*, a.titulo acao_titulo, s.sigla secao_sigla from pedidos_prazo p join acoes a on a.id = p.acao_id join secoes s on s.id = a.secao_id where p.reuniao_id = ? and (a.interna = 0 or a.compartilhada = 1) order by p.decidido_em`, r.id),
     };
   }));
 
@@ -218,7 +218,7 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       }
     } else linhas.push('- Nenhuma ação nova.');
     linhas.push('');
-    const ped = await q(`select p.*, a.titulo, s.sigla from pedidos_prazo p join acoes a on a.id = p.acao_id join secoes s on s.id = a.secao_id where p.reuniao_id = ? order by p.decidido_em`, r.id);
+    const ped = await q(`select p.*, a.titulo, s.sigla from pedidos_prazo p join acoes a on a.id = p.acao_id join secoes s on s.id = a.secao_id where p.reuniao_id = ? and (a.interna = 0 or a.compartilhada = 1) order by p.decidido_em`, r.id);
     if (ped.length) {
       linhas.push('Pedidos de novo prazo decididos:');
       ped.forEach((p) => linhas.push(`- [${p.sigla}] "${p.titulo}": novo prazo ${br(p.novo_prazo)} ${p.status === 'aprovado' ? 'aprovado' : 'recusado'}.`));
