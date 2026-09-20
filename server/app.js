@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { subarvore, nivel } from './db.js';
@@ -13,6 +14,7 @@ const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export function createApp(db) {
   const app = express();
+  app.use(compression({ threshold: 512 })); // gzip/brotli: reduz JSON em ~70-80%
   app.use(express.json({ limit: '200kb' }));
   app.use(express.static(path.join(raiz, 'public')));
 

@@ -53,7 +53,9 @@ export const ultimaAtualizacao = async (db, secaoId, semana) => {
   return atualizacaoDe(row);
 };
 
-/** Painel da semana: uma linha por Centro/Coordenação, somando as subseções abaixo. */
+/** Painel da semana: uma linha por Centro/Coordenação, somando as subseções abaixo.
+ *  Implementação otimizada: 4 queries agregadas totais (independente do nº de Centros)
+ *  em vez de 4 queries × N centros (N+1 problem). */
 export async function painelSemana(db, semana, hoje) {
   const centros = (await db
     .prepare(
@@ -61,52 +63,123 @@ export async function painelSemana(db, semana, hoje) {
        where s.pai_id is null and s.ativa = 1 order by s.ordem, s.id`,
     )
     .all()) || [];
+
+  if (!centros.length) return [];
+
   const ate = addDays(hoje, 2);
-  return Promise.all(
-    centros.map(async (c) => {
-      const ids = subarvore(db, c.id);
-      const st = await db
-        .prepare(
-          `select
-             coalesce(sum(case when status != 'concluida' and prazo < ? then 1 end), 0) atrasadas,
-             coalesce(sum(case when status != 'concluida' and prazo >= ? and prazo <= ? then 1 end), 0) vencendo,
-             coalesce(sum(case when status != 'concluida' then 1 end), 0) abertas,
-             coalesce(sum(case when status != 'concluida' and prazo < ? and interna = 1 and compartilhada = 0 then 1 end), 0) atrasadas_internas
-           from acoes where encerrada = 0 and secao_id in (${marks(ids)})`,
-        )
-        .get(hoje, hoje, ate, hoje, ...ids);
-      const at = await ultimaAtualizacao(db, c.id, semana);
-      const tempoRow = await db
-        .prepare(
-          `select coalesce(sum(t.minutos), 0) m from tempo t join acoes a on a.id = t.acao_id
-           where a.secao_id in (${marks(ids)}) and t.data >= ? and t.data <= ?`,
-        )
-        .get(...ids, addDays(semana, -7), addDays(semana, -1));
-      const tempoSemana = tempoRow?.m ?? 0;
-      const pedidosRow = await db
-        .prepare(
-          `select count(*) n from pedidos_prazo p join acoes a on a.id = p.acao_id
-           where p.status = 'pendente' and a.secao_id in (${marks(ids)})`,
-        )
-        .get(...ids);
-      const pedidos = pedidosRow?.n ?? 0;
-      const cor = semaforo({ enviada: !!at, atrasadas: st?.atrasadas ?? 0, vencendo: st?.vencendo ?? 0, critico: at?.critico });
-      return {
-        secao: { id: c.id, nome: c.nome, sigla: c.sigla, tipo: c.tipo, chefe_nome: c.chefe_nome },
-        cor,
-        enviada: !!at,
-        enviada_em: at?.enviada_em ?? null,
-        critico: !!at?.critico,
-        atrasadas: st?.atrasadas ?? 0,
-        vencendo: st?.vencendo ?? 0,
-        abertas: st?.abertas ?? 0,
-        atrasadas_internas: st?.atrasadas_internas ?? 0,
-        pedidos_pendentes: pedidos,
-        tempo_semana: tempoSemana,
-        subsecoes: ids.length - 1,
-      };
-    }),
-  );
+
+  // Monta mapa centroId → [ids da subárvore]
+  const arvores = new Map(centros.map((c) => [c.id, subarvore(db, c.id)]));
+  // Todos os ids de seções (raízes + descendentes), achatados com mapeamento para centro raiz
+  const todosIds = [];
+  const idParaCentro = new Map();
+  for (const [centroId, ids] of arvores) {
+    for (const id of ids) {
+      todosIds.push(id);
+      idParaCentro.set(id, centroId);
+    }
+  }
+
+  // ── Query 1: estatísticas de ações agrupadas por secao_id ──
+  const statsRows = todosIds.length
+    ? await db.prepare(
+        `select
+           secao_id,
+           coalesce(sum(case when status != 'concluida' and prazo < ? then 1 end), 0) atrasadas,
+           coalesce(sum(case when status != 'concluida' and prazo >= ? and prazo <= ? then 1 end), 0) vencendo,
+           coalesce(sum(case when status != 'concluida' then 1 end), 0) abertas,
+           coalesce(sum(case when status != 'concluida' and prazo < ? and interna = 1 and compartilhada = 0 then 1 end), 0) atrasadas_internas
+         from acoes
+         where encerrada = 0 and secao_id in (${marks(todosIds)})
+         group by secao_id`,
+      ).all(hoje, hoje, ate, hoje, ...todosIds)
+    : [];
+
+  // ── Query 2: última atualização por Centro (só raízes) ──
+  const centroIds = centros.map((c) => c.id);
+  const atualizacaoRows = centroIds.length
+    ? await db.prepare(
+        `select a.*
+         from atualizacoes a
+         where a.secao_id in (${marks(centroIds)}) and a.semana = ?
+           and a.versao = (
+             select max(b.versao) from atualizacoes b
+             where b.secao_id = a.secao_id and b.semana = a.semana
+           )`,
+      ).all(...centroIds, semana)
+    : [];
+
+  // ── Query 3: tempo na semana, agrupado por seção ──
+  const semanaInicio = addDays(semana, -7);
+  const semanaFim = addDays(semana, -1);
+  const tempoRows = todosIds.length
+    ? await db.prepare(
+        `select a.secao_id, coalesce(sum(t.minutos), 0) minutos
+         from tempo t
+         join acoes a on a.id = t.acao_id
+         where a.secao_id in (${marks(todosIds)}) and t.data >= ? and t.data <= ?
+         group by a.secao_id`,
+      ).all(...todosIds, semanaInicio, semanaFim)
+    : [];
+
+  // ── Query 4: pedidos pendentes por seção ──
+  const pedidosRows = todosIds.length
+    ? await db.prepare(
+        `select a.secao_id, count(*) n
+         from pedidos_prazo p
+         join acoes a on a.id = p.acao_id
+         where p.status = 'pendente' and a.secao_id in (${marks(todosIds)})
+         group by a.secao_id`,
+      ).all(...todosIds)
+    : [];
+
+  // Agrega resultados por centroId
+  const statsMap    = new Map();
+  const tempoMap    = new Map();
+  const pedidosMap  = new Map();
+  const atMap       = new Map(atualizacaoRows.map((r) => [r.secao_id, atualizacaoDe(r)]));
+
+  for (const row of statsRows) {
+    const cId = idParaCentro.get(row.secao_id);
+    if (cId == null) continue;
+    const prev = statsMap.get(cId) ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0 };
+    statsMap.set(cId, {
+      atrasadas:          prev.atrasadas          + Number(row.atrasadas),
+      vencendo:           prev.vencendo           + Number(row.vencendo),
+      abertas:            prev.abertas            + Number(row.abertas),
+      atrasadas_internas: prev.atrasadas_internas + Number(row.atrasadas_internas),
+    });
+  }
+  for (const row of tempoRows) {
+    const cId = idParaCentro.get(row.secao_id);
+    if (cId == null) continue;
+    tempoMap.set(cId, (tempoMap.get(cId) ?? 0) + Number(row.minutos));
+  }
+  for (const row of pedidosRows) {
+    const cId = idParaCentro.get(row.secao_id);
+    if (cId == null) continue;
+    pedidosMap.set(cId, (pedidosMap.get(cId) ?? 0) + Number(row.n));
+  }
+
+  return centros.map((c) => {
+    const st  = statsMap.get(c.id)   ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0 };
+    const at  = atMap.get(c.id)      ?? null;
+    const cor = semaforo({ enviada: !!at, atrasadas: st.atrasadas, vencendo: st.vencendo, critico: at?.critico });
+    return {
+      secao: { id: c.id, nome: c.nome, sigla: c.sigla, tipo: c.tipo, chefe_nome: c.chefe_nome },
+      cor,
+      enviada:            !!at,
+      enviada_em:         at?.enviada_em ?? null,
+      critico:            !!at?.critico,
+      atrasadas:          st.atrasadas,
+      vencendo:           st.vencendo,
+      abertas:            st.abertas,
+      atrasadas_internas: st.atrasadas_internas,
+      pedidos_pendentes:  pedidosMap.get(c.id) ?? 0,
+      tempo_semana:       tempoMap.get(c.id)   ?? 0,
+      subsecoes:          (arvores.get(c.id)?.length ?? 1) - 1,
+    };
+  });
 }
 
 export const porNecessidade = (lista) =>

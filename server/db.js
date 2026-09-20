@@ -184,7 +184,9 @@ function openPgDb(url) {
   const pool = new Pool({
     connectionString: url,
     ssl: { rejectUnauthorized: false },
-    max: 10,
+    max: Number(process.env.PG_POOL_MAX) || 10,
+    idleTimeoutMillis: 30_000,       // fecha conexões ociosas após 30s
+    connectionTimeoutMillis: 5_000,  // erro se não conectar em 5s
   });
 
   const makeTx = (execTx) => (fn) => {
@@ -208,7 +210,8 @@ function openPgDb(url) {
     _secoesCache: [],
     async refreshSecoes() {
       try {
-        const res = await pool.query('select id, pai_id from secoes where ativa = 1');
+        // Carrega id, pai_id e ativa para uso em subarvore() e nivel()
+        const res = await pool.query('select id, pai_id, ativa from secoes order by id');
         db._secoesCache = res.rows;
       } catch {}
     },
