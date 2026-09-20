@@ -298,6 +298,9 @@ export function createPgDb(pool) {
 
 export function openDb(target = process.env.SGC_DB || 'data/sgc.db', { databaseUrl = process.env.DATABASE_URL } = {}) {
   const dbUrl = databaseUrl;
+  if (process.env.VERCEL && (!dbUrl || target === ':memory:')) {
+    throw new Error('Configure DATABASE_URL PostgreSQL na Vercel; SQLite não é suportado nesse ambiente.');
+  }
   if (target !== ':memory:' && dbUrl) {
     return openPgDb(dbUrl);
   }

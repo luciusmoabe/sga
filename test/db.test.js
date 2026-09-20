@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPgDb } from '../server/db.js';
+import { createPgDb, openDb } from '../server/db.js';
+
+test('Vercel: ausência de PostgreSQL falha antes de criar SQLite', t => {
+  const anterior = process.env.VERCEL;
+  t.after(() => {
+    if (anterior === undefined) delete process.env.VERCEL;
+    else process.env.VERCEL = anterior;
+  });
+  process.env.VERCEL = '1';
+  assert.throws(() => openDb('/caminho-inexistente/sgc.db', { databaseUrl: '' }), /Configure DATABASE_URL PostgreSQL/);
+  assert.throws(() => openDb(':memory:', { databaseUrl: 'postgres://localhost/teste' }), /SQLite não é suportado/);
+});
 
 // Pool instrumentado: não abre conexões nem lê DATABASE_URL.
 function bancoSimulado({ falharRollback = false } = {}) {
