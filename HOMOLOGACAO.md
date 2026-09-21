@@ -17,7 +17,8 @@ Regras de segurança para toda a execução:
 4. Confira a política de senha do projeto. Ela vale para as senhas provisórias e para as trocas: se exigir mais que 12 caracteres ou complexidade, use senhas que a cumpram (veja o item de diagnóstico sobre "senha recusada").
 5. Não ative MFA obrigatório nesta fase: o login do Agilis não pede segundo fator, e uma conta com MFA obrigatório não conclui o login.
 6. Em **Project Settings → API**, separe: a URL do projeto, a chave pública (*publishable* ou *anon*) e a chave `service_role`.
-7. Em **Project Settings → Database**, copie a string de conexão do PostgreSQL. Para o migrador e o comando do Administrador, prefira a conexão direta (porta 5432) à do *pooler* em modo de transação.
+7. Em **Project Settings → Database**, copie a string de conexão do PostgreSQL. Para o migrador e o comando do Administrador, prefira a conexão direta (porta 5432) ou o *Session pooler*; evite o *Transaction pooler* (porta 6543). A conexão direta usa IPv6 em vários planos: se o computador não conectar, use o *Session pooler*, que aceita IPv4.
+8. A conexão exige TLS verificado. Se aparecer erro de certificado, baixe o certificado do projeto em **Project Settings → Database → SSL Configuration**, guarde-o na pasta `certs/` e aponte `SGC_PG_CA_FILE` para ele (o arquivo que já está no repositório pode não ser o do seu projeto).
 
 ## 2. Configurar o ambiente
 
@@ -32,7 +33,7 @@ Copie `.env.example` para `.env` (o arquivo é ignorado pelo git) e preencha:
 | `SUPABASE_SERVICE_ROLE_KEY` | Chave `service_role` |
 | `DATABASE_URL` | String de conexão do PostgreSQL de homologação |
 | `SGC_MIGRATION_DATABASE_URL` | A mesma string, para o migrador e o comando do Administrador |
-| `SGC_PG_CA_FILE` | `certs/supabase-prod-ca-2021.crt`, se a conexão pedir a CA do projeto |
+| `SGC_PG_CA_FILE` | `certs/supabase-prod-ca-2021.crt`, ou o certificado baixado do seu projeto (passo 1.8), se a conexão pedir a CA |
 
 Confira sem acessar o banco:
 
@@ -49,7 +50,7 @@ npm run check:auth -- --online
 
 Antes de qualquer alteração:
 
-1. **Faça um backup e confirme como restaurá-lo.** Se o banco tem dados de piloto ou dados reais, ensaie tudo primeiro numa **cópia** (restaure o backup num projeto novo de homologação, ou use `pg_dump` e `psql`, conforme o seu plano do Supabase). As migrações 4 a 8 mudam permissões e a tabela de usuários.
+1. **Faça um backup e confirme como restaurá-lo.** Se o banco tem só dados de teste, o backup é opcional e dá para migrar direto no banco existente; se tem dados de piloto ou dados reais, ensaie tudo primeiro numa **cópia** (restaure o backup num projeto novo de homologação, ou use `pg_dump` e `psql`, conforme o seu plano do Supabase). As migrações 4 a 8 mudam permissões e a tabela de usuários.
 2. **Rode o diagnóstico, que só lê.** No painel: **SQL Editor → New query**, cole o conteúdo de [scripts/diagnostico-supabase.sql](scripts/diagnostico-supabase.sql) e execute. Ele não altera nada e não mostra nomes nem e-mails, só contagens e o estado da estrutura; o resultado pode ser compartilhado.
 3. **Interprete o resultado:**
 
