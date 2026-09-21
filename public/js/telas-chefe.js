@@ -2,7 +2,7 @@
 import { del, get, patch, post, put } from './api.js';
 import { est } from './estado.js';
 import {
-  $, abrirForm, addDias, br, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, STATUS, toast, vazio,
+  $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, STATUS, toast, vazio,
 } from './ui.js';
 import { abrirAcao } from './acao-comum.js';
 import { relatoHTML } from './telas-diretor.js';
@@ -37,7 +37,7 @@ export async function inicio(raiz, { refresh }) {
     <div class="espaco"></div>
     <div class="cartao"><div class="linha entre"><h2>Próximas ações</h2><a href="#/minhas-acoes">Ver todas</a></div>
       ${abertas.length ? `<table><tbody>${abertas.slice(0, 4).map((a) => `<tr class="clicavel" data-acao="${a.id}" tabindex="0">
-        <td><b>${esc(a.titulo)}</b>${a.demandada_diretor ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">🎯 Demandada pelo Diretor em ${br(a.demandado_em || a.criada_em)}</div>` : ''}</td>
+        <td><b>${esc(a.titulo)}</b>${a.demandada_diretor ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">Demandada pelo Diretor em ${br(a.demandado_em || a.criada_em)}</div>` : ''}</td>
         <td class="num">${br(a.prazo)}</td><td>${pilulaStatus(a)}</td></tr>`).join('')}</tbody></table>`
         : vazio('Nenhuma ação em aberto', 'Quando o Diretor direcionar algo, aparecerá aqui.')}</div>`;
   const abrir = (el) => abrirAcao(el.dataset.acao, refresh).catch((e) => toast(e.message, 'erro'));
@@ -122,18 +122,22 @@ export async function atualizacao(raiz) {
 // ---------- Minhas ações ----------
 const TRANS = { a_fazer: ['em_andamento'], em_andamento: ['a_fazer', 'bloqueada', 'concluida'], bloqueada: ['em_andamento'], concluida: ['em_andamento'] };
 
-export async function minhasAcoes(raiz, { refresh }) {
+export async function minhasAcoes(raiz) {
   if (!est.user.secao_id) return semSecao(raiz);
-  const [abertas, concl, arq] = await Promise.all([
+  const buscar = () => Promise.all([
     get('/acoes?situacao=abertas'),
     get('/acoes?situacao=concluidas'),
     get('/acoes?situacao=arquivadas'),
   ]);
+  let [abertas, concl, arq] = await buscar();
 
   let aba = 'ativas';
-  const todasAtivas = [...abertas, ...concl];
+  let todasAtivas = [...abertas, ...concl];
 
   const renderizar = () => {
+    // Guarda os minutos digitados e o foco, para que atualizar um cartão não apague o que está em outro.
+    const digitado = new Map([...raiz.querySelectorAll('[data-min]')].filter((i) => i.value).map((i) => [i.closest('[data-id]').dataset.id, i.value]));
+    const foco = raiz.contains(document.activeElement) ? document.activeElement.closest('[data-id]')?.dataset.id : null;
     let lista = todasAtivas;
     if (aba === 'abertas') lista = abertas;
     else if (aba === 'concluidas') lista = concl;
@@ -159,7 +163,7 @@ export async function minhasAcoes(raiz, { refresh }) {
             <h3>${esc(a.titulo)}</h3>
             <div class="suave pequeno">
               Prazo <b class="num">${br(a.prazo)}</b> · ${esc(a.secao_sigla)}${a.interna ? ' · ação interna' : ''}
-              ${a.demandada_diretor ? ` · <span style="color:var(--verde);font-weight:600">🎯 Demandada pelo Diretor em ${br(a.demandado_em || a.criada_em)}</span>` : ''}
+              ${a.demandada_diretor ? ` · demandada em ${br(a.demandado_em || a.criada_em)}` : ''}
               ${a.arquivada ? ' · <span class="pilula enc">Arquivada</span>' : ''}
             </div>
           </div>
@@ -194,10 +198,19 @@ export async function minhasAcoes(raiz, { refresh }) {
               : '<button type="button" class="btn btn-fantasma btn-mini" data-arquivar>Arquivar</button>'}
             <button type="button" class="btn btn-fantasma btn-mini" style="color:var(--vermelho);margin-left:auto" data-excluir>Excluir</button>
           ` : `
-            <span class="suave pequeno" style="margin-left:auto;font-size:0.75rem" title="Ações demandadas pelo Diretor não podem ser excluídas nem arquivadas pela seção">🔒 Criada pelo Diretor</span>
+            <span class="suave pequeno" style="margin-left:auto;font-size:0.75rem" title="Ações demandadas pelo Diretor não podem ser excluídas nem arquivadas pela seção">Criada pelo Diretor</span>
           `}
         </div>
       </article>`).join('') : `<div class="cartao">${vazio('Nenhuma ação nesta visão', aba === 'arquivadas' ? 'Nenhuma ação arquivada.' : 'Quando o Diretor ou você criarem ações, elas aparecerão aqui.')}</div>`}`;
+    for (const [id, v] of digitado) { const i = raiz.querySelector(`[data-id="${id}"] [data-min]`); if (i) i.value = v; }
+    if (foco) raiz.querySelector(`[data-id="${foco}"] [data-min]`)?.focus({ preventScroll: true });
+  };
+
+  // Recarrega só os dados desta tela: a aba escolhida e os campos em edição continuam como estavam.
+  const recarregar = async () => {
+    [abertas, concl, arq] = await buscar();
+    todasAtivas = [...abertas, ...concl];
+    renderizar();
   };
 
   renderizar();
@@ -218,7 +231,7 @@ export async function minhasAcoes(raiz, { refresh }) {
     try {
       await patch(`/acoes/${a.id}`, { prioridade: el.value });
       toast(`Prioridade atualizada para ${PRIO[el.value]}.`);
-      refresh();
+      await recarregar();
     } catch (e) { erro(e); }
   });
 
@@ -227,7 +240,7 @@ export async function minhasAcoes(raiz, { refresh }) {
     try {
       await post(`/acoes/${a.id}/arquivar`);
       toast('Ação arquivada.');
-      refresh();
+      await recarregar();
     } catch (e) { erro(e); }
   });
 
@@ -236,17 +249,22 @@ export async function minhasAcoes(raiz, { refresh }) {
     try {
       await post(`/acoes/${a.id}/desarquivar`);
       toast('Ação desarquivada.');
-      refresh();
+      await recarregar();
     } catch (e) { erro(e); }
   });
 
   on(raiz, 'click', '[data-excluir]', async (el) => {
     const a = acaoDe(el);
-    if (!confirm(`Deseja realmente excluir permanentemente a ação "${a.titulo}"?`)) return;
+    const ok = await confirmar({
+      titulo: 'Excluir ação',
+      texto: `A ação <b>${esc(a.titulo)}</b> será excluída para sempre, com o tempo e os comentários registrados. Se quiser só tirá-la da lista, use Arquivar.`,
+      rotulo: 'Excluir ação', perigo: true,
+    });
+    if (!ok) return;
     try {
       await del(`/acoes/${a.id}`);
       toast('Ação excluída.');
-      refresh();
+      await recarregar();
     } catch (e) { erro(e); }
   });
 
@@ -271,7 +289,7 @@ export async function minhasAcoes(raiz, { refresh }) {
           interna: d.interna === '1',
         });
         toast('Ação criada com sucesso.');
-        refresh();
+        recarregar().catch(erro);
       },
     });
   });
@@ -279,7 +297,7 @@ export async function minhasAcoes(raiz, { refresh }) {
   on(raiz, 'click', '[data-status]', async (el) => {
     const a = acaoDe(el);
     if (el.getAttribute('aria-pressed') === 'true') return;
-    try { await patch(`/acoes/${a.id}`, { status: el.dataset.status }); toast(`Status: ${STATUS[el.dataset.status]}.`); refresh(); }
+    try { await patch(`/acoes/${a.id}`, { status: el.dataset.status }); toast(`Status: ${STATUS[el.dataset.status]}.`); await recarregar(); }
     catch (e) {
       erro(e);
       if (e.status === 422) $('[data-min]', el.closest('[data-id]')).focus();
@@ -289,10 +307,10 @@ export async function minhasAcoes(raiz, { refresh }) {
   on(raiz, 'click', '[data-tempo]', async (el) => {
     const a = acaoDe(el);
     const inp = $('[data-min]', el.closest('[data-id]'));
-    try { await post(`/acoes/${a.id}/tempo`, { minutos: Number(inp.value) }); toast('Tempo registrado.'); refresh(); } catch (e) { erro(e); inp.focus(); }
+    try { await post(`/acoes/${a.id}/tempo`, { minutos: Number(inp.value) }); toast('Tempo registrado.'); await recarregar(); } catch (e) { erro(e); inp.focus(); }
   });
   on(raiz, 'keydown', '[data-min]', (el, ev) => { if (ev.key === 'Enter') $('[data-tempo]', el.closest('[data-id]')).click(); });
-  on(raiz, 'click', '[data-detalhe]', (el) => abrirAcao(acaoDe(el).id, refresh).catch(erro));
+  on(raiz, 'click', '[data-detalhe]', (el) => abrirAcao(acaoDe(el).id, recarregar).catch(erro));
   on(raiz, 'click', '[data-prazo]', (el) => {
     const a = acaoDe(el);
     abrirForm({
@@ -301,7 +319,7 @@ export async function minhasAcoes(raiz, { refresh }) {
         <div class="campo"><label for="np">Novo prazo</label><input id="np" type="date" name="novo_prazo" min="${addDias(a.prazo, 1)}" value="${addDias(a.prazo, 7)}"></div>
         <div class="campo"><label for="jp">Motivo</label><textarea id="jp" name="justificativa" placeholder="Explique o que justifica o novo prazo"></textarea></div>`,
       rotulo: 'Enviar pedido',
-      aoEnviar: async (d) => { await post(`/acoes/${a.id}/pedido-prazo`, d); toast('Pedido enviado ao Diretor.'); refresh(); },
+      aoEnviar: async (d) => { await post(`/acoes/${a.id}/pedido-prazo`, d); toast('Pedido enviado ao Diretor.'); recarregar().catch(erro); },
     });
   });
 }
