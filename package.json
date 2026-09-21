@@ -1,0 +1,26 @@
+{
+  "name": "sgc-prototipo",
+  "version": "0.1.0",
+  "description": "Protótipo do SGC: acompanhamento semanal dos Centros do Departamento de Planejamento, Orçamento e Gestão",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "seed": "node server/seed.js --reset",
+    "migrate": "node server/migrate.js",
+    "check:auth": "node server/verificar-auth.js",
+    "test": "node --test test/*.test.js",
+    "test:postgres": "node --test test/postgres/*.test.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "compression": "^1.8.2",
+    "dotenv": "^18.0.1",
+    "express": "^4.19.2",
+    "pg": "^8.23.0"
+  }
+}
