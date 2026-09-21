@@ -1,6 +1,6 @@
 // Reuniões e atas: histórico para Diretor e Apoio, leitura das atas enviadas para os chefes.
 import { get, post, put } from './api.js';
-import { est } from './estado.js';
+import { est, podeOperar } from './estado.js';
 import { br, confirmar, dataHora, diaSemana, esc, on, plural, toast, vazio } from './ui.js';
 
 const ST = { em_andamento: 'Em andamento', rascunho: 'Ata em rascunho', enviada: 'Ata enviada' };
@@ -10,7 +10,7 @@ export async function reunioes(raiz) {
   const lista = await get('/reunioes');
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>Reuniões e atas</h1><div class="sub">Histórico das reuniões semanais. A ata guarda os combinados que estavam valendo naquela data.</div></div>
-      <div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao">Iniciar ou retomar reunião</a></div></div>
+      ${podeOperar() ? '<div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao">Iniciar ou retomar reunião</a></div>' : ''}</div>
     <div class="cartao">${lista.length ? `<table><thead><tr><th>Data</th><th>Situação</th><th>Decisões</th><th>Novas ações</th></tr></thead><tbody>
       ${lista.map((r) => `<tr class="clicavel" data-id="${r.id}" tabindex="0"><td><b>${br(r.data)}</b> <span class="suave pequeno">${diaSemana(r.data)}</span></td>
         <td><span class="pilula ${cls[r.status]}">${ST[r.status]}</span></td><td class="num">${r.decisoes}</td><td class="num">${r.novas_acoes}</td></tr>`).join('')}</tbody></table>`
@@ -26,7 +26,7 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
   raiz.innerHTML = `
     <div class="cabeca"><div><a href="#/reunioes" class="pequeno">← Reuniões e atas</a><h1>Reunião de ${br(r.data)}</h1>
       <div class="sub"><span class="pilula ${cls[r.status]}">${ST[r.status]}</span> · iniciada em ${dataHora(r.iniciada_em)}${r.encerrada_em ? ` · encerrada em ${dataHora(r.encerrada_em)}` : ''}</div></div>
-      ${r.status === 'em_andamento' ? '<div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao/${r.id}">Voltar ao Modo Reunião</a></div>' : ''}</div>
+      ${r.status === 'em_andamento' && podeOperar() ? '<div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao/${r.id}">Voltar ao Modo Reunião</a></div>' : ''}</div>
     <div class="dois" style="align-items:start">
       <div class="cartao"><h2>Combinados vigentes</h2>${lista(r.combinados_snapshot, (c) => esc(c.texto))}</div>
       <div class="cartao"><h2>Decisões</h2>${lista(r.decisoes, (d) => `<b>${esc(d.secao_sigla || 'Geral')}</b> · ${esc(d.texto)}`)}</div>
@@ -35,13 +35,14 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
     </div>
     <div class="espaco"></div>
     <div class="cartao"><h2>Ata</h2>
-      ${r.status === 'rascunho' ? `<div class="info">A ata foi montada a partir do que foi registrado na reunião. Revise, ajuste se precisar e envie aos chefes. Nesta versão do protótipo, "enviar" libera a leitura na tela Atas; não há e-mail.</div>
+      ${r.status === 'rascunho' && !podeOperar() ? `<div class="info">Ata em rascunho: o Diretor ou o Apoio ainda vai revisá-la e enviá-la aos chefes.</div><div class="ata">${esc(r.ata_texto || '')}</div>`
+      : r.status === 'rascunho' ? `<div class="info">A ata foi montada a partir do que foi registrado na reunião. Revise, ajuste se precisar e envie aos chefes. Nesta versão do protótipo, "enviar" libera a leitura na tela Atas; não há e-mail.</div>
         <textarea class="ata-edicao" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
         <div class="linha" style="margin-top:10px"><button class="btn btn-sec" id="salvar">Salvar rascunho</button><button class="btn btn-primario" id="enviar">Enviar aos chefes</button>
         <button class="btn btn-fantasma" id="reabrir">Reabrir a reunião</button></div>`
       : r.status === 'enviada' ? `<div class="ata">${esc(r.ata_texto)}</div><p class="suave pequeno">Enviada em ${dataHora(r.enviada_em)}.</p>`
       : '<p class="suave">A ata será montada quando a reunião for encerrada.</p>'}</div>`;
-  if (r.status !== 'rascunho') return;
+  if (r.status !== 'rascunho' || !podeOperar()) return;
   const erro = (e) => toast(e.message, 'erro');
   const texto = () => raiz.querySelector('#ata').value;
   raiz.querySelector('#salvar').addEventListener('click', async () => { try { await put(`/reunioes/${id}/ata`, { ata_texto: texto() }); toast('Rascunho salvo.'); } catch (e) { erro(e); } });

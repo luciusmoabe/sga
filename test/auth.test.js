@@ -125,7 +125,7 @@ test('auth: conta sem vínculo e senha errada retornam a mesma resposta sem cada
   assert.equal(semAcesso.status, 401);
   assert.equal(senhaErrada.status, 401);
   assert.deepEqual(await semAcesso.json(), await senhaErrada.json());
-  assert.equal((await db.prepare('select count(*) n from usuarios').get()).n, 9);
+  assert.equal((await db.prepare('select count(*) n from usuarios').get()).n, 10);
   assert.equal((await db.prepare('select count(*) n from auth_sessoes_senha').get()).n, 0);
 });
 

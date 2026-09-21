@@ -1,6 +1,6 @@
 // Telas do Diretor e do Apoio: painel, Centro, direcionar ação, ações, prazos e pauta impressa.
 import { get, post } from './api.js';
-import { ehDiretor, est, hoje } from './estado.js';
+import { ehAdmin, ehDiretor, est, hoje } from './estado.js';
 import {
   $, addDias, br, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, porNecessidade, PRIO, sem, STATUS, toast, vazio,
 } from './ui.js';
@@ -91,7 +91,7 @@ export async function centro(raiz, { id, q, refresh }) {
       ${d.acoes.map((a) => `<tr class="clicavel" data-acao="${a.id}" tabindex="0"><td><b>${esc(a.titulo)}</b><br><span class="suave pequeno">${esc(a.secao_sigla)} · prioridade ${PRIO[a.prioridade].toLowerCase()}</span></td>
         <td class="num">${br(a.prazo)}</td><td>${pilulaStatus(a)}</td><td class="num">${fmtMin(a.tempo_total)}</td></tr>`).join('')}</tbody></table></div>`
         : vazio('Nenhuma ação em aberto', 'As ações direcionadas a este Centro aparecerão aqui.')}
-      <p class="suave pequeno" style="margin-top:10px">Ações internas das subseções não aparecem aqui: o Diretor vê só o resumo, salvo se o chefe compartilhar.</p></div>
+      <p class="suave pequeno" style="margin-top:10px">${d.acoes_internas_visiveis ? 'Como Administrador, você vê também as ações internas das subseções.' : 'Ações internas das subseções não aparecem aqui: o Diretor vê só o resumo, salvo se o chefe compartilhar.'}</p></div>
     <div class="cartao"><h2>Semanas anteriores</h2>${anteriores.length ? anteriores.map((h) => `<details style="margin-bottom:8px"><summary><b>Reunião de ${br(h.semana)}</b>
       <span class="suave pequeno"> · enviada em ${dataHora(h.enviada_em)}</span></summary><div style="padding-top:10px">${relatoHTML(h)}</div></details>`).join('')
       : '<p class="suave">Ainda não há histórico.</p>'}</div>`;
@@ -185,7 +185,7 @@ export async function prazos(raiz, { refresh }) {
   const diretor = ehDiretor();
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>Pedidos de novo prazo</h1><div class="sub">${lista.length ? plural(lista.length, 'pedido aguarda', 'pedidos aguardam') + ' decisão' : 'Nenhum pedido pendente'}</div></div></div>
-    ${diretor ? '' : '<div class="info">Somente o Diretor decide pedidos de prazo. Durante a reunião, o Apoio pode registrar a decisão no Modo Reunião.</div>'}
+    ${diretor ? '' : ehAdmin() ? '<div class="info">Você consulta os pedidos de prazo. A decisão é do Diretor.</div>' : '<div class="info">Somente o Diretor decide pedidos de prazo. Durante a reunião, o Apoio pode registrar a decisão no Modo Reunião.</div>'}
     ${lista.length ? lista.map((p) => `<div class="cartao"><div class="linha entre"><h3>${esc(p.acao_titulo)}</h3><span class="pilula">${esc(p.secao_sigla)}</span></div>
       <p class="suave" style="margin:4px 0 8px">Pedido de ${esc(p.usuario_nome || '')} em ${dataHora(p.criado_em)}</p>
       <p><b class="num">${br(p.prazo_atual)}</b> → <b class="num">${br(p.novo_prazo)}</b></p><p>${esc(p.justificativa)}</p>

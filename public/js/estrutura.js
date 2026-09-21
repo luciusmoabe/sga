@@ -1,11 +1,13 @@
 // Estrutura: o Diretor cria e organiza as seções em árvore (Centros, Coordenação e subseções) e o cadastro mínimo de usuários.
 import { get, patch, post, put, del } from './api.js';
-import { atualizarSessao } from './estado.js';
+import { atualizarSessao, ehAdmin } from './estado.js';
 import { abrirForm, confirmar, esc, on, toast } from './ui.js';
-import { HORA_FECHAMENTO } from './regras.js';
+import { HORA_FECHAMENTO, ROTULO_PERFIL } from './regras.js';
 
 const TIPO = { centro: 'Centro', coordenacao: 'Coordenação', subsecao: 'Subseção' };
-const PERFIL = { diretor: 'Diretor', apoio: 'Apoio', chefe: 'Chefe' };
+const PERFIL = ROTULO_PERFIL;
+// Contas do Diretor e do Administrador só o Administrador altera; a conta do Administrador só muda pelo servidor.
+const protegidoParaMim = (u) => u.perfil === 'administrador' || (u.perfil === 'diretor' && !ehAdmin());
 const LIMITE = 3;
 const ui = { painel: 'secoes', buscaSecao: '', estadoSecao: 'todas', buscaUsuario: '', perfil: 'todos', estadoUsuario: 'todos', recolhidas: new Set() };
 
@@ -67,7 +69,7 @@ export async function estrutura(raiz, { refresh }) {
     <td>${PERFIL[u.perfil]}</td><td>${esc(u.secao_nome || 'Sem seção atribuída')}</td>
     <td><span class="estrutura-status ${u.ativo ? 'ativo' : ''}">${u.ativo ? 'Ativo' : 'Inativo'}</span><span class="estrutura-email">${u.tem_login ? 'Login vinculado' : 'Sem login'}</span></td>
     <td><div class="estrutura-acoes"><button class="btn btn-sec btn-mini" data-editar-u="${u.id}" aria-label="Editar ${esc(u.nome)}">Editar</button>
-    ${opcoes(u.nome, `${u.tem_login ? `<button data-login-u="${u.id}">Alterar e-mail ou senha</button>` : '<span class="estrutura-menu-nota">Cadastro sem acesso ao app</span>'}${u.perfil !== 'diretor' ? `<button data-u="${u.id}" data-ativo="${u.ativo ? 0 : 1}">${u.ativo ? 'Desativar' : 'Reativar'} usuário</button><button class="estrutura-perigo" data-excluir-u="${u.id}">Excluir usuário</button>` : '<span class="estrutura-menu-nota">Perfil Diretor protegido</span>'}`)}</div></td></tr>`;
+    ${opcoes(u.nome, `${u.tem_login && (ehAdmin() || !protegidoParaMim(u)) ? `<button data-login-u="${u.id}">Alterar e-mail ou senha</button>` : u.tem_login ? '' : '<span class="estrutura-menu-nota">Cadastro sem acesso ao app</span>'}${u.perfil === 'administrador' ? '<span class="estrutura-menu-nota">Administrador: só o servidor altera perfil e acesso</span>' : u.perfil === 'diretor' && !ehAdmin() ? '<span class="estrutura-menu-nota">Perfil Diretor protegido: peça ao Administrador</span>' : `<button data-u="${u.id}" data-ativo="${u.ativo ? 0 : 1}">${u.ativo ? 'Desativar' : 'Reativar'} usuário</button>${u.perfil === 'diretor' ? '' : `<button class="estrutura-perigo" data-excluir-u="${u.id}">Excluir usuário</button>`}`}`)}</div></td></tr>`;
   raiz.innerHTML = `<div class="estrutura-pagina">
     <header class="estrutura-cabecalho"><div><p class="estrutura-sobretitulo">ADMINISTRAÇÃO</p><h1>Estrutura</h1><p class="sub">Organize as seções, as pessoas e a rotina de acompanhamento.</p></div></header>
     <div class="estrutura-resumo" aria-label="Resumo dos cadastros">
@@ -78,7 +80,7 @@ export async function estrutura(raiz, { refresh }) {
     <nav class="estrutura-abas" aria-label="Áreas da estrutura">
       <button data-painel="secoes" aria-controls="estrutura-secoes">Seções</button>
       <button data-painel="usuarios" aria-controls="estrutura-usuarios">Usuários e acessos</button>
-      <button data-painel="reuniao" aria-controls="estrutura-reuniao">Reunião semanal</button>
+      ${ehAdmin() ? '' : '<button data-painel="reuniao" aria-controls="estrutura-reuniao">Reunião semanal</button>'}
     </nav>
     <section id="estrutura-secoes" class="estrutura-painel" aria-labelledby="titulo-secoes">
       <div class="estrutura-barra"><div><h2 id="titulo-secoes">Organização das seções</h2><p class="suave">Centros, coordenações e subseções em até três níveis.</p></div><button class="btn btn-primario" data-a="nova">+ Nova seção</button></div>
@@ -87,11 +89,11 @@ export async function estrutura(raiz, { refresh }) {
     </section>
     <section id="estrutura-usuarios" class="estrutura-painel" aria-labelledby="titulo-usuarios" hidden>
       <div class="estrutura-barra"><div><h2 id="titulo-usuarios">Usuários e acessos</h2><p class="suave">Gerencie perfis, atribuições e acesso ao Agilis.</p></div><div class="estrutura-acoes"><button class="btn btn-primario" data-a="chefe-acesso">+ Novo usuário</button>${opcoes('cadastro de usuários','<button data-a="usuario">Criar cadastro sem login</button>')}</div></div>
-      <div class="estrutura-filtros"><div class="campo"><label for="buscar-usuario">Buscar usuário</label><input id="buscar-usuario" type="search" placeholder="Nome, e-mail ou seção" value="${esc(ui.buscaUsuario)}"></div><div class="campo"><label for="perfil-filtro">Perfil</label><select id="perfil-filtro"><option value="todos">Todos os perfis</option><option value="diretor">Diretor</option><option value="apoio">Apoio</option><option value="chefe">Chefe</option></select></div><div class="campo"><label for="estado-usuario">Situação</label><select id="estado-usuario"><option value="todos">Todos</option><option value="ativos">Ativos</option><option value="inativos">Inativos</option></select></div></div>
+      <div class="estrutura-filtros"><div class="campo"><label for="buscar-usuario">Buscar usuário</label><input id="buscar-usuario" type="search" placeholder="Nome, e-mail ou seção" value="${esc(ui.buscaUsuario)}"></div><div class="campo"><label for="perfil-filtro">Perfil</label><select id="perfil-filtro"><option value="todos">Todos os perfis</option><option value="diretor">Diretor</option><option value="apoio">Apoio</option><option value="chefe">Chefe</option><option value="administrador">Administrador</option></select></div><div class="campo"><label for="estado-usuario">Situação</label><select id="estado-usuario"><option value="todos">Todos</option><option value="ativos">Ativos</option><option value="inativos">Inativos</option></select></div></div>
       <p id="contagem-usuarios" class="estrutura-contagem" role="status"></p>
       <div class="tabela-rolagem"><table class="estrutura-tabela"><thead><tr><th scope="col">Usuário</th><th scope="col">Perfil</th><th scope="col">Seção</th><th scope="col">Acesso</th><th scope="col">Ações</th></tr></thead><tbody id="lista-usuarios"></tbody></table></div>
     </section>
-    <section id="estrutura-reuniao" class="estrutura-painel" aria-labelledby="titulo-reuniao" hidden>
+    ${ehAdmin() ? '' : `<section id="estrutura-reuniao" class="estrutura-painel" aria-labelledby="titulo-reuniao" hidden>
       <div class="estrutura-barra"><div><h2 id="titulo-reuniao">Reunião semanal</h2><p class="suave">Defina o dia e o horário de acompanhamento.</p></div></div>
       <div class="estrutura-aviso">O prazo para os relatos encerra no dia anterior à reunião, às ${HORA_FECHAMENTO}h.</div>
       <form id="form-reuniao" novalidate>
@@ -117,7 +119,7 @@ export async function estrutura(raiz, { refresh }) {
         <div class="erro-form oculto" role="alert" id="erro-reuniao"></div>
       </form>
 
-    </section>
+    </section>`}
   </div>`;
   const renderSecoes = () => {
     const html = filhos(null).map(no).join('');
@@ -131,7 +133,7 @@ export async function estrutura(raiz, { refresh }) {
   const selecionarPainel = painel => {
     ui.painel=painel;
     raiz.querySelectorAll('[data-painel]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.painel===painel)));
-    for(const p of ['secoes','usuarios','reuniao']) raiz.querySelector(`#estrutura-${p}`).hidden=p!==painel;
+    for(const p of ['secoes','usuarios','reuniao']) { const el=raiz.querySelector(`#estrutura-${p}`); if(el) el.hidden=p!==painel; }
   };
   on(raiz,'click','[data-painel]',el=>selecionarPainel(el.dataset.painel));
   on(raiz,'click','[data-expandir]',el=>{const id=Number(el.dataset.expandir);ui.recolhidas.has(id)?ui.recolhidas.delete(id):ui.recolhidas.add(id);renderSecoes();raiz.querySelector(`[data-expandir="${id}"]`)?.focus();});
@@ -173,7 +175,7 @@ export async function estrutura(raiz, { refresh }) {
     formulario({titulo:'Editar usuário', corpo:`
       <div class="campo"><label for="eu-nome">Nome</label><input id="eu-nome" name="nome" value="${esc(u.nome)}" maxlength="120" required></div>
       <div class="campo"><label for="eu-email">E-mail</label><input id="eu-email" name="email" type="email" value="${esc(u.email || '')}" ${u.tem_login ? 'disabled' : ''}><div class="dica">Para contas vinculadas, altere e-mail e senha pelo botão Login.</div></div>
-      ${u.perfil==='diretor' ? '<p>Perfil Diretor protegido.</p>' : `<div class="campo"><label for="eu-perfil">Perfil</label><select id="eu-perfil" name="perfil"><option value="chefe" ${u.perfil==='chefe'?'selected':''}>Chefe</option><option value="apoio" ${u.perfil==='apoio'?'selected':''}>Apoio</option></select></div>
+      ${protegidoParaMim(u) ? '<p>Perfil e acesso protegidos: só o Administrador altera o Diretor, e o Administrador só muda pelo servidor.</p>' : `<div class="campo"><label for="eu-perfil">Perfil</label><select id="eu-perfil" name="perfil">${ehAdmin() ? `<option value="diretor" ${u.perfil==='diretor'?'selected':''}>Diretor</option>` : ''}<option value="chefe" ${u.perfil==='chefe'?'selected':''}>Chefe de seção</option><option value="apoio" ${u.perfil==='apoio'?'selected':''}>Apoio do Diretor</option></select></div>
       <div class="campo"><label for="eu-secao">Seção (Chefe)</label><select id="eu-secao" name="secao_id"><option value="">Sem seção</option>${secoes.filter(s=>s.ativa && (!s.chefe_id || s.chefe_id===u.id)).map(s=>`<option value="${s.id}" ${s.id===u.secao_id?'selected':''}>${esc(s.nome)}</option>`).join('')}</select></div>`}`,
       aoEnviar:async d=>{await patch(`/usuarios/${u.id}`,d);salvo('Usuário atualizado.');}
     });
@@ -183,7 +185,7 @@ export async function estrutura(raiz, { refresh }) {
     formulario({titulo:`Login de ${u.nome}`,corpo:`
       <div class="campo"><label for="lu-email">Novo e-mail (opcional)</label><input id="lu-email" name="email" type="email" autocomplete="off"></div>
       <div class="campo"><label for="lu-senha">Nova senha (opcional)</label><input id="lu-senha" name="senha" type="password" autocomplete="new-password" minlength="12" maxlength="128"></div>
-      <p>As sessões atuais serão encerradas. Entregue a nova senha diretamente ao usuário.</p>`,
+      <p>As sessões atuais serão encerradas e, ao alterar a senha, a pessoa precisará criar a própria no próximo acesso. Entregue a nova senha diretamente a ela.</p>`,
       aoEnviar:async(d,form)=>{try{await patch(`/usuarios/${u.id}/login`,d);salvo('Login atualizado. Entre novamente se alterou sua própria conta.');}finally{form.querySelector('[name="senha"]').value='';d.senha='';}}
     });
   });
@@ -251,9 +253,9 @@ export async function estrutura(raiz, { refresh }) {
           titulo: 'Novo usuário com acesso', rotulo: 'Criar usuário e login',
           corpo: `<div class="campo"><label for="ca-nome">Nome</label><input id="ca-nome" name="nome" maxlength="120" required></div>
             <div class="campo"><label for="ca-email">E-mail de login</label><input id="ca-email" name="email" type="email" maxlength="160" autocomplete="off" required></div>
-            <div class="campo"><label for="ca-senha">Senha inicial</label><input id="ca-senha" name="senha" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><div class="dica">De 12 a 128 caracteres. Entregue a senha diretamente ao usuário.</div></div>
+            <div class="campo"><label for="ca-senha">Senha inicial</label><input id="ca-senha" name="senha" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><div class="dica">De 12 a 128 caracteres. É provisória: a pessoa será obrigada a criar a própria senha no primeiro acesso. Entregue-a diretamente a ela.</div></div>
             <div class="campo"><label for="ca-secao">Seção</label><select id="ca-secao" name="secao_id" required><option value="">Escolha uma seção</option>${secoes.filter(s => s.ativa).map(s => `<option value="${s.id}">${esc(s.nome)}${s.sigla ? ` (${esc(s.sigla)})` : ''}${s.chefe_id ? ` — chefe atual: ${esc(s.chefe_nome || 'atribuído')}` : ''}</option>`).join('')}</select><div class="dica">Todas as seções ativas estão disponíveis. Se já houver chefe, será solicitada confirmação para substituí-lo.</div></div>
-            <div class="campo"><label for="ca-perfil">Perfil</label><select id="ca-perfil" name="perfil"><option value="chefe">Chefe de seção</option><option value="apoio">Apoio (sem seção)</option></select></div><p>Confira o e-mail: a conta será criada com acesso imediato, sem envio de convite.</p>`,
+            <div class="campo"><label for="ca-perfil">Perfil</label><select id="ca-perfil" name="perfil">${ehAdmin() ? '<option value="diretor">Diretor</option>' : ''}<option value="chefe">Chefe de seção (vê a sua seção e as subordinadas)</option><option value="apoio">Apoio do Diretor (sem seção)</option></select></div><p>Confira o e-mail: a conta será criada com acesso imediato, sem envio de convite.</p>`,
           aoEnviar: async (d, form) => {
             const selecionada = secoes.find(s => s.id === Number(d.secao_id));
             if (d.perfil === 'chefe' && selecionada?.chefe_id) {

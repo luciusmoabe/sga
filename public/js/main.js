@@ -8,19 +8,22 @@ import { combinados } from './combinados.js';
 import { estrutura } from './estrutura.js';
 import { atas, reuniaoDetalhe, reunioes } from './atas.js';
 import { inicioReuniao, viewReuniao } from './reuniao.js';
+import { ROTULO_PERFIL } from './regras.js';
+import { abrirTrocaSenha, telaTrocaSenha } from './senha.js';
 
 const GESTAO = ['diretor', 'apoio'];
-const TODOS = ['diretor', 'apoio', 'chefe'];
+const LEITURA = ['diretor', 'apoio', 'administrador']; // telas de acompanhamento que o Administrador também consulta
+const TODOS = ['diretor', 'apoio', 'chefe', 'administrador'];
 const ROTAS = {
-  painel: { f: painel, perfis: GESTAO, trilho: true, titulo: 'Painel da semana' },
-  centro: { f: centro, perfis: GESTAO, titulo: 'Centro' },
+  painel: { f: painel, perfis: LEITURA, trilho: true, titulo: 'Painel da semana' },
+  centro: { f: centro, perfis: LEITURA, titulo: 'Centro' },
   direcionar: { f: direcionar, perfis: GESTAO, titulo: 'Direcionar ação' },
-  acoes: { f: acoes, perfis: GESTAO, titulo: 'Ações' },
-  prazos: { f: prazos, perfis: GESTAO, titulo: 'Pedidos de prazo' },
-  pauta: { f: pauta, perfis: GESTAO, titulo: 'Pauta' },
-  estrutura: { f: estrutura, perfis: ['diretor'], titulo: 'Estrutura' },
+  acoes: { f: acoes, perfis: LEITURA, titulo: 'Ações' },
+  prazos: { f: prazos, perfis: LEITURA, titulo: 'Pedidos de prazo' },
+  pauta: { f: pauta, perfis: LEITURA, titulo: 'Pauta' },
+  estrutura: { f: estrutura, perfis: ['diretor', 'administrador'], titulo: 'Estrutura' },
   combinados: { f: combinados, perfis: TODOS, titulo: 'Combinados' },
-  reunioes: { f: (r, p) => (p.id ? reuniaoDetalhe(r, p) : reunioes(r, p)), perfis: GESTAO, titulo: 'Reuniões e atas' },
+  reunioes: { f: (r, p) => (p.id ? reuniaoDetalhe(r, p) : reunioes(r, p)), perfis: LEITURA, titulo: 'Reuniões e atas' },
   // Sem id: tela comum de início (nada é criado ao abrir a rota). Com id: Modo Reunião em tela cheia.
   reuniao: { f: (r, p) => (p.id ? viewReuniao(r, p) : inicioReuniao(r, p)), perfis: GESTAO, tv: (p) => !!p.id, titulo: 'Modo Reunião' },
   inicio: { f: inicio, perfis: ['chefe'], trilho: true, titulo: 'Início' },
@@ -54,7 +57,19 @@ const MENU_CHEFE = [
   ['combinados', 'Combinados'],
   ['atas', 'Atas'],
 ];
-const PERFIL = { diretor: 'Diretor', apoio: 'Apoio do Diretor', chefe: 'Chefe de seção' };
+// O Administrador consulta o acompanhamento e gerencia contas e estrutura; não direciona ações nem conduz reunião.
+const MENU_ADMIN = [
+  ['#Acompanhamento'],
+  ['painel', 'Painel da semana'],
+  ['#Consulta'],
+  ['acoes', 'Ações'],
+  ['prazos', 'Pedidos de prazo', 'selo'],
+  ['combinados', 'Combinados'],
+  ['reunioes', 'Reuniões e atas'],
+  ['#Administração'],
+  ['estrutura', 'Contas e estrutura'],
+];
+const PERFIL = ROTULO_PERFIL;
 const app = document.getElementById('app');
 
 function lerRota() {
@@ -64,6 +79,7 @@ function lerRota() {
   return { rota, id, q: new URLSearchParams(qs || '') };
 }
 const casaDe = () => (est.user.perfil === 'chefe' ? '#/inicio' : '#/painel');
+
 
 async function carregarSessao() {
   atualizarSessao(await get('/bootstrap'));
@@ -131,14 +147,15 @@ on(app, 'click', '[data-u]', async (el) => {
 
 function casca() {
   const u = est.user;
-  const menu = (u.perfil === 'chefe' ? MENU_CHEFE : MENU_GESTAO).filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
+  const menu = (u.perfil === 'chefe' ? MENU_CHEFE : u.perfil === 'administrador' ? MENU_ADMIN : MENU_GESTAO).filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
   app.innerHTML = `<div class="app"><aside class="lateral">
     <div class="marca"><strong>Agilis</strong></div>
     <nav class="menu" aria-label="Principal">${menu.map((m) => m[0].startsWith('#')
       ? `<div class="grupo"><b>${esc(m[0].slice(1))}</b></div>`
       : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}">${esc(m[1])}${m[2] === 'selo' ? '<span class="selo oculto" id="selo-prazos"></span>' : ''}</a>`).join('')}</nav>
-    <div class="usuario"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}<br><button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></div></aside>
+    <div class="usuario"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}<br><span class="usuario-acoes">${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span></div></aside>
     <main class="principal"><div id="trilho"></div><div id="conteudo"></div></main></div>`;
+  $('#alterar-senha')?.addEventListener('click', () => abrirTrocaSenha());
   $('#sair').addEventListener('click', async () => {
     try { await sair(); est.user = null; est.boot = null; location.hash = '#/'; render(); }
     catch (e) { toast(e.message); }
@@ -163,6 +180,8 @@ export async function render() {
     if (modo === 'demo' && !sessao.userId) return await telaEntrada();
     await carregarSessao();
     if (minha !== gen) return;
+    // Senha inicial provisória: nada funciona até a pessoa criar a própria.
+    if (est.user.trocar_senha) return telaTrocaSenha(app, { aoConcluir: async () => { est.user = null; est.boot = null; location.hash = '#/'; await render(); }, aoSair: async () => { try { await sair(); } catch { /* segue */ } est.user = null; est.boot = null; location.hash = '#/'; render(); } });
     const { rota, id, q } = lerRota();
     const def = ROTAS[rota];
     if (!def || !def.perfis.includes(est.user.perfil)) { location.hash = casaDe(); return; }
@@ -196,6 +215,7 @@ export async function render() {
       limparSessao(); est.user = null; est.boot = null;
       return telaEntrada({ expirada: eraLogado });
     }
+    if (e.dados?.trocar_senha) { est.user = null; est.boot = null; return render(); }
     const alvo = $('#conteudo') || app;
     alvo.innerHTML = `<div class="cartao"><h2>Não foi possível abrir esta tela</h2><p>${esc(e.message)}</p><a class="btn btn-sec" href="${est.user ? casaDe() : '#/'}">Voltar ao início</a></div>`;
     console.error(e);

@@ -182,6 +182,20 @@ Limite: o ESLint foi executado uma vez, fora do projeto, e não faz parte de `np
 
 Limites: ainda não foi feito o ensaio na TV/HDMI real; a legibilidade a distância só se confirma lá. A reorganização do cartão não foi validada com um chefe de verdade.
 
+## Décima quarta entrega — perfil Administrador e senha inicial provisória
+
+Decisões do responsável pelo projeto: o Administrador só consulta e cadastra (contas, perfis e estrutura); o Diretor continua cadastrando Chefe e Apoio; a senha inicial é provisória, com troca obrigatória no primeiro acesso; o primeiro Administrador nasce por comando no servidor.
+
+- [x] Migração 8 (`perfil_administrador`): novo perfil e `usuarios.trocar_senha`. No SQLite reconstrói `usuarios` (testada com banco anterior: dados, chaves, índices e views preservados, sem referências órfãs); no PostgreSQL recria a restrição de perfil.
+- [x] Administrador consulta painel, pauta, ações (inclusive internas), pedidos de prazo, reuniões, atas e cadastros; toda escrita fora de `/usuarios`, `/secoes` e `/auth` é recusada no servidor, além da permissão de cada rota. Telas de acompanhamento ficam somente para leitura (detalhe da ação, combinados, pedidos de prazo, atas); o menu não oferece Direcionar ação nem Iniciar reunião.
+- [x] Contas: o Administrador cria Diretor, Apoio e Chefe; o Diretor, Chefe e Apoio. Só o Administrador mexe em Diretor e Administrador; nenhuma rota cria ou promove Administrador; o último Diretor ativo é protegido. Redefinir a senha de alguém, ou criar a conta, exige troca no próximo acesso.
+- [x] Troca de senha: `POST /api/auth/trocar-senha` (confirma a senha atual, grava pela API administrativa, encerra as outras sessões), tela obrigatória "Crie a sua senha" sem menu, e botão "Alterar senha" no menu.
+- [x] `npm run admin:criar` cria o primeiro Administrador (conta nova com senha provisória pelo ambiente, ou vínculo de conta existente). Usuário Administrador incluído nos dados de demonstração.
+- [x] Chefe de Seção confirmado por teste: vê a própria seção e as subordinadas, e só elas.
+- [x] 118 testes gerais aprovados. Verificação no Edge: Administrador em modo demo (menu, leitura, redirecionamentos, estrutura) e fluxo institucional com provedor simulado (cadastro de Diretor pelo Administrador, primeiro acesso, troca com mensagens de erro, senha provisória invalidada).
+
+Limites: a migração 8 no PostgreSQL não foi executada (sem binários aqui; `npm run test:postgres` teve só as expectativas de versão atualizadas). O fluxo de senha foi verificado com Supabase simulado, não com o projeto real; a API administrativa do Supabase precisa aceitar a atualização de senha por `PUT /auth/v1/admin/users/{id}`. O Administrador enxerga as ações internas das subseções por decisão explícita ("acessa todos os dados"): isso amplia o que o Diretor vê hoje.
+
 ## Próximas entregas
 
 1. Ampliar a integração para implantação com múltiplos processos, conexão de produção e cópia isolada dos dados reais quando houver ambiente destinado a isso.

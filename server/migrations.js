@@ -1,6 +1,7 @@
 // Migrações incrementais sobre o esquema base SQLite ou server/schema.sql (PostgreSQL).
 // Uma falha desfaz todas as migrações pendentes desta execução. Nunca remove dados.
 import { alinharIntegridade } from './migration-integridade.js';
+import { aplicarPerfilAdministrador } from './migration-perfil-admin.js';
 import { sqlSeguranca } from './seguranca-supabase.js';
 const MIGRACOES = [
   {
@@ -95,6 +96,14 @@ const MIGRACOES = [
         ? await db.prepare("select column_name as nome from information_schema.columns where table_schema=current_schema() and table_name='auth_sessoes_senha'").all()
         : (await db.prepare('pragma table_info(auth_sessoes_senha)').all()).map(c => ({ nome: c.name }));
       if (!colunas.some(c => c.nome === 'criada_em')) await db.exec('alter table auth_sessoes_senha add column criada_em integer not null default 0');
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
+  {
+    // Perfil Administrador (consulta tudo, gerencia contas e estrutura) e troca obrigatória da senha inicial.
+    id: 8, nome: 'perfil_administrador',
+    async aplicar(db) {
+      await aplicarPerfilAdministrador(db);
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },

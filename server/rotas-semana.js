@@ -70,7 +70,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
   app.get('/api/historico', permit('chefe'), h(async (req) => (req.user.secao_id ? await historicoDe(req.user.secao_id) : [])));
 
   // ---------- Painel do Diretor ----------
-  app.get('/api/painel', permit('diretor', 'apoio'), h(async (req) => {
+  app.get('/api/painel', permit('diretor', 'apoio', 'administrador'), h(async (req) => {
     const semana = await semanaDe(req);
     const itens = await painelSemana(db, semana, hoje());
     return {
@@ -87,20 +87,21 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     };
   }));
   // Pauta da semana (base da versão para impressão): mesmos cartões do Modo Reunião, sem reunião aberta.
-  app.get('/api/pauta', permit('diretor', 'apoio'), h(async (req) => {
+  app.get('/api/pauta', permit('diretor', 'apoio', 'administrador'), h(async (req) => {
     const semana = await semanaDe(req);
     return { semana, cartoes: await cartoesReuniao(db, semana, hoje()) };
   }));
-  app.get('/api/secoes/:id/detalhe', permit('diretor', 'apoio'), h(async (req) => {
+  app.get('/api/secoes/:id/detalhe', permit('diretor', 'apoio', 'administrador'), h(async (req) => {
     const id = Number(req.params.id);
     const s = await q1('select * from secoes where id = ? and pai_id is null', id);
     if (!s) throw falha(404, 'Centro não encontrado.');
     const semana = await semanaDe(req);
     const item = (await painelSemana(db, semana, hoje())).find((i) => i.secao.id === id);
     const ids = await subarvore(db, id);
-    const acoes = (await q(`${SELECT_ACAO} where a.secao_id in (${marks(ids)}) and (a.interna = 0 or a.compartilhada = 1) and a.encerrada = 0 and a.arquivada = 0
+    const todas = req.user.perfil === 'administrador';
+    const acoes = (await q(`${SELECT_ACAO} where a.secao_id in (${marks(ids)}) and (${todas ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'}) and a.encerrada = 0 and a.arquivada = 0
                      order by case a.status when 'concluida' then 1 else 0 end, a.prazo`, ...ids)).map(acaoOut);
     const tempoTotal = (await q1(`select coalesce(sum(t.minutos), 0) m from tempo t join acoes a on a.id = t.acao_id where a.secao_id in (${marks(ids)})`, ...ids))?.m ?? 0;
-    return { semana, item, historico: await historicoDe(id), acoes, tempo_total: tempoTotal };
+    return { semana, item, historico: await historicoDe(id), acoes, tempo_total: tempoTotal, acoes_internas_visiveis: todas };
   }));
 }

@@ -102,6 +102,39 @@ Testes locais cobrem provedor simulado, CSRF, origem, limite de tentativas, vín
 
 Ainda é necessário configurar o projeto Supabase, criar e vincular as contas autorizadas e executar o login real. A tela de entrada não teve inspeção visual.
 
+## Perfis e o Administrador
+
+| Perfil | O que vê | O que faz |
+| --- | --- | --- |
+| Diretor | Painel, ações (sem as internas das subseções), pedidos de prazo, reuniões e atas | Direciona ações, decide prazos, conduz reuniões, gerencia estrutura e cadastra contas de Chefe e Apoio |
+| Apoio do Diretor | O mesmo do Diretor | Direciona ações e conduz reuniões; decide prazos só dentro de reunião em andamento |
+| Chefe de seção | A própria seção e as seções subordinadas, e só elas | Atualiza o relato, gerencia as ações e o tempo da sua seção |
+| Administrador | Todos os dados, inclusive as ações internas das subseções | Só consulta o acompanhamento. Gerencia contas, perfis e estrutura (seções e subseções). Não direciona ações, não decide prazos, não conduz reunião, não comenta nem edita ações, combinados ou atas |
+
+O bloqueio de escrita do Administrador é aplicado no servidor (`app.js`): qualquer escrita fora de `/usuarios`, `/secoes` e `/auth` responde 403, além da permissão de cada rota.
+
+Regras de contas:
+
+- O Administrador cria contas de Diretor, Apoio e Chefe (com senha inicial). O Diretor continua criando Chefe e Apoio. Só o Administrador altera o perfil, o acesso e a senha de um Diretor.
+- Nenhuma tela ou rota cria ou promove Administradores, e o perfil e o acesso do Administrador não mudam pela API: isso evita que o sistema fique sem administrador e que alguém se declare administrador.
+- O sistema exige ao menos um Diretor ativo: o último não pode ser desativado nem trocado de perfil.
+
+### Primeiro Administrador
+
+Depois de migrar o banco (versão 8), execute no servidor, com `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` no ambiente:
+
+```powershell
+$env:SGC_ADMIN_SENHA_INICIAL = "senha provisória de 12 a 128 caracteres"
+npm run admin:criar -- --sqlite data/sgc.db "Nome Completo" administrador@orgao.gov.br
+# PostgreSQL: use --postgres e SGC_MIGRATION_DATABASE_URL explícita
+```
+
+O comando cria a conta no Supabase e o usuário local com perfil Administrador. A senha vai pelo ambiente, nunca na linha de comando, e é provisória: a pessoa cria a própria no primeiro acesso. Se a conta já existe no Supabase, use `SGC_ADMIN_SUBJECT=<UUID do usuário Supabase>` em vez da senha: o comando só vincula a conta, sem criar nem alterar senha. Pode-se criar mais de um Administrador.
+
+### Senha inicial e troca obrigatória
+
+Contas criadas pelo Diretor ou pelo Administrador, e contas cuja senha foi redefinida por eles (botão Login), nascem com `usuarios.trocar_senha = 1`. Enquanto isso, a API só responde `GET /bootstrap`, `POST /auth/trocar-senha` e `POST /auth/sair` (as demais rotas respondem 403 com `trocar_senha: true`), e a interface mostra somente a tela "Crie a sua senha". A troca (`POST /api/auth/trocar-senha`) confirma a senha atual no Supabase, grava a nova pela API administrativa (é preciso `SUPABASE_SERVICE_ROLE_KEY` no servidor), libera a conta e encerra as outras sessões dela. O mesmo endpoint atende a troca voluntária pelo botão "Alterar senha" do menu; usuários não podem redefinir a própria senha pelo botão Login da gestão. A senha nova precisa ter de 12 a 128 caracteres e ser diferente da atual. Como a senha provisória fica conhecida por quem cadastrou, ela não deve ser reaproveitada.
+
 ## Cadastro de chefes pelo Diretor
 
 Em Estrutura → Usuários → Novo chefe com acesso, o Diretor informa nome, e-mail, senha inicial (12–128 caracteres) e seção ativa. Se ela já tiver chefe, o Diretor confirma explicitamente a substituição. O servidor cria a conta confirmada via Auth Admin API, cadastra o perfil fixo `chefe`, vincula o UUID e atribui a seção em transação. Não envia convite nem devolve ou armazena a senha no banco Agilis. A senha não tem troca obrigatória no primeiro acesso nesta versão.

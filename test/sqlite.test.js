@@ -70,7 +70,7 @@ test('SQLite: seed aguarda commit e propaga falhas sem deixar carga parcial', as
   db.prepare = preparar;
   assert.equal((await db.prepare('select count(*) n from secoes').get()).n, 0);
   await seed(db);
-  assert.equal((await db.prepare('select count(*) n from usuarios').get()).n, 9);
+  assert.equal((await db.prepare('select count(*) n from usuarios').get()).n, 10);
   assert.deepEqual((await subarvore(db, 1)).sort((a, b) => a - b), [1, 7, 9]);
   assert.equal(await nivel(db, 9), 3);
   await db.prepare('update secoes set pai_id = ? where id = ?').run(2, 7);

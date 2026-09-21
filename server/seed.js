@@ -34,6 +34,7 @@ export async function seed(db) {
     [7, 'Elisa Prado', 'chefe', 5],
     [8, 'Fábio Amaral', 'chefe', 6],
     [9, 'Gabriela Sena', 'chefe', 7],
+    [10, 'Administrador (demonstração)', 'administrador', null],
   ];
 
   await db.transaction(async () => {

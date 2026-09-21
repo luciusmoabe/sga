@@ -25,9 +25,10 @@ create table if not exists usuarios (
   id integer primary key,
   nome text not null,
   email text,
-  perfil text not null check (perfil in ('diretor','chefe','apoio')),
+  perfil text not null check (perfil in ('diretor','chefe','apoio','administrador')),
   secao_id integer references secoes(id),
-  ativo integer not null default 1
+  ativo integer not null default 1,
+  trocar_senha integer not null default 0
 );
 create table if not exists diretrizes (
   id integer primary key,

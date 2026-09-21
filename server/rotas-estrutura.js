@@ -35,7 +35,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     await run('update secoes set chefe_id = ? where id = ?', chefeId, secaoId);
   };
 
-  app.post('/api/secoes', permit('diretor'), h(async (req, res) => db.transaction(async () => {
+  app.post('/api/secoes', permit('diretor', 'administrador'), h(async (req, res) => db.transaction(async () => {
     if (db.isPg) await db.prepare('select pg_advisory_xact_lock(7319, 2)').get();
     const b = req.body || {};
     const nome = texto(b.nome, 120);
@@ -63,7 +63,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     return (await listaSecoes(req.user)).find((s) => s.id === id);
   })));
 
-  app.patch('/api/secoes/:id', permit('diretor'), h(async (req) => db.transaction(async () => {
+  app.patch('/api/secoes/:id', permit('diretor', 'administrador'), h(async (req) => db.transaction(async () => {
     if (db.isPg) await db.prepare('select pg_advisory_xact_lock(7319, 2)').get();
     const id = Number(req.params.id);
     const s = await q1('select * from secoes where id = ?', id);
@@ -119,22 +119,27 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
   })));
 
   // ---------- Usuários (cadastro mínimo) ----------
-  app.post('/api/usuarios/chefes', permit('diretor'), h(async (req, res) => {
+  app.post('/api/usuarios/chefes', permit('diretor', 'administrador'), h(async (req, res) => {
     if (auth.mode !== 'supabase') throw falha(400, 'Criação de login disponível somente com Supabase Auth.');
     const usuario = await cadastrarChefe(db, auth, adminAuth || administradorAuth(auth), req.body || {});
     res.status(201);
     return usuario;
   }));
-  app.post('/api/usuarios/acesso', permit('diretor'), h(async(req,res)=>{
+  // Cria conta de login com senha inicial provisória. Diretor: Chefe e Apoio. Administrador: também Diretor.
+  app.post('/api/usuarios/acesso', permit('diretor', 'administrador'), h(async(req,res)=>{
     if(auth.mode!=='supabase') throw falha(400,'Login requer Supabase Auth.');
-    const u=await cadastrarChefe(db,auth,adminAuth || administradorAuth(auth),req.body || {},req.body?.perfil);
+    const permitidos = req.user.perfil === 'administrador' ? ['diretor', 'apoio', 'chefe'] : ['chefe', 'apoio'];
+    const u=await cadastrarChefe(db,auth,adminAuth || administradorAuth(auth),req.body || {},req.body?.perfil,{ permitidos });
     res.status(201); return u;
   }));
-  app.patch('/api/usuarios/:id/login', permit('diretor'), h(async(req)=>{
+  app.patch('/api/usuarios/:id/login', permit('diretor', 'administrador'), h(async(req)=>{
     if(auth.mode!=='supabase') throw falha(400,'Login requer Supabase Auth.');
     const id=Number(req.params.id), b=req.body || {};
     const conta=await q1('select * from auth_contas where usuario_id=? and projeto=?',id,auth.supabaseUrl);
     if(!conta) throw falha(404,'Usuário sem login vinculado.');
+    const alvo=await q1('select perfil from usuarios where id=?',id);
+    if(req.user.perfil!=='administrador' && ['diretor','administrador'].includes(alvo?.perfil)) throw falha(403,'Somente o Administrador altera o acesso do Diretor e de outros Administradores.');
+    if(b.senha && id===req.user.id) throw falha(400,'Para alterar a sua própria senha, use "Alterar senha" no menu.');
     const dados={};
     if(b.email) {
       const email=String(b.email).trim().toLowerCase();
@@ -150,13 +155,15 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     await (adminAuth || administradorAuth(auth)).atualizar(conta.subject,dados);
     await db.transaction(async()=>{
       if(dados.email) await run('update usuarios set email=? where id=?',dados.email,id);
+      // Quem define a senha a conhece: a pessoa precisa trocá-la no próximo acesso.
+      if(dados.password) await run('update usuarios set trocar_senha=1 where id=?',id);
       await run('delete from auth_sessoes_senha where conta_id=?',conta.id);
     });
     return {ok:true};
   }));
-  app.get('/api/usuarios', permit('diretor', 'apoio'), h(async () =>
+  app.get('/api/usuarios', permit('diretor', 'apoio', 'administrador'), h(async () =>
     await q(`select u.*, s.nome as secao_nome, (select count(*) from auth_contas c where c.usuario_id=u.id) as tem_login from usuarios u left join secoes s on s.id = u.secao_id order by u.ativo desc, u.perfil, u.nome`)));
-  app.post('/api/usuarios', permit('diretor'), h(async (req, res) => {
+  app.post('/api/usuarios', permit('diretor', 'administrador'), h(async (req, res) => {
     const b = req.body || {};
     const nome = texto(b.nome, 120);
     if (!nome) throw falha(400, 'Informe o nome.');
@@ -165,13 +172,18 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     res.status(201);
     return await q1('select * from usuarios where id = ?', id);
   }));
-  app.patch('/api/usuarios/:id', permit('diretor'), h(async (req) => db.transaction(async () => {
+  app.patch('/api/usuarios/:id', permit('diretor', 'administrador'), h(async (req) => db.transaction(async () => {
     const id = Number(req.params.id), b=req.body || {};
     const u = await q1('select * from usuarios where id = ?' + (db.isPg ? ' for update' : ''), id);
     if (!u) throw falha(404, 'Usuário não encontrado.');
-    if (u.perfil === 'diretor' && ('perfil' in b || 'ativo' in b || 'secao_id' in b)) throw falha(400, 'Perfil e acesso do Diretor são protegidos.');
+    const porAdmin = req.user.perfil === 'administrador';
+    const muda = 'perfil' in b || 'ativo' in b || 'secao_id' in b;
+    if (u.perfil === 'administrador' && !porAdmin) throw falha(403, 'Somente o Administrador altera esta conta.');
+    if (u.perfil === 'administrador' && muda) throw falha(400, 'O perfil e o acesso do Administrador só mudam pelo servidor, para que o sistema nunca fique sem administrador.');
+    if (u.perfil === 'diretor' && !porAdmin && muda) throw falha(400, 'Perfil e acesso do Diretor são protegidos: peça ao Administrador.');
     const perfil=b.perfil ?? u.perfil;
-    if (!['diretor','chefe','apoio'].includes(perfil) || (u.perfil !== 'diretor' && perfil === 'diretor')) throw falha(400,'Escolha Chefe ou Apoio.');
+    const permitidos = porAdmin ? ['diretor','chefe','apoio'] : ['chefe','apoio'];
+    if (perfil !== u.perfil && !permitidos.includes(perfil)) throw falha(400, porAdmin ? 'Escolha Diretor, Apoio do Diretor ou Chefe de seção.' : 'Escolha Chefe ou Apoio.');
     if ('nome' in b) {
       const nome=texto(b.nome,120);
       if(!nome) throw falha(400,'Informe o nome.');
@@ -188,6 +200,10 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     if ('ativo' in b && typeof b.ativo !== 'boolean') throw falha(400,'Estado inválido.');
     const ativo='ativo' in b ? Number(b.ativo) : u.ativo;
     const secao='secao_id' in b ? (b.secao_id ? Number(b.secao_id) : null) : u.secao_id;
+    if (u.perfil === 'diretor' && (perfil !== 'diretor' || !ativo)) {
+      const outros = (await q1(`select count(*) n from usuarios where perfil = 'diretor' and ativo = 1 and id != ?`, id)).n;
+      if (!outros) throw falha(409, 'O sistema precisa de ao menos um Diretor ativo. Cadastre outro Diretor antes de trocar ou desativar este.');
+    }
     if(perfil==='chefe' && ativo && secao) {
       const s=await q1('select * from secoes where id=?',secao);
       if(!s?.ativa) throw falha(400,'Escolha uma seção ativa.');
@@ -201,6 +217,6 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     }
     return await q1('select * from usuarios where id = ?', id);
   })));
-  app.delete('/api/usuarios/:id', permit('diretor'), h(req => excluirCadastro(db,'usuarios',Number(req.params.id))));
-  app.delete('/api/secoes/:id', permit('diretor'), h(req => excluirCadastro(db,'secoes',Number(req.params.id))));
+  app.delete('/api/usuarios/:id', permit('diretor', 'administrador'), h(req => excluirCadastro(db,'usuarios',Number(req.params.id))));
+  app.delete('/api/secoes/:id', permit('diretor', 'administrador'), h(req => excluirCadastro(db,'secoes',Number(req.params.id))));
 }

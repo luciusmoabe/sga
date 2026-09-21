@@ -13,6 +13,7 @@
     "seed": "node server/seed.js --reset",
     "migrate": "node server/migrate.js",
     "check:auth": "node server/verificar-auth.js",
+    "admin:criar": "node server/criar-administrador.js",
     "test": "node --test test/*.test.js",
     "test:postgres": "node --test test/postgres/*.test.js"
   },

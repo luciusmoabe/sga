@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { falha, h } from './helpers.js';
+import { TAM_SENHA } from '../public/js/regras.js';
 
 export const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const hash = valor => createHash('sha256').update(valor).digest('hex');
@@ -95,7 +96,10 @@ function cookie(req, nome) {
   return /^[A-Za-z0-9_-]{43}$/.test(valor) ? valor : '';
 }
 
-export function instalarAuth(app, db, config, provedor) {
+// Enquanto a senha inicial não for trocada, só estas rotas respondem.
+const LIBERADAS_NA_TROCA = new Set(['GET /bootstrap', 'POST /auth/sair', 'POST /auth/trocar-senha']);
+
+export function instalarAuth(app, db, config, provedor, contas) {
   const q1 = (sql, ...args) => db.prepare(sql).get(...args);
   const run = (sql, ...args) => db.prepare(sql).run(...args);
   app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); res.set('Referrer-Policy', 'no-referrer'); next(); });
@@ -104,7 +108,7 @@ export function instalarAuth(app, db, config, provedor) {
     if (process.env.NODE_ENV === 'production' || process.env.VERCEL) throw new Error('Login de demonstração é proibido em produção.');
     app.get('/api/usuarios-demo', h(() => db.prepare(`select u.id, u.nome, u.perfil, u.secao_id, s.nome as secao_nome, s.sigla as secao_sigla
       from usuarios u left join secoes s on s.id = u.secao_id where u.ativo = 1
-      order by case u.perfil when 'diretor' then 0 when 'apoio' then 1 else 2 end, u.nome`).all()));
+      order by case u.perfil when 'diretor' then 0 when 'apoio' then 1 when 'administrador' then 2 else 3 end, u.nome`).all()));
     app.use('/api', async (req, res, next) => {
       try {
         const valor = req.get('x-user-id') || '';
@@ -178,9 +182,43 @@ export function instalarAuth(app, db, config, provedor) {
       req.user = u;
       req.csrf = sessao.csrf;
       req.authSession = sessao.id;
+      if (u.trocar_senha && !LIBERADAS_NA_TROCA.has(`${req.method} ${req.path}`)) {
+        const e = falha(403, 'Troque a senha inicial antes de continuar.');
+        e.extra = { trocar_senha: true };
+        throw e;
+      }
       next();
     } catch (err) { next(err); }
   });
+  // Troca da própria senha. Vale para a troca obrigatória do primeiro acesso e para qualquer troca voluntária.
+  // Confirma a senha atual no Supabase e a grava pela API administrativa; as demais sessões da conta são encerradas.
+  app.post('/api/auth/trocar-senha', h(async (req) => {
+    const { senha_atual: atual, senha_nova: nova } = req.body || {};
+    if (typeof atual !== 'string' || !atual.length || atual.length > 1024) throw falha(400, 'Informe a senha atual.');
+    if (typeof nova !== 'string' || nova.length < TAM_SENHA.min || nova.length > TAM_SENHA.max) {
+      throw falha(400, `A nova senha deve ter entre ${TAM_SENHA.min} e ${TAM_SENHA.max} caracteres.`);
+    }
+    if (nova === atual) throw falha(400, 'A nova senha precisa ser diferente da atual.');
+    if (!contas) throw falha(503, 'Troca de senha indisponível: o servidor não tem a configuração administrativa do Supabase.');
+    const conta = await q1('select id, subject from auth_contas where usuario_id = ? and projeto = ?', req.user.id, config.supabaseUrl);
+    const email = (req.user.email || '').toLowerCase();
+    if (!conta || !email) throw falha(409, 'Esta conta não tem login vinculado. Peça ao administrador.');
+    await limitarTentativas(db, email, req.ip || 'desconhecido');
+    let identidade;
+    try { identidade = await supabase.autenticar(email, atual); }
+    catch (err) {
+      if (err.status === 429) throw falha(429, 'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.');
+      if (err.status === 401) throw falha(400, 'A senha atual não confere.');
+      throw falha(503, 'Troca de senha indisponível no momento. Tente novamente mais tarde.');
+    }
+    if (identidade.subject !== conta.subject) throw falha(400, 'A senha atual não confere.');
+    await contas.atualizar(conta.subject, { password: nova });
+    await db.transaction(async () => {
+      await run('update usuarios set trocar_senha = 0 where id = ?', req.user.id);
+      await run('delete from auth_sessoes_senha where conta_id = ? and id != ?', conta.id, req.authSession);
+    });
+    return { ok: true };
+  }));
   app.post('/api/auth/sair', h(async (req, res) => {
     await run('delete from auth_sessoes_senha where id = ?', req.authSession);
     res.clearCookie(sessaoCookie, opcoes);

@@ -1,6 +1,6 @@
 // Combinados da reunião: cadastro completo para Diretor e Apoio, leitura para os chefes.
 import { get, patch, post, put } from './api.js';
-import { ehGestao } from './estado.js';
+import { ehGestao, podeOperar } from './estado.js';
 import { abrirForm, esc, on, plural, toast, vazio } from './ui.js';
 
 let verArquivados = false;
@@ -11,12 +11,13 @@ const FREQ = {
 };
 
 export async function combinados(raiz, { refresh }) {
-  const gere = ehGestao();
+  const gere = ehGestao(); // Diretor, Apoio e Administrador veem também os inativos e arquivados
+  const edita = podeOperar(); // só Diretor e Apoio alteram
   const [c, cfg] = await Promise.all([get(`/combinados${gere ? `?todos=1${verArquivados ? '&arquivados=1' : ''}` : ''}`), get('/config')]);
   let n = 0;
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>Combinados da reunião</h1>
-      <div class="sub">${gere ? 'Aparecem em uma tela curta quando a reunião começa. Mudanças valem a partir da próxima reunião.' : 'Como conduzimos a reunião semanal.'}</div></div></div>
+      <div class="sub">${edita ? 'Aparecem em uma tela curta quando a reunião começa. Mudanças valem a partir da próxima reunião.' : gere ? 'Aparecem em uma tela curta quando a reunião começa. Você consulta; quem altera é o Diretor ou o Apoio.' : 'Como conduzimos a reunião semanal.'}</div></div></div>
     ${gere && c.aviso ? `<div class="aviso">${esc(c.aviso)}</div>` : ''}
     <div class="cartao">
       ${c.itens.length ? `<ol class="combinados">${c.itens.map((i) => {
@@ -24,7 +25,7 @@ export async function combinados(raiz, { refresh }) {
         return `<li class="combinado ${i.ativo ? '' : 'inativo'} ${i.arquivado ? 'arquivado' : ''}" data-id="${i.id}">
           <span class="ordem num">${i.arquivado || !i.ativo ? '·' : n}</span><span class="texto">${esc(i.texto)}</span>
           ${i.arquivado ? '<span class="pilula enc">Arquivado</span>' : !i.ativo ? '<span class="pilula">Desativado</span>' : ''}
-          ${gere ? `<span class="linha" style="gap:4px">
+          ${edita ? `<span class="linha" style="gap:4px">
             ${i.arquivado ? '<button class="btn btn-sec btn-mini" data-acao="restaurar">Restaurar</button>' : `
               <button class="btn btn-fantasma btn-mini" data-acao="cima" aria-label="Subir">↑</button>
               <button class="btn btn-fantasma btn-mini" data-acao="baixo" aria-label="Descer">↓</button>
@@ -32,9 +33,9 @@ export async function combinados(raiz, { refresh }) {
               <button class="btn btn-fantasma btn-mini" data-acao="alternar">${i.ativo ? 'Desativar' : 'Ativar'}</button>
               <button class="btn btn-fantasma btn-mini" data-acao="arquivar">Arquivar</button>`}</span>` : ''}
         </li>`;
-      }).join('')}</ol>` : vazio('Nenhum combinado ativo', gere ? 'Adicione o primeiro abaixo.' : 'O Diretor ainda não cadastrou combinados.')}
+      }).join('')}</ol>` : vazio('Nenhum combinado ativo', edita ? 'Adicione o primeiro abaixo.' : 'O Diretor ainda não cadastrou combinados.')}
     </div>
-    ${gere ? `<div class="espaco"></div>
+    ${edita ? `<div class="espaco"></div>
     <div class="dois" style="align-items:start">
       <form class="cartao" id="form-novo" novalidate><h2>Novo combinado</h2>
         <div class="erro-form oculto" role="alert"></div>
@@ -46,7 +47,7 @@ export async function combinados(raiz, { refresh }) {
         <label class="escolha" style="display:inline-flex"><input type="checkbox" id="arq" ${verArquivados ? 'checked' : ''}> Mostrar arquivados</label>
         <p class="suave pequeno" style="margin-top:10px">Combinados não são excluídos: arquivar preserva o histórico e a ata sempre guarda o que estava valendo naquela reunião.</p></div>
     </div>` : ''}`;
-  if (!gere) return;
+  if (!edita) return;
   const erro = (e) => toast(e.message, 'erro');
   on(raiz, 'click', '[data-acao]', async (el) => {
     const li = el.closest('[data-id]');

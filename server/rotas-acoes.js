@@ -5,6 +5,7 @@ import { falha, h, marks, permit, texto } from './helpers.js';
 
 export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   const visiveisAcoes = async (user) => {
+    if (user.perfil === 'administrador') return { where: '1 = 1', params: [] }; // o Administrador consulta tudo, inclusive ações internas
     if (user.perfil !== 'chefe') return { where: '(a.interna = 0 or a.compartilhada = 1)', params: [] };
     const ids = user.secao_id ? await subarvore(db, user.secao_id) : [-1];
     return { where: `a.secao_id in (${marks(ids)})`, params: ids };
@@ -108,7 +109,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     res.status(201);
     return await criarDiretriz(req.user, req.body || {});
   }));
-  app.get('/api/diretrizes', permit('diretor', 'apoio'), h(async () =>
+  app.get('/api/diretrizes', permit('diretor', 'apoio', 'administrador'), h(async () =>
     await q(`select d.*, u.nome as criado_por_nome,
          (select count(*) from acoes a where a.diretriz_id = d.id) total,
          (select count(*) from acoes a where a.diretriz_id = d.id and a.status = 'concluida') concluidas
@@ -304,12 +305,12 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   }));
 
   // ---------- Pedidos de novo prazo ----------
-  app.get('/api/pedidos-prazo', permit('diretor', 'apoio'), h(async (req) => {
+  app.get('/api/pedidos-prazo', permit('diretor', 'apoio', 'administrador'), h(async (req) => {
     const st = req.query.status === 'todos' ? null : 'pendente';
     return await q(`select p.*, a.titulo as acao_titulo, a.secao_id, s.nome as secao_nome, s.sigla as secao_sigla, u.nome as usuario_nome
               from pedidos_prazo p join acoes a on a.id = p.acao_id join secoes s on s.id = a.secao_id
               left join usuarios u on u.id = p.usuario_id
-              where (a.interna = 0 or a.compartilhada = 1) ${st ? `and p.status = '${st}' and a.arquivada = 0 and a.encerrada = 0` : ''}
+              where (${req.user.perfil === 'administrador' ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'}) ${st ? `and p.status = '${st}' and a.arquivada = 0 and a.encerrada = 0` : ''}
               order by p.criado_em desc`);
   }));
   app.post('/api/pedidos-prazo/:id/decidir', permit('diretor', 'apoio'), h(async (req) => {

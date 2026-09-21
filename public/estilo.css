@@ -873,8 +873,8 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 /* Entrada por e-mail e senha */
 #login-senha { display: grid; gap: .75rem; margin-top: 1.5rem; }
 #login-senha input { width: 100%; min-width: 0; box-sizing: border-box; }
-#login-erro { margin: 0; color: #a4262c; }
-#login-erro:empty { display: none; }
+#login-erro, #troca-erro { margin: 0; color: #a4262c; }
+#login-erro:empty, #troca-erro:empty { display: none; }
 .login-ajuda { margin-top: 1rem; font-size: .9rem; }
 
 /* Administração / Estrutura */
@@ -968,3 +968,6 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 
 /* Tela de início da reunião */
 .lista-pre { margin: 6px 0 14px; padding-left: 1.2em; line-height: 1.7; }
+
+/* Ações do usuário no rodapé do menu */
+.usuario-acoes { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }

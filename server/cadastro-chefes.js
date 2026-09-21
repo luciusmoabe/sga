@@ -1,5 +1,6 @@
 import { GUID } from './auth.js';
 import { falha } from './helpers.js';
+import { TAM_SENHA } from './logic.js';
 
 export function administradorAuth(config, { env = process.env, fetchImpl = fetch } = {}) {
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -29,15 +30,20 @@ export function administradorAuth(config, { env = process.env, fetchImpl = fetch
   };
 }
 
-export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe') {
-  if (!['chefe','apoio'].includes(perfil)) throw falha(400, 'Escolha Chefe ou Apoio.');
+// `permitidos` limita os perfis que quem chama pode criar: o Diretor cria Chefe e Apoio; o Administrador também cria Diretor;
+// o Administrador só nasce pelo comando do servidor (server/criar-administrador.js). A senha informada é provisória:
+// a pessoa é obrigada a trocá-la no primeiro acesso.
+export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe', { permitidos = ['chefe', 'apoio'] } = {}) {
+  if (!permitidos.includes(perfil)) {
+    throw falha(400, permitidos.includes('diretor') ? 'Escolha Diretor, Apoio do Diretor ou Chefe de seção.' : 'Escolha Chefe ou Apoio.');
+  }
   const nome = typeof dados.nome === 'string' ? dados.nome.trim() : '';
   const email = typeof dados.email === 'string' ? dados.email.trim().toLowerCase() : '';
   const senha = dados.senha;
   const secaoId = perfil === 'chefe' ? Number(dados.secao_id) : null;
   if (!nome || nome.length > 120) throw falha(400, 'Informe um nome com até 120 caracteres.');
   if (email.length > 160 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw falha(400, 'Informe um e-mail válido.');
-  if (typeof senha !== 'string' || senha.length < 12 || senha.length > 128) throw falha(400, 'A senha inicial deve ter entre 12 e 128 caracteres.');
+  if (typeof senha !== 'string' || senha.length < TAM_SENHA.min || senha.length > TAM_SENHA.max) throw falha(400, `A senha inicial deve ter entre ${TAM_SENHA.min} e ${TAM_SENHA.max} caracteres.`);
   if (perfil === 'chefe' && (!Number.isSafeInteger(secaoId) || secaoId < 1)) throw falha(400, 'Escolha uma seção.');
   const anterior = dados.substituir_chefe_id == null ? null : Number(dados.substituir_chefe_id);
   if (anterior !== null && (!Number.isSafeInteger(anterior) || anterior < 1)) throw falha(400, 'Confirmação de substituição inválida.');
@@ -55,7 +61,7 @@ export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe')
   try {
     return await db.transaction(async () => {
       await validar();
-      const id = (await db.prepare('insert into usuarios (nome,email,perfil,secao_id) values (?,?,?,?)').run(nome,email,perfil,secaoId)).lastInsertRowid;
+      const id = (await db.prepare('insert into usuarios (nome,email,perfil,secao_id,trocar_senha) values (?,?,?,?,1)').run(nome,email,perfil,secaoId)).lastInsertRowid;
       if (perfil === 'chefe') {
       const alteracao = anterior === null
         ? await db.prepare('update secoes set chefe_id = ? where id = ? and ativa = 1 and chefe_id is null').run(id,secaoId)
@@ -64,7 +70,7 @@ export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe')
       if (anterior !== null) await db.prepare('update usuarios set secao_id = null where id = ? and secao_id = ?').run(anterior,secaoId);
       }
       await db.prepare('insert into auth_contas (usuario_id,projeto,subject) values (?,?,?)').run(id,config.supabaseUrl,subject);
-      return { id, nome, email, perfil, secao_id: secaoId, ativo: 1 };
+      return { id, nome, email, perfil, secao_id: secaoId, ativo: 1, trocar_senha: 1 };
     });
   } catch (err) {
     try { await admin.remover(subject); }
