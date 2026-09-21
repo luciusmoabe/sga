@@ -182,6 +182,8 @@ export async function viewReuniao(raiz) {
     } else if (ev.key === 'Escape' && S.passo !== 'visao') irPara('visao');
   };
   document.addEventListener('keydown', teclas);
-  window.addEventListener('hashchange', () => document.removeEventListener('keydown', teclas), { once: true });
+  // Reuniões longas têm minutos sem nenhuma chamada ao servidor; um ping mantém a sessão ativa.
+  const mantemSessao = setInterval(() => get('/bootstrap').catch(() => {}), 10 * 60 * 1000);
+  window.addEventListener('hashchange', () => { document.removeEventListener('keydown', teclas); clearInterval(mantemSessao); }, { once: true });
   desenhar();
 }

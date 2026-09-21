@@ -141,6 +141,18 @@ Configuração e operação em `AUTENTICACAO.md`. Node mínimo atualizado para 2
 
 O diagnóstico local confirmou ausência de `SGC_PUBLIC_ORIGIN`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` e `ENTRA_CLIENT_SECRET`. Nenhuma consulta ao tenant real ou alteração administrativa foi realizada. A continuação da homologação exige o registro institucional e essas configurações; o segredo deve ficar no ambiente seguro, não na conversa. Suíte geral atualizada para 77 testes. PostgreSQL e suas migrações não foram alterados nesta entrega.
 
+## Décima entrega — versionamento, cabeçalhos de segurança e continuidade do trabalho na interface
+
+- [x] Inicializar o repositório git (branch `main`) com o estado das nove entregas anteriores; `.env.example` deixou de ser ignorado.
+- [x] Atualizar `better-sqlite3` para 12.x, que instala sem compilação no Node 24/Windows; a suíte voltou a rodar aqui.
+- [x] Enviar CSP restritiva, `nosniff`, `X-Frame-Options`, `Permissions-Policy` e HSTS (só com HTTPS); ativar `trust proxy` na Vercel ou por `SGC_TRUST_PROXY`, para o limite de login enxergar o IP real.
+- [x] Hospedar Manrope e DM Sans em `public/fontes`; nenhuma URL externa em HTML ou CSS.
+- [x] Migração 7: sessão deslizante (1 h de inatividade, teto de 8 h); Modo Reunião renova a sessão a cada 10 minutos.
+- [x] Interface: aviso de sessão expirada com retorno à tela anterior; rascunho da atualização semanal em `sessionStorage`; Minhas ações recarrega só os dados (mantém a aba e os minutos digitados); exclusão de ação usa o diálogo padrão.
+- [x] 102 testes gerais aprovados. Verificação no Edge (CDP), com servidor em modo demo: fontes locais carregadas, zero violações de CSP no console, aba e minutos preservados, rascunho recuperado após recarregar, telas do chefe (390 px) e do Diretor (1920x1080) conferidas visualmente.
+
+Limites: os testes de PostgreSQL real (`npm run test:postgres`) não foram executados aqui (sem binários); as expectativas de versão em `test/postgres/integracao.test.js` foram atualizadas, mas a migração 7 em PostgreSQL ainda precisa ser confirmada nesse ambiente. A expiração real de sessão na interface (aviso e retorno) foi verificada só por leitura do código e pelos testes de servidor. O ensaio na TV/HDMI real continua pendente.
+
 ## Próximas entregas
 
 1. Ampliar a integração para implantação com múltiplos processos, conexão de produção e cópia isolada dos dados reais quando houver ambiente destinado a isso.

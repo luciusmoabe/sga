@@ -59,9 +59,24 @@ export async function atualizacao(raiz) {
     critico: at ? at.critico : false,
     apoio: at?.apoio || '',
   };
+  // Rascunho local (só nesta aba): sobrevive a recarga, queda de sessão ou fechamento sem querer.
+  const chaveRascunho = `agilis-rascunho:${est.user.id}:${semana}`;
+  let recuperado = false;
+  try {
+    const r = JSON.parse(sessionStorage.getItem(chaveRascunho));
+    const lista = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
+    if (r && Array.isArray(r.previstos) && r.previstos.every((p) => typeof p?.texto === 'string') && lista(r.extras) && lista(r.proximo) && lista(r.impedimentos)) {
+      Object.assign(st, { previstos: r.previstos.map((p) => ({ texto: p.texto, cumprido: !!p.cumprido })), extras: r.extras, proximo: r.proximo, impedimentos: r.impedimentos, critico: !!r.critico, apoio: String(r.apoio || '') });
+      recuperado = true;
+    }
+  } catch { /* sem rascunho ou armazenamento indisponível */ }
+  const gravarRascunho = () => {
+    try { sessionStorage.setItem(chaveRascunho, JSON.stringify({ ...st, critico: chk.checked, apoio: $('#apoio', raiz).value })); } catch { /* segue sem rascunho */ }
+  };
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>Minha atualização</h1><div class="sub">Para a reunião de ${diaSemana(semana)}, ${br(semana)} · prazo regular ${diaSemana(addDias(semana, -1))}, ${br(addDias(semana, -1))}, às 18h</div></div></div>
     ${at ? `<div class="info">Você já enviou esta atualização (versão ${at.versao}). Ao enviar de novo, a nova versão substitui a anterior e o histórico é mantido.</div>` : ''}
+    ${recuperado ? '<div class="info" role="status">Recuperamos o rascunho que você não chegou a enviar. Confira e envie quando estiver pronto.</div>' : ''}
     <form id="form-at" novalidate>
       <div class="erro-form oculto" role="alert"></div>
       <div class="cartao"><h2>O que foi feito</h2>
@@ -96,12 +111,15 @@ export async function atualizacao(raiz) {
     st[k].push(v);
     inp.value = '';
     desenhar();
+    gravarRascunho();
     inp.focus();
   };
   on(raiz, 'click', '[data-add]', (el) => adicionar(el.dataset.add));
   on(raiz, 'keydown', 'input[id^=i-]', (el, ev) => { if (ev.key === 'Enter') { ev.preventDefault(); adicionar(el.id.slice(2)); } });
-  on(raiz, 'click', '[data-rem]', (el) => { const [k, i] = el.dataset.rem.split(':'); st[k].splice(Number(i), 1); desenhar(); });
-  on(raiz, 'change', '[data-prev]', (el) => { st.previstos[Number(el.dataset.prev)].cumprido = el.checked; });
+  on(raiz, 'click', '[data-rem]', (el) => { const [k, i] = el.dataset.rem.split(':'); st[k].splice(Number(i), 1); desenhar(); gravarRascunho(); });
+  on(raiz, 'change', '[data-prev]', (el) => { st.previstos[Number(el.dataset.prev)].cumprido = el.checked; gravarRascunho(); });
+  on(raiz, 'input', '#apoio', gravarRascunho);
+  on(raiz, 'change', '#critico', gravarRascunho);
   $('#form-at', raiz).addEventListener('submit', async (e) => {
     e.preventDefault();
     for (const k of ['extras', 'proximo', 'impedimentos']) adicionar(k); // aproveita o que ficou digitado e não foi adicionado
@@ -109,6 +127,7 @@ export async function atualizacao(raiz) {
     erro.classList.add('oculto');
     try {
       await put('/atualizacao', { semana, feito: { previstos: st.previstos, extras: st.extras }, proximo: st.proximo, impedimentos: st.impedimentos, critico: chk.checked, apoio: $('#apoio', raiz).value });
+      try { sessionStorage.removeItem(chaveRascunho); } catch { /* ignora */ }
       toast('Atualização enviada. Obrigado!');
       location.hash = '#/inicio';
     } catch (ex) {

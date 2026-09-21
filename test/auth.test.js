@@ -161,6 +161,47 @@ test('auth: vínculo é por projeto e UUID, idempotente e não substitui contas 
   assert.equal((await db.prepare('select count(*) n from auth_contas').get()).n, 1);
 });
 
+test('auth: sessão é renovada com atividade, respeitando o teto de 8 h e as sessões antigas', async t => {
+  const { db, call, login } = await ambiente(t);
+  const cookie = lerCookie(await login());
+  const agora = () => Math.floor(Date.now() / 1000);
+  const estado = async () => await db.prepare('select expira_em, criada_em from auth_sessoes_senha').get();
+  const ajustar = (expira, criada) => db.exec(`update auth_sessoes_senha set expira_em = ${expira}, criada_em = ${criada}`);
+
+  // Sessão recém-criada: mais de metade da janela restante, nada é gravado nem reenviado.
+  const inicial = await estado();
+  assert.ok(inicial.criada_em > 0);
+  const quieta = await call('/bootstrap', { headers: { cookie } });
+  assert.equal(quieta.status, 200);
+  assert.equal(quieta.headers.get('set-cookie'), null);
+  assert.equal((await estado()).expira_em, inicial.expira_em);
+
+  // Perto de expirar: renova por mais 1 h e reenvia o cookie com a nova validade.
+  await ajustar(agora() + 600, agora() - 3000);
+  const renovada = await call('/bootstrap', { headers: { cookie } });
+  assert.equal(renovada.status, 200);
+  assert.match(renovada.headers.get('set-cookie'), /Max-Age=3[56]\d\d/);
+  assert.ok((await estado()).expira_em >= agora() + 3590);
+
+  // Perto do teto de 8 h: a renovação é limitada ao teto.
+  await ajustar(agora() + 100, agora() - (8 * 3600 - 600));
+  assert.equal((await call('/bootstrap', { headers: { cookie } })).status, 200);
+  const limitada = (await estado()).expira_em;
+  assert.ok(limitada > agora() + 500 && limitada <= agora() + 600, `expira em ${limitada - agora()} s`);
+
+  // Depois do teto não há renovação: a sessão expira e o usuário entra de novo.
+  await ajustar(agora() + 100, agora() - (8 * 3600 + 100));
+  const antes = (await estado()).expira_em;
+  assert.equal((await call('/bootstrap', { headers: { cookie } })).status, 200);
+  assert.equal((await estado()).expira_em, antes);
+
+  // Sessão anterior à migração (criada_em = 0) mantém o prazo original.
+  await ajustar(agora() + 100, 0);
+  const legada = (await estado()).expira_em;
+  assert.equal((await call('/bootstrap', { headers: { cookie } })).status, 200);
+  assert.equal((await estado()).expira_em, legada);
+});
+
 test('PostgreSQL: TLS valida certificado e impede downgrade por URL', () => {
   const config = configurarPg('postgresql://usuario:senha@banco.example/db?sslmode=require', {});
   assert.equal(config.ssl.rejectUnauthorized, true);

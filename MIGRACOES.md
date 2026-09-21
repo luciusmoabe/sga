@@ -35,6 +35,8 @@ O migrador não utiliza `DATABASE_URL` como destino implícito. Não registre a 
 | 3 | `integridade_referencial` | Acrescenta FK adiada de chefe no SQLite e remove quatro cascatas PostgreSQL, preservando os registros |
 | 4 | `identidade_institucional` | Cria tabelas de identidade da integração OAuth anterior (Entra), hoje sem uso; em PostgreSQL/public habilita RLS e revoga permissões públicas aos objetos Agilis |
 | 5 | `login_email_senha` | Cria `auth_contas` (vínculo com usuário Supabase), `auth_sessoes_senha` e `auth_tentativas`; reaplica RLS e revogações em PostgreSQL/public |
+| 6 | `autoria_acoes` | Adiciona `acoes.criado_por` e preenche a autoria das ações vindas de diretrizes; reaplica RLS e revogações em PostgreSQL/public |
+| 7 | `sessao_deslizante` | Adiciona `auth_sessoes_senha.criada_em` (0 nas sessões já abertas, que expiram no prazo original); reaplica RLS e revogações em PostgreSQL/public |
 
 A unicidade das versões semanais já faz parte do esquema base (`secao_id`, `semana`, `versao`). Os destinos e as regras de exclusão/atualização de todas as FKs do esquema migrado são comparados automaticamente entre SQLite e PostgreSQL.
 

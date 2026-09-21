@@ -39,6 +39,10 @@ export async function sair() {
     catch (e) { if (e.status !== 401) throw e; }
   }
   limparSessao();
+  // Saída explícita: apaga rascunhos desta aba (a queda por expiração os preserva de propósito).
+  try {
+    for (const k of Object.keys(sessionStorage)) if (k.startsWith('agilis-rascunho:')) sessionStorage.removeItem(k);
+  } catch { /* ignora */ }
 }
 
 // ── Cache em memória para GETs (TTL = 5 segundos) ──────────────────────────

@@ -9,9 +9,9 @@ test('migrações: aplicação concorrente é idempotente e registra a versão',
   t.after(() => db.close());
   await assert.rejects(verificarMigracoes(db), /Migrações pendentes/);
   const resultados = await Promise.all([aplicarMigracoes(db), aplicarMigracoes(db)]);
-  assert.deepEqual(resultados, [[1, 2, 3, 4, 5, 6], []]);
+  assert.deepEqual(resultados, [[1, 2, 3, 4, 5, 6, 7], []]);
   await verificarMigracoes(db);
-  assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 6);
+  assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 7);
 });
 
 test('migrações: esquema antigo recebe arquivamento sem perder ações existentes', async (t) => {
@@ -20,7 +20,7 @@ test('migrações: esquema antigo recebe arquivamento sem perder ações existen
   await seed(db);
   const antes = await db.prepare('select id, titulo from acoes order by id').all();
   await db.exec('drop index uq_pedido_pendente_acao; drop index uq_reuniao_em_andamento; drop table schema_migrations; alter table acoes drop column arquivada');
-  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7]);
   assert.deepEqual(await db.prepare('select id, titulo from acoes order by id').all(), antes);
   assert.ok((await db.prepare('select arquivada from acoes').all()).every(a => a.arquivada === 0));
 });
@@ -61,7 +61,7 @@ test('migrações: erro de DDL desfaz índices e registro da migração', async 
   await assert.rejects(aplicarMigracoes(db), /Falha de DDL/);
   assert.deepEqual(await db.prepare("select name from sqlite_master where name in ('schema_migrations','uq_pedido_pendente_acao')").all(), []);
   db.exec = executar;
-  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7]);
 });
 
 test('migrações: índices impedem duplicidades até em escritas diretas', async (t) => {
@@ -82,4 +82,17 @@ test('migrações: versão desconhecida e erros de acesso são propagados', asyn
   await assert.rejects(verificarMigracoes(db), /incompatível/);
   await assert.rejects(aplicarMigracoes(db), /incompatível/);
   await assert.rejects(verificarMigracoes({ prepare: () => ({ all: async () => { throw new Error('Acesso negado'); } }) }), /Acesso negado/);
+});
+
+test('migrações: banco na versão 6 recebe a sessão deslizante sem perder sessões abertas', async (t) => {
+  const db = openDb(':memory:');
+  t.after(() => db.close());
+  await seed(db);
+  await db.exec(`insert into auth_contas (usuario_id, projeto, subject) values (3, 'https://p.supabase.co', '33333333-3333-4333-8333-333333333333');
+    insert into auth_sessoes_senha (id, conta_id, csrf, expira_em, criada_em) values ('abc', 1, 'x', 4102444800, 5);
+    delete from schema_migrations where id = 7;
+    alter table auth_sessoes_senha drop column criada_em`);
+  assert.deepEqual(await aplicarMigracoes(db), [7]);
+  assert.deepEqual(await db.prepare('select id, expira_em, criada_em from auth_sessoes_senha').all(), [{ id: 'abc', expira_em: 4102444800, criada_em: 0 }]);
+  assert.deepEqual(await aplicarMigracoes(db), [], 'reexecução não altera nada');
 });

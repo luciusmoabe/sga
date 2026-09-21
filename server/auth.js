@@ -7,6 +7,9 @@ const aleatorio = () => randomBytes(32).toString('base64url');
 const igual = (a, b) => typeof a === 'string' && typeof b === 'string'
   && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const segundos = () => Math.floor(Date.now() / 1000); // Segurança usa relógio real, nunca SGC_NOW.
+// A sessão vale por 1 h sem atividade e é renovada ao usar o sistema, até 8 h desde o login.
+export const SESSAO_OCIOSA = 3600;
+export const SESSAO_MAXIMA = 8 * 3600;
 
 export function origemValida(valor, { permitirLocal = false } = {}) {
   let url;
@@ -137,7 +140,7 @@ export function instalarAuth(app, db, config, provedor) {
       throw falha(401, 'E-mail, senha ou acesso inválidos.');
     }
     const token = aleatorio(), csrf = aleatorio();
-    const expira = Math.min(identidade.expires, segundos() + 3600);
+    const expira = Math.min(identidade.expires, segundos() + SESSAO_OCIOSA);
     await db.transaction(async () => {
       const vinculo = await q1(`select c.id from auth_contas c join usuarios u on u.id = c.usuario_id
         where c.projeto = ? and c.subject = ? and u.ativo = 1`, config.supabaseUrl, identidade.subject);
@@ -145,7 +148,7 @@ export function instalarAuth(app, db, config, provedor) {
       await run('delete from auth_sessoes_senha where expira_em <= ?', segundos());
       const anterior = cookie(req, sessaoCookie);
       if (anterior) await run('delete from auth_sessoes_senha where id = ?', hash(anterior));
-      await run('insert into auth_sessoes_senha (id, conta_id, csrf, expira_em) values (?, ?, ?, ?)', hash(token), vinculo.id, csrf, expira);
+      await run('insert into auth_sessoes_senha (id, conta_id, csrf, expira_em, criada_em) values (?, ?, ?, ?, ?)', hash(token), vinculo.id, csrf, expira, segundos());
     });
     res.cookie(sessaoCookie, token, { ...opcoes, maxAge: (expira - segundos()) * 1000 });
     return { ok: true, csrf };
@@ -153,7 +156,7 @@ export function instalarAuth(app, db, config, provedor) {
   app.use('/api', async (req, res, next) => {
     try {
       const token = cookie(req, sessaoCookie);
-      const sessao = token ? await q1(`select s.id, s.csrf, i.usuario_id from auth_sessoes_senha s
+      const sessao = token ? await q1(`select s.id, s.csrf, s.expira_em, s.criada_em, i.usuario_id from auth_sessoes_senha s
         join auth_contas i on i.id = s.conta_id where s.id = ? and s.expira_em > ? and i.projeto = ?`,
       hash(token), segundos(), config.supabaseUrl) : null;
       const u = sessao ? await q1('select * from usuarios where id = ? and ativo = 1', sessao.usuario_id) : null;
@@ -161,6 +164,16 @@ export function instalarAuth(app, db, config, provedor) {
       if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)
         && (req.get('origin') !== config.origin || !igual(req.get('x-csrf-token'), sessao.csrf))) {
         throw falha(403, 'Requisição inválida. Atualize a página e tente novamente.');
+      }
+      // Renova só quando falta menos da metade da janela: no máximo uma gravação a cada 30 min por sessão.
+      const agora = segundos();
+      if (sessao.criada_em > 0 && sessao.expira_em - agora < SESSAO_OCIOSA / 2) {
+        const nova = Math.min(agora + SESSAO_OCIOSA, sessao.criada_em + SESSAO_MAXIMA);
+        if (nova > sessao.expira_em) {
+          await run('update auth_sessoes_senha set expira_em = ? where id = ?', nova, sessao.id);
+          res.cookie(sessaoCookie, token, { ...opcoes, maxAge: (nova - agora) * 1000 });
+          sessao.expira_em = nova;
+        }
       }
       req.user = u;
       req.csrf = sessao.csrf;

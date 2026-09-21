@@ -17,6 +17,8 @@ Use a raiz deste repositório como Root Directory. Mantenha os builders do `verc
 | `DATABASE_URL` | Conexão PostgreSQL fornecida pelo painel Supabase, acessível pela função |
 | `SGC_PG_CA_FILE` | `certs/supabase-prod-ca-2021.crt` se esse for o certificado CA indicado para o banco |
 
+Na Vercel o servidor confia no primeiro proxy (`trust proxy`), de modo que o limite de tentativas de login use o IP real de cada usuário; fora dela, use `SGC_TRUST_PROXY` (número de proxies) somente atrás de um proxy confiável. A interface envia CSP restritiva e demais cabeçalhos de segurança, e as fontes ficam em `public/fontes` (sem Google Fonts).
+
 A CA já é incluída no pacote da função. Não desabilite a verificação TLS. SQLite é recusado na Vercel, inclusive se `DATABASE_URL` estiver ausente. Não configure `SGC_AUTH_MODE=demo`.
 
 Use uma origem estável para homologação. Acessar um alias diferente de `SGC_PUBLIC_ORIGIN` impede login e gravações pela proteção de origem. Configure Preview separadamente, preferencialmente com banco e usuários de homologação.

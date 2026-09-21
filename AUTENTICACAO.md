@@ -51,7 +51,7 @@ O comando verifica migrações e usuário ativo, é idempotente para o mesmo ví
 ## Sessão e proteção das requisições
 
 - Sessão opaca em cookie `HttpOnly`, `SameSite=Lax`, `Secure` em HTTPS (nome `__Host-sgc_senha`), sem domínio e com caminho `/`. O banco guarda só o hash do token (`auth_sessoes_senha`).
-- Sessão dura no máximo uma hora, limitada também pela validade do token Supabase. Não há refresh token; ao expirar, o usuário entra de novo.
+- A sessão vale por uma hora sem atividade e é renovada enquanto o usuário usa o sistema (no máximo uma gravação a cada 30 minutos por sessão), até o teto absoluto de 8 horas desde o login; depois disso o usuário entra de novo. Não há refresh token do Supabase: ele só é consultado no login. O Modo Reunião envia um ping a cada 10 minutos para não expirar em reuniões longas. Sessões abertas antes da migração 7 mantêm o prazo original.
 - Login exige `Origin` igual à origem configurada e JSON. Mutações exigem também o token CSRF recebido no login/bootstrap. O cabeçalho `x-user-id` é ignorado fora do modo demo.
 - Limite de tentativas em janelas de 15 minutos: 10 por e-mail e 100 por origem (`auth_tentativas`). Mensagens de erro não revelam se o e-mail existe.
 - Sair remove a sessão do Agilis. Desativações urgentes devem desativar também o usuário local.
@@ -95,7 +95,7 @@ Execute em ambiente de homologação, depois da configuração e da migração. 
 | Tentativa de `x-user-id` sem sessão | API responde 401; lista demo responde 404 |
 | Logout e retorno à página anterior | Requisições protegidas exigem novo login |
 | Usuário local desativado | Próxima requisição protegida é recusada |
-| Sessão expirada | Aplicação solicita novo login |
+| Sessão expirada | Aplicação avisa, solicita novo login e volta à tela em que o usuário estava; o rascunho da atualização semanal (guardado só na aba, em `sessionStorage`) é mantido e apagado ao sair |
 | Acesso direto Supabase por `anon`/`authenticated` | Tabelas Agilis não ficam acessíveis fora da API Express |
 
 Testes locais cobrem provedor simulado, CSRF, origem, limite de tentativas, vínculo inexistente, sessão expirada/desativada, logout, regras de perfil, cache do cliente e TLS. PostgreSQL real verifica permissões e RLS com papéis `anon`/`authenticated` e sessões em conexões independentes.

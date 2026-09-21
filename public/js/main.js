@@ -68,11 +68,16 @@ async function carregarSessao() {
   atualizarSessao(await get('/bootstrap'));
 }
 
-async function telaEntrada() {
+// Tela para onde voltar depois de um novo login causado por sessão expirada.
+let retorno = null;
+
+async function telaEntrada({ expirada = false } = {}) {
   document.body.classList.remove('tv');
+  if (!expirada) retorno = null;
   if (await modoAuth() === 'supabase') {
     app.innerHTML = `<div class="entrada"><div class="entrada-caixa"><h1>Agilis</h1>
       <p class="lema">Entre com seu e-mail e senha.</p>
+      ${expirada ? '<div class="info" role="status">Sua sessão expirou. Entre novamente para continuar de onde parou; rascunhos não enviados foram mantidos.</div>' : ''}
       <form id="login-senha">
         <label for="login-email">E-mail</label>
         <input id="login-email" name="email" type="email" autocomplete="username" maxlength="254" required>
@@ -95,7 +100,8 @@ async function telaEntrada() {
         await entrarSenha(form.elements.email.value, form.elements.senha.value);
         form.elements.senha.value = '';
         est.user = null;
-        location.hash = '#/';
+        location.hash = retorno || '#/';
+        retorno = null;
         await render();
       } catch (err) {
         form.elements.senha.value = '';
@@ -183,7 +189,12 @@ export async function render() {
     atualizarSelo();
   } catch (e) {
     if (minha !== gen) return;
-    if (e.status === 401) { limparSessao(); est.user = null; est.boot = null; return telaEntrada(); }
+    if (e.status === 401) {
+      const eraLogado = !!est.user;
+      if (eraLogado && !retorno) retorno = location.hash;
+      limparSessao(); est.user = null; est.boot = null;
+      return telaEntrada({ expirada: eraLogado });
+    }
     const alvo = $('#conteudo') || app;
     alvo.innerHTML = `<div class="cartao"><h2>Não foi possível abrir esta tela</h2><p>${esc(e.message)}</p><a class="btn btn-sec" href="${est.user ? casaDe() : '#/'}">Voltar ao início</a></div>`;
     console.error(e);

@@ -86,6 +86,18 @@ const MIGRACOES = [
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },
+  {
+    // Permite renovar a sessão enquanto há atividade, respeitando um teto absoluto desde o login.
+    // Sessões anteriores ficam com 0 e apenas expiram no prazo original.
+    id: 7, nome: 'sessao_deslizante',
+    async aplicar(db) {
+      const colunas = db.isPg
+        ? await db.prepare("select column_name as nome from information_schema.columns where table_schema=current_schema() and table_name='auth_sessoes_senha'").all()
+        : (await db.prepare('pragma table_info(auth_sessoes_senha)').all()).map(c => ({ nome: c.name }));
+      if (!colunas.some(c => c.nome === 'criada_em')) await db.exec('alter table auth_sessoes_senha add column criada_em integer not null default 0');
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
 ];
 
 async function registros(db) {
