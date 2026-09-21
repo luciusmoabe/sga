@@ -172,6 +172,16 @@ Pendências vistas na inspeção: na TV, o subtítulo da Visão geral e o contad
 
 Limite: o ESLint foi executado uma vez, fora do projeto, e não faz parte de `npm test`.
 
+## Décima terceira entrega — refino visual (cartão de ação do chefe e Modo Reunião)
+
+- [x] Cartão de ação do chefe reorganizado em camadas: título e linha de prazo; selos de estado (atrasada, prioridade, demandada, pedido enviado, aguardando aceite); status e tempo como ações principais; "Detalhes e histórico" e "Pedir novo prazo" como ações secundárias; Arquivar, Desarquivar e Excluir recolhidos em "Mais". A prioridade saiu do cartão como campo editável e continua alterável em "Detalhes e histórico". Ação atrasada ganha faixa vermelha, como nos cartões do painel. Sem emojis.
+- [x] Modo Reunião: o corpo da tela deixou de ficar preso em 14 px e passou a acompanhar a escala da TV. Menor texto efetivo: em 1920x1080, de 14 px para 19,9 px; em 1366x768, de 11,3 px (rótulos das caixas) para 14,1 px. Legendas, dicas e tempo subiram para 0,9 a 0,95 rem.
+- [x] Marcadores de seção da TV: antes viravam cápsulas inclinadas (o estilo genérico dos botões sobrescrevia o losango) e só se distinguiam pela cor; agora têm forma própria (quadrado = crítico, triângulo = atenção, círculo = em dia), coerente com a regra de semáforo com forma e texto.
+- [x] "Em andamento" deixou de quebrar em duas linhas na lista de ações da TV, e ações atrasadas não deslocam mais o texto. Removido o preload de fonte, que gerava aviso no console.
+- [x] Verificado no Edge (CDP), com dados de demonstração: comparação antes/depois em 390 px e 1280 px (chefe) e 1920x1080 e 1366x768 (TV); aba e minutos digitados continuam preservados; sem avisos de console. 109 testes gerais aprovados.
+
+Limites: ainda não foi feito o ensaio na TV/HDMI real; a legibilidade a distância só se confirma lá. A reorganização do cartão não foi validada com um chefe de verdade.
+
 ## Próximas entregas
 
 1. Ampliar a integração para implantação com múltiplos processos, conexão de produção e cópia isolada dos dados reais quando houver ambiente destinado a isso.

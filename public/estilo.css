@@ -517,6 +517,18 @@ tr.clicavel:hover td { background: var(--green-bg); }
 
 /* ---------- Ações do chefe ---------- */
 .acao { display: grid; gap: 10px; }
+.acao.atrasada { border-left: 4px solid var(--vermelho); }
+.acao-meta { color: var(--muted); font-size: 0.86rem; margin-top: 2px; }
+.acao-selos { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.acao-detalhe { margin: 0; color: var(--muted); font-size: 0.93rem; }
+.acao-rodape { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; border-top: 1px solid var(--line); padding-top: 8px; }
+.mais { margin-left: auto; }
+.mais > summary { list-style: none; cursor: pointer; }
+.mais > summary::-webkit-details-marker { display: none; }
+.mais[open] > summary { background: var(--pale); }
+.mais-itens { display: flex; gap: 8px; margin-top: 8px; justify-content: flex-end; }
+.perigo-texto { color: var(--vermelho); }
+
 .acao-topo { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
 .acao h3 { font-size: 1rem; }
 .segmento { display: inline-flex; border: 1px solid var(--line-str); border-radius: 7px; overflow: hidden; }
@@ -698,7 +710,7 @@ textarea.ata-edicao {
 }
 
 /* ---------- Modo Reunião (TV) ---------- */
-body.tv { background: #0c2a1e; color: #dff0e8; }
+body.tv { background: #0c2a1e; color: #dff0e8; font-size: 1rem; } /* a escala vem do html; o corpo não fica preso em 14px */
 html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 .tv-app {
   height: 100vh;
@@ -710,13 +722,16 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 }
 .tv-topo { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .tv-topo h1 { font-size: 1.5rem; color: #fff; }
-.tv-topo .suave { color: #8ac0a6; }
+.tv-topo .suave { color: #8ac0a6; font-size: 1rem; }
 .tv-passos { display: flex; gap: 6px; align-items: center; }
-.tv-passo { width: 0.85rem; height: 0.85rem; border-radius: 3px; background: #1e4a35; transform: rotate(45deg); border: 0; padding: 0; }
-.tv-passo.cor-vermelho { background: #ff7a6b; }
-.tv-passo.cor-amarelo  { background: #f0b93c; }
-.tv-passo.cor-verde    { background: #4fcf90; }
-.tv-passo.atual { outline: 3px solid #fff; outline-offset: 3px; }
+/* Marcadores de seção: forma própria por cor (quadrado, triângulo, círculo), nunca só cor. O botão é a área de clique e o foco; o desenho fica no ::before. */
+.tv-app .tv-passo { width: 1.5rem; height: 1.5rem; padding: 0; border: 0; background: transparent; border-radius: 6px; display: inline-grid; place-items: center; }
+.tv-passo::before { content: ""; width: 1rem; height: 1rem; background: #1e4a35; }
+.tv-passo.cor-vermelho::before { background: #ff7a6b; border-radius: 2px; }
+.tv-passo.cor-amarelo::before  { background: #f0b93c; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.tv-passo.cor-verde::before    { background: #4fcf90; border-radius: 50%; }
+.tv-app .tv-passo.atual { outline: 3px solid #fff; outline-offset: 2px; }
+.tv-app .tv-passo.atual::before { transform: scale(1.15); }
 .tv-palco { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; }
 .tv-rodape { display: flex; justify-content: space-between; gap: 0.8rem; align-items: center; flex-wrap: wrap; }
 .tv-app button, .tv-app .btn { font-size: 1rem; padding: 0.55rem 1.1rem; border-radius: 9px; }
@@ -766,7 +781,8 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 .tv-secao.cor-amarelo  { border-left-color: #f0b93c; }
 .tv-secao.cor-verde    { border-left-color: #4fcf90; }
 .tv-secao b { font-family: var(--head); font-size: 1.2rem; font-weight: 700; }
-.tv-secao small { color: #8ac0a6; font-size: 0.84rem; }
+.tv-secao small { color: #8ac0a6; font-size: 0.95rem; }
+.tv .sem { font-size: 0.9rem; }
 .tv-verdes { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
 .tv-verdes .btn { border-color: #4fcf90; color: #4fcf90; }
 .tv .sem-verde   { color: #4fcf90; background: #143f2b; }
@@ -780,27 +796,28 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
   font-family: var(--head);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  font-size: 0.72rem;
+  font-size: 0.9rem;
   color: #8ac0a6;
   margin-bottom: 0.5rem;
   font-weight: 700;
 }
 .tv-caixa ul  { margin: 0; padding-left: 1.1rem; font-size: 1.05rem; line-height: 1.4; }
 .tv-caixa li  { margin-bottom: 0.3rem; }
-.tv-caixa .nada  { color: #6a9e85; font-style: italic; }
+.tv-caixa .nada  { color: #8fbfa6; font-style: italic; font-size: 1rem; }
 .tv-caixa .ok    { color: #4fcf90; }
 .tv-caixa .pend  { color: #f0b93c; }
 .tv-caixa.critico { border-color: #ff7a6b; }
 .tv-acoes { display: grid; gap: 0.5rem; align-content: start; overflow-y: auto; max-height: 100%; }
-.tv-acao { display: grid; gap: 0.15rem; padding: 0.55rem 0.8rem; border-radius: 9px; background: #0d2e1d; font-size: 1rem; }
+.tv-acao { display: grid; gap: 0.15rem; padding: 0.55rem 0.8rem; border-radius: 9px; border-left: 0.35rem solid transparent; background: #0d2e1d; font-size: 1rem; }
 .tv-acao .linha1 { display: flex; justify-content: space-between; gap: 0.6rem; }
-.tv-acao small { color: #8ac0a6; }
-.tv-acao.atrasada { border-left: 0.35rem solid #ff7a6b; }
+.tv-acao .linha1 > span { white-space: nowrap; }
+.tv-acao small { color: #8ac0a6; font-size: 0.95rem; }
+.tv-acao.atrasada { border-left-color: #ff7a6b; }
 .tv-pedido { border: 2px solid #f0b93c; background: #2c2711; border-radius: 11px; padding: 0.7rem 0.9rem; display: grid; gap: 0.4rem; }
-.tv-tempo { color: #f0b93c; font-size: 0.8rem; font-weight: 700; }
+.tv-tempo { color: #f0b93c; font-size: 0.95rem; font-weight: 700; }
 .tv-decisoes { display: grid; gap: 0.3rem; font-size: 1rem; }
 .tv-decisoes div { background: #0d2e1d; border-radius: 8px; padding: 0.35rem 0.7rem; }
-.tv-dica { color: #6a9e85; font-size: 0.8rem; }
+.tv-dica { color: #8fbfa6; font-size: 0.95rem; }
 .tv dialog { background: #112e1f; color: #dff0e8; }
 .tv dialog input, .tv dialog textarea, .tv dialog select { background: #0c2a1e; color: #fff; border-color: #3a6e52; }
 .tv dialog .btn-sec, .tv dialog .btn-fantasma { background: transparent; color: #dff0e8; border-color: #3a6e52; }

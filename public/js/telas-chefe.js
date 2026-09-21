@@ -175,50 +175,38 @@ export async function minhasAcoes(raiz) {
         <button type="button" class="btn ${aba === 'concluidas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="concluidas">Concluídas (${concl.length})</button>
         <button type="button" class="btn ${aba === 'arquivadas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="arquivadas">Arquivadas (${arq.length})</button>
       </div>
-      ${lista.length ? lista.map((a) => `<article class="cartao acao" data-id="${a.id}">
-        <div class="acao-topo">
+      ${lista.length ? lista.map((a) => `<article class="cartao acao${a.atrasada ? ' atrasada' : ''}" data-id="${a.id}">
+        <header class="acao-topo">
           <div>
             <h3>${esc(a.titulo)}</h3>
-            <div class="suave pequeno">
-              Prazo <b class="num">${br(a.prazo)}</b> · ${esc(a.secao_sigla)}${a.interna ? ' · ação interna' : ''}
-              ${a.demandada_diretor ? ` · demandada em ${br(a.demandado_em || a.criada_em)}` : ''}
-              ${a.arquivada ? ' · <span class="pilula enc">Arquivada</span>' : ''}
-            </div>
+            <div class="acao-meta">Prazo <b class="num">${br(a.prazo)}</b> · ${esc(a.secao_sigla)}${a.interna ? ' · ação interna' : ''}${a.demandada_diretor ? ` · demandada em ${br(a.demandado_em || a.criada_em)}` : ''}</div>
           </div>
-          <div class="linha" style="align-items:center;flex-wrap:wrap;gap:6px">
-            ${a.demandada_diretor ? '<span class="pilula diretor">Demandada pelo Diretor</span>' : ''}
-            <label class="pequeno suave" style="margin:0;display:inline-flex;align-items:center;gap:4px">
-              Prioridade:
-              <select data-prio="${a.id}" style="width:auto;padding:2px 8px;font-size:0.8rem;border-radius:6px">
-                <option value="alta" ${a.prioridade === 'alta' ? 'selected' : ''}>Alta</option>
-                <option value="media" ${a.prioridade === 'media' ? 'selected' : ''}>Média</option>
-                <option value="baixa" ${a.prioridade === 'baixa' ? 'selected' : ''}>Baixa</option>
-              </select>
-            </label>
+          <div class="acao-selos">
             ${a.atrasada ? '<span class="pilula atraso">Atrasada</span>' : ''}
+            ${a.demandada_diretor ? '<span class="pilula diretor" title="Ações demandadas pelo Diretor não podem ser arquivadas nem excluídas pela seção">Demandada pelo Diretor</span>' : ''}
+            <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade].toLowerCase()}</span>
             ${a.pedido_pendente ? '<span class="pilula">Pedido de prazo enviado</span>' : ''}
+            ${a.status === 'concluida' && !a.arquivada ? '<span class="pilula st-concluida">Aguardando aceite</span>' : ''}
+            ${a.arquivada ? '<span class="pilula enc">Arquivada</span>' : ''}
           </div>
-        </div>
-        ${a.detalhe ? `<p class="suave" style="margin:0">${esc(a.detalhe)}</p>` : ''}
+        </header>
+        ${a.detalhe ? `<p class="acao-detalhe">${esc(a.detalhe)}</p>` : ''}
         ${!a.arquivada ? `
           <div class="segmento" role="group" aria-label="Status da ação">${Object.entries(STATUS).map(([k, v]) =>
             `<button type="button" data-status="${k}" aria-pressed="${a.status === k}" ${a.status !== k && !TRANSICOES[a.status].includes(k) ? 'disabled' : ''}>${v}</button>`).join('')}</div>
-          <div class="tempo-linha">Tempo gasto: <b class="num">${fmtMin(a.tempo_total)}</b>
+          <div class="tempo-linha"><span>Tempo gasto <b class="num">${fmtMin(a.tempo_total)}</b></span>
             <input type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="minutos" aria-label="Minutos gastos" data-min>
-            <button type="button" class="btn btn-sec btn-mini" data-tempo>Adicionar tempo</button></div>
+            <button type="button" class="btn btn-sec btn-mini" data-tempo aria-label="Registrar tempo gasto">Registrar</button></div>
         ` : ''}
-        <div class="linha" style="margin-top:6px;align-items:center">
-          <button type="button" class="btn btn-fantasma btn-mini" data-detalhe>Comentários e histórico</button>
+        <footer class="acao-rodape">
+          <button type="button" class="btn btn-fantasma btn-mini" data-detalhe>Detalhes e histórico</button>
           ${!a.arquivada && a.status !== 'concluida' && !a.pedido_pendente ? '<button type="button" class="btn btn-fantasma btn-mini" data-prazo>Pedir novo prazo</button>' : ''}
-          ${!a.demandada_diretor ? `
-            ${a.arquivada
-              ? '<button type="button" class="btn btn-fantasma btn-mini" data-desarquivar>Desarquivar</button>'
-              : '<button type="button" class="btn btn-fantasma btn-mini" data-arquivar>Arquivar</button>'}
-            <button type="button" class="btn btn-fantasma btn-mini" style="color:var(--vermelho);margin-left:auto" data-excluir>Excluir</button>
-          ` : `
-            <span class="suave pequeno" style="margin-left:auto;font-size:0.75rem" title="Ações demandadas pelo Diretor não podem ser excluídas nem arquivadas pela seção">Criada pelo Diretor</span>
-          `}
-        </div>
+          ${!a.demandada_diretor ? `<details class="mais"><summary class="btn btn-fantasma btn-mini">Mais</summary>
+            <div class="mais-itens">
+              ${a.arquivada ? '<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar</button>' : '<button type="button" class="btn btn-sec btn-mini" data-arquivar>Arquivar</button>'}
+              <button type="button" class="btn btn-sec btn-mini perigo-texto" data-excluir>Excluir ação</button>
+            </div></details>` : ''}
+        </footer>
       </article>`).join('') : `<div class="cartao">${vazio('Nenhuma ação nesta visão', aba === 'arquivadas' ? 'Nenhuma ação arquivada.' : 'Quando o Diretor ou você criarem ações, elas aparecerão aqui.')}</div>`}`;
     for (const [id, v] of digitado) { const i = raiz.querySelector(`[data-id="${id}"] [data-min]`); if (i) i.value = v; }
     if (foco) raiz.querySelector(`[data-id="${foco}"] [data-min]`)?.focus({ preventScroll: true });
@@ -242,15 +230,6 @@ export async function minhasAcoes(raiz) {
   on(raiz, 'click', '[data-aba]', (el) => {
     aba = el.dataset.aba;
     renderizar();
-  });
-
-  on(raiz, 'change', '[data-prio]', async (el) => {
-    const a = acaoDe(el);
-    try {
-      await patch(`/acoes/${a.id}`, { prioridade: el.value });
-      toast(`Prioridade atualizada para ${PRIO[el.value]}.`);
-      await recarregar();
-    } catch (e) { erro(e); }
   });
 
   on(raiz, 'click', '[data-arquivar]', async (el) => {
