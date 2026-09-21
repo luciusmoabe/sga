@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { readFile } from 'node:fs/promises';
 import { clusterTemporario } from './cluster.js';
 import { aplicarMigracoes, verificarMigracoes } from '../../server/migrations.js';
 import { seed } from '../../server/seed.js';
@@ -28,6 +29,19 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
   const cluster = await clusterTemporario(t);
   t.diagnostic(cluster.versao);
 
+  await t.test('limpeza piloto remove apenas ações e dependências explícitas', async t => {
+    const [db] = await cluster.banco(t);
+    await seed(db);
+    const preservadas = ['usuarios','secoes','diretrizes','reunioes','atualizacoes','decisoes','combinados','config','schema_migrations','auth_contas'];
+    const antes = await Promise.all(preservadas.map(tabela=>db.prepare(`select * from ${tabela}`).all()));
+    assert.ok((await db.prepare('select count(*) n from acoes').get()).n > 0);
+    const primeira = await db.prepare('select id from acoes order by id limit 1').get();
+    await db.prepare('update acoes set acao_pai_id=? where id!=?').run(primeira.id,primeira.id);
+    await db.exec(await readFile(new URL('../../scripts/limpar-acoes-piloto.sql',import.meta.url),'utf8'));
+    for (const tabela of ['acoes','acao_comentarios','tempo','pedidos_prazo']) assert.equal((await db.prepare(`select count(*) n from ${tabela}`).get()).n,0);
+    assert.deepEqual(await Promise.all(preservadas.map(tabela=>db.prepare(`select * from ${tabela}`).all())),antes);
+  });
+
   await t.test('gestão exclui ações de autoria do Diretor e Apoio', async t => {
     const [db] = await cluster.banco(t);
     await seed(db);
@@ -49,9 +63,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     assert.equal(s.status,201);
     const u = await call('POST','/usuarios',{nome:'Novo CRUD',perfil:'chefe'});
     assert.equal((await call('PATCH',`/usuarios/${u.data.id}`,{secao_id:s.data.id})).status,200);
-    assert.equal((await call('DELETE',`/usuarios/${u.data.id}`)).status,409);
-    assert.equal((await call('DELETE',`/secoes/${s.data.id}`)).status,409);
-    assert.equal((await call('PATCH',`/usuarios/${u.data.id}`,{perfil:'apoio'})).status,200);
+       assert.equal((await call('DELETE',`/secoes/${s.data.id}`)).status,409);
     assert.equal((await call('PATCH',`/secoes/${s.data.id}`,{tipo:'subsecao',pai_id:s.data.id})).status,400);
     assert.equal((await call('DELETE',`/usuarios/${u.data.id}`)).status,200);
     assert.equal((await call('DELETE',`/secoes/${s.data.id}`)).status,200);

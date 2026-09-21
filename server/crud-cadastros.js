@@ -29,6 +29,27 @@ export async function excluirCadastro(db, tabela, id) {
       if(!row) throw falha(404,'Cadastro não encontrado.');
       if(tabela==='usuarios') {
         if(row.perfil==='diretor') throw falha(409,'O Diretor não pode ser excluído.');
+        const referencias = [
+          ['acoes','criado_por','ações criadas'],
+          ['diretrizes','criado_por','diretrizes'],
+          ['acao_comentarios','usuario_id','comentários'],
+          ['tempo','usuario_id','lançamentos de tempo'],
+          ['pedidos_prazo','usuario_id','pedidos de prazo'],
+          ['pedidos_prazo','decidido_por','decisões de prazo'],
+          ['atualizacoes','usuario_id','relatos semanais'],
+          ['combinados','criado_por','combinados'],
+          ['reunioes','criada_por','reuniões'],
+          ['decisoes','criada_por','decisões de reunião'],
+        ];
+        const historico=[];
+        for (const [origem,coluna,rotulo] of referencias) {
+          const {n}=await db.prepare(`select count(*) as n from ${origem} where ${coluna}=?`).get(id);
+          if(n) historico.push(`${n} ${rotulo}`);
+        }
+        if(historico.length) throw falha(409,`Usuário possui histórico: ${historico.join('; ')}. Use Desativar para preservar a autoria desses registros.`);
+        // Chefia é uma atribuição atual, não um impedimento histórico.
+        // Qualquer falha posterior desfaz também esta liberação.
+        await db.prepare('update secoes set chefe_id=null where chefe_id=?').run(id);
         await db.prepare('delete from auth_sessoes_senha where conta_id in (select id from auth_contas where usuario_id=?)').run(id);
         await db.prepare('delete from auth_contas where usuario_id=?').run(id);
         await db.prepare('delete from auth_sessoes where identidade_id in (select id from auth_identidades where usuario_id=?)').run(id);

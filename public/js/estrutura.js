@@ -112,7 +112,7 @@ export async function estrutura(raiz, { refresh }) {
   });
   on(raiz, 'click', '[data-excluir-u]', async el => {
     const u=usuarios.find(x=>x.id===Number(el.dataset.excluirU));
-    if(await confirmar({titulo:'Excluir usuário',texto:`Excluir ${esc(u.nome)} do Agilis? O acesso ao app será removido. Cadastros com histórico não podem ser excluídos. A conta no provedor de login será preservada.`,rotulo:'Excluir',perigo:true})) {
+    if(await confirmar({titulo:'Excluir usuário',texto:`Excluir ${esc(u.nome)} do Agilis? O acesso ao app será removido e as seções chefiadas ficarão sem chefe. Cadastros com histórico não podem ser excluídos. A conta no provedor de login será preservada.`,rotulo:'Excluir',perigo:true})) {
       try{await del(`/usuarios/${u.id}`);salvo('Usuário excluído.');}catch(e){erro(e);}
     }
   });

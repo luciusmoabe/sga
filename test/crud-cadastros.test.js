@@ -20,7 +20,6 @@ test('CRUD: seção e usuário sem histórico podem ser criados, editados, lista
  const u=await call('POST','/usuarios',{nome:'Novo',perfil:'chefe',email:'novo@example.org'});assert.equal(u.status,201);
  assert.equal((await call('PATCH',`/usuarios/${u.data.id}`,{nome:'Chefe editado',secao_id:sid})).status,200);
  assert.equal((await call('DELETE',`/secoes/${sid}`)).status,409);
- assert.equal((await call('DELETE',`/usuarios/${u.data.id}`)).status,409);
  assert.equal((await call('PATCH',`/usuarios/${u.data.id}`,{perfil:'apoio',secao_id:null})).status,200);
  assert.equal((await call('GET','/usuarios')).data.find(x=>x.id===u.data.id).nome,'Chefe editado');
  assert.equal((await call('DELETE',`/usuarios/${u.data.id}`)).status,200);
@@ -73,4 +72,27 @@ test('exclusão de ações: dependências impedem remoção sem apagar comentár
  await db.prepare('update acoes set acao_pai_id=? where id=?').run(a.id,b.id);
  assert.equal((await call('DELETE',`/acoes/${a.id}`)).status,409);
  assert.ok(await db.prepare('select id from acao_comentarios where acao_id=?').get(a.id));
+});
+
+test('exclusão de usuário libera chefia e revoga vínculo sem excluir seção',async t=>{
+ const {call,db}=await ambiente(t);
+ const s=(await call('POST','/secoes',{nome:'Seção piloto',tipo:'centro'})).data;
+ const u=(await call('POST','/usuarios',{nome:'Chefe piloto',perfil:'chefe'})).data;
+ await call('PATCH',`/usuarios/${u.id}`,{secao_id:s.id});
+ const conta=(await db.prepare('insert into auth_contas(usuario_id,projeto,subject) values (?,?,?)').run(u.id,'https://projeto.supabase.co','cccccccc-cccc-4ccc-8ccc-cccccccccccc')).lastInsertRowid;
+ await db.prepare('insert into auth_sessoes_senha(id,conta_id,csrf,expira_em) values (?,?,?,?)').run('sessao-teste',conta,'csrf',2000000000);
+ assert.equal((await call('DELETE',`/usuarios/${u.id}`)).status,200);
+ assert.equal((await db.prepare('select chefe_id from secoes where id=?').get(s.id)).chefe_id,null);
+ assert.equal((await db.prepare('select count(*) n from auth_contas where id=?').get(conta)).n,0);
+ assert.equal((await db.prepare('select count(*) n from auth_sessoes_senha where conta_id=?').get(conta)).n,0);
+});
+test('histórico impede exclusão com motivo específico e preserva chefia',async t=>{
+ const {call,db}=await ambiente(t);
+ const s=(await call('POST','/secoes',{nome:'Histórico piloto',tipo:'centro'})).data;
+ const u=(await call('POST','/usuarios',{nome:'Chefe histórico',perfil:'chefe'})).data;
+ await call('PATCH',`/usuarios/${u.id}`,{secao_id:s.id});
+ await db.prepare("insert into combinados(texto,criado_por,criado_em,alterado_em) values ('Preservar',?,'2026-09-21','2026-09-21')").run(u.id);
+ const r=await call('DELETE',`/usuarios/${u.id}`);
+ assert.equal(r.status,409);assert.match(r.data.erro,/1 combinados/);
+ assert.equal((await db.prepare('select chefe_id from secoes where id=?').get(s.id)).chefe_id,u.id);
 });
