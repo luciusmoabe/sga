@@ -10,6 +10,7 @@ Regras de segurança para toda a execução:
 
 ## 1. Preparar o projeto Supabase
 
+0. Confirme que este é o projeto de **homologação**. Se ele já é o que usa dados reais, não execute este roteiro nele antes do ensaio numa cópia (etapa 3.1). A URL da API do projeto aparece em **Project Settings → API** (tem o formato `https://<identificador-do-projeto>.supabase.co`).
 1. Em **Authentication → Providers**, mantenha só e-mail e senha.
 2. Em **Authentication**, desligue o cadastro público (*Allow new users to sign up*). As contas são criadas pelo Agilis.
 3. Em **Authentication → URL Configuration**, informe a origem do Agilis como Site URL: `http://localhost:3000` na fase local e a URL HTTPS da Vercel na fase seguinte.
@@ -44,18 +45,46 @@ npm run check:auth -- --online
 
 ## 3. Preparar o banco
 
-1. Faça um backup e confirme como restaurá-lo (mesmo em homologação).
-2. Banco novo: aplique o esquema base `server/schema.sql` pelo editor SQL do Supabase. Banco que já tem dados: pule este passo.
-3. Aplique as migrações e confira a versão:
+### 3.1 Se o projeto já tem um banco do Agilis (é o caso mais comum)
+
+Antes de qualquer alteração:
+
+1. **Faça um backup e confirme como restaurá-lo.** Se o banco tem dados de piloto ou dados reais, ensaie tudo primeiro numa **cópia** (restaure o backup num projeto novo de homologação, ou use `pg_dump` e `psql`, conforme o seu plano do Supabase). As migrações 4 a 8 mudam permissões e a tabela de usuários.
+2. **Rode o diagnóstico, que só lê.** No painel: **SQL Editor → New query**, cole o conteúdo de [scripts/diagnostico-supabase.sql](scripts/diagnostico-supabase.sql) e execute. Ele não altera nada e não mostra nomes nem e-mails, só contagens e o estado da estrutura; o resultado pode ser compartilhado.
+3. **Interprete o resultado:**
+
+   | Linha do diagnóstico | Se for assim | O que fazer |
+   | --- | --- | --- |
+   | Versões aplicadas | "tabela ausente" | Normal em banco criado só com o esquema base ou com a carga inicial: o migrador aplica as versões 1 a 8 |
+   | Versões aplicadas | Termina antes da 8 | O migrador aplica as que faltam |
+   | Reuniões em andamento | Mais de 1 | A migração 2 **interrompe** sem apagar nada. Decida qual reunião fica e encerre as demais (veja "Se houver duplicidades antigas" em [MIGRACOES.md](MIGRACOES.md)) |
+   | Ações com mais de um pedido de prazo pendente | Mais de 0 | Mesma situação: resolva os pedidos duplicados antes |
+   | Seções com chefe que não existe | Mais de 0 | A migração 3 interrompe. Corrija a chefia dessas seções |
+   | Usuários sem e-mail, ou e-mails repetidos | Mais de 0 | Cada login precisa de um e-mail único. Complete ou corrija antes de criar os acessos |
+   | Diretores ativos | 0 | O sistema exige ao menos um. Depois de criar o Administrador, cadastre o Diretor pela tela de contas |
+   | Tabelas com RLS ligada | Menos que o total | A migração liga a RLS em todas |
+   | Permissões de anon/authenticated | Diferente de "nenhuma" | As migrações **revogam** esse acesso. Confirme que nenhum outro sistema, planilha ou API pública do Supabase lê essas tabelas diretamente |
+   | Tabelas cujo dono não é o papel da conexão | Não é "nenhuma" | O backend precisa conectar como dono ou com `BYPASSRLS` (etapa 3.3) |
+   | Ações, atualizações, reuniões, tempo | Volume alto | Há histórico de verdade: ensaie na cópia e guarde o backup |
+
+4. **Aplique as migrações** (na cópia primeiro, depois no banco de homologação/produção, com a aplicação parada):
 
    ```powershell
    npm run migrate -- --postgres
    ```
 
-   **Esperado:** a lista de versões aplicadas termina na 8. Rodar de novo não aplica nada.
-4. O backend precisa conectar como dono das tabelas (ou papel com `BYPASSRLS`), porque as migrações 4 a 8 ligam a segurança por linha e revogam o acesso direto de `anon` e `authenticated`. Se a API responder erro de permissão, este é o ponto a revisar.
+   **Esperado:** a lista de versões aplicadas termina na 8. Rodar de novo não aplica nada. Se a migração parar com um diagnóstico de duplicidades, nada foi alterado: corrija os dados apontados e repita.
+5. **Rode o diagnóstico de novo.** Esperado: versões 1 a 8, restrição de perfil com `administrador`, RLS ligada em todas as tabelas, índices únicos presentes e permissões de `anon`/`authenticated` iguais a "nenhuma".
 
-A migração 8 (perfil Administrador e `usuarios.trocar_senha`) já foi validada em PostgreSQL 18.4, num cluster local e descartável, partindo do esquema antigo e do novo. Aqui ela roda pela primeira vez no PostgreSQL do Supabase.
+### 3.2 Se o banco estiver vazio (projeto novo)
+
+Aplique o esquema base `server/schema.sql` pelo editor SQL do Supabase e depois rode `npm run migrate -- --postgres`.
+
+### 3.3 Papel de conexão
+
+O backend precisa conectar como dono das tabelas (ou papel com `BYPASSRLS`), porque as migrações 4 a 8 ligam a segurança por linha e revogam o acesso direto de `anon` e `authenticated`. Se a API responder erro de permissão, este é o ponto a revisar.
+
+A migração 8 (perfil Administrador e `usuarios.trocar_senha`) já foi validada em PostgreSQL 18.4, num cluster local e descartável, partindo do esquema antigo e do novo. O diagnóstico também foi testado lá, em banco vazio, banco antigo com dados problemáticos e banco migrado; a única consulta não exercitada fora do Supabase é a de `auth.users`. Aqui a migração roda pela primeira vez no PostgreSQL do Supabase.
 
 ## 4. Criar o primeiro Administrador
 
