@@ -163,6 +163,15 @@ Limites: os testes de PostgreSQL real (`npm run test:postgres`) não foram execu
 
 Pendências vistas na inspeção: na TV, o subtítulo da Visão geral e o contador do topo (seções, decisões, ações) ficam pequenos demais para a sala; revisar no ensaio com a TV real.
 
+## Décima segunda entrega — divisão do `app.js` por assunto
+
+- [x] `server/app.js` (700 linhas) virou uma montagem de 49 linhas; as rotas foram para `rotas-estrutura.js`, `rotas-acoes.js` e `rotas-semana.js`, com auxiliares comuns em `contexto.js`. A divisão foi feita por fatiamento das linhas originais, sem reescrever a lógica.
+- [x] Sem mudança de comportamento: as 52 rotas antigas e novas são idênticas (comparação automática do método e do caminho) e a ordem relativa entre rotas de mesmo prefixo foi preservada.
+- [x] Verificação estática (ESLint `no-undef` e `no-unused-vars`) sem erros nos arquivos do servidor; `test/rotas.test.js` fixa o inventário de rotas.
+- [x] 109 testes gerais aprovados.
+
+Limite: o ESLint foi executado uma vez, fora do projeto, e não faz parte de `npm test`.
+
 ## Próximas entregas
 
 1. Ampliar a integração para implantação com múltiplos processos, conexão de produção e cópia isolada dos dados reais quando houver ambiente destinado a isso.

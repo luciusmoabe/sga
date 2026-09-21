@@ -81,7 +81,11 @@ Teclas: seta direita avança, seta esquerda volta. Há também a "Versão para i
 
 ```
 server/   API Express + SQLite (better-sqlite3) ou PostgreSQL (pg)
-  app.js       rotas de seções, usuários, ações, atualizações, painel, pauta
+  app.js       monta o Express e registra as rotas
+  rotas-estrutura.js  seções e usuários
+  rotas-acoes.js      diretrizes, ações e pedidos de prazo
+  rotas-semana.js     sessão, atualização semanal, painel, pauta
+  contexto.js  auxiliares comuns das rotas (banco, relógio, configuração)
   reunioes.js  combinados, reuniões, decisões, ata
   logic.js     regras puras: semana, fechamento, semáforo
   db.js        esquema e consultas de árvore
