@@ -104,4 +104,4 @@ test/     testes da API
 Para continuar o desenvolvimento com o Claude Code, abra esta pasta e leia o `CLAUDE.md`.
 
 O andamento das correções e as limitações da validação estão em [ESTABILIZACAO.md](ESTABILIZACAO.md).
-O roteiro para testar o Modo Reunião na TV da sala está em [ENSAIO_TV.md](ENSAIO_TV.md).
+O roteiro para testar o Modo Reunião na TV da sala está em [ENSAIO_TV.md](ENSAIO_TV.md), e o da homologação com o Supabase real em [HOMOLOGACAO.md](HOMOLOGACAO.md).

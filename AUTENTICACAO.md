@@ -83,6 +83,8 @@ Para demonstração apenas local, use `SGC_AUTH_MODE=demo DATABASE_URL="" npm st
 
 ### Roteiro de homologação
 
+O passo a passo completo, incluindo criação do Administrador, contas por perfil e troca de senha, está em [HOMOLOGACAO.md](HOMOLOGACAO.md). A tabela abaixo é o resumo original do login.
+
 Execute em ambiente de homologação, depois da configuração e da migração. Registre resultado e data, sem senhas, tokens ou chaves. Todos os itens continuam pendentes de execução no projeto Supabase real.
 
 | Verificação | Resultado esperado |

@@ -194,7 +194,14 @@ Decisões do responsável pelo projeto: o Administrador só consulta e cadastra 
 - [x] Chefe de Seção confirmado por teste: vê a própria seção e as subordinadas, e só elas.
 - [x] 118 testes gerais aprovados. Verificação no Edge: Administrador em modo demo (menu, leitura, redirecionamentos, estrutura) e fluxo institucional com provedor simulado (cadastro de Diretor pelo Administrador, primeiro acesso, troca com mensagens de erro, senha provisória invalidada).
 
-Limites: a migração 8 no PostgreSQL não foi executada (sem binários aqui; `npm run test:postgres` teve só as expectativas de versão atualizadas). O fluxo de senha foi verificado com Supabase simulado, não com o projeto real; a API administrativa do Supabase precisa aceitar a atualização de senha por `PUT /auth/v1/admin/users/{id}`. O Administrador enxerga as ações internas das subseções por decisão explícita ("acessa todos os dados"): isso amplia o que o Diretor vê hoje.
+Limites: a migração 8 foi validada depois, em PostgreSQL 18.4 real (veja a décima quinta entrega); a suíte `npm run test:postgres` não roda no Windows e teve só as expectativas de versão atualizadas. O fluxo de senha foi verificado com Supabase simulado, não com o projeto real; a API administrativa do Supabase precisa aceitar a atualização de senha por `PUT /auth/v1/admin/users/{id}`. O Administrador enxerga as ações internas das subseções por decisão explícita ("acessa todos os dados"): isso amplia o que o Diretor vê hoje.
+
+## Décima quinta entrega — migração 8 validada em PostgreSQL real e roteiro de homologação
+
+- [x] Migração 8 executada num PostgreSQL 18.4 real e descartável (binários do pacote `embedded-postgres`, TCP local, fora do projeto), partindo do esquema **antigo** com usuários, seção e chefia: restrição de perfil recriada, coluna `trocar_senha` criada (não nula, padrão 0), dados e chefia preservados, perfil inválido continua recusado, reexecução não altera nada, `verificarMigracoes` aceita a versão, RLS de `usuarios` segue ligada, e a lógica do comando `admin:criar` cria o Administrador e o vínculo. Também confirmado que, partindo do esquema **novo** (`schema.sql`), as migrações não conflitam (uma única restrição de perfil).
+- [x] `HOMOLOGACAO.md`: roteiro para o projeto Supabase real (preparo, ambiente, banco, primeiro Administrador, 36 verificações em cinco blocos (administrador, contas, permissões, senhas e segurança) mais a etapa da Vercel, diagnóstico e encerramento).
+
+Limites: o teste foi num PostgreSQL local, não no gerenciado pelo Supabase (papéis, RLS de `anon`/`authenticated` e o pooler só se provam no roteiro de homologação). A suíte oficial `npm run test:postgres` continua exigindo Linux ou macOS.
 
 ## Próximas entregas
 
