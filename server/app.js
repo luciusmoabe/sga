@@ -55,6 +55,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   };
 
   const SELECT_ACAO = `select a.*, s.nome as secao_nome, s.sigla as secao_sigla,
+      ua.perfil as autor_perfil,
       d.criado_por as demandado_por_id,
       ud.nome as demandado_por_nome,
       ud.perfil as demandado_por_perfil,
@@ -65,6 +66,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
       exists(select 1 from pedidos_prazo p where p.acao_id = a.id and p.status = 'pendente') as pedido_pendente
     from acoes a
     join secoes s on s.id = a.secao_id
+    left join usuarios ua on ua.id = a.criado_por
     left join diretrizes d on d.id = a.diretriz_id
     left join usuarios ud on ud.id = d.criado_por
     left join reunioes r on r.id = d.reuniao_id`;
@@ -86,6 +88,11 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
     const a = await q1(`${SELECT_ACAO} where a.id = ? and ${v.where}`, id, ...v.params);
     if (!a) throw falha(404, 'Ação não encontrada.');
     return a;
+  };
+  const podeExcluirAcao = async (user, a) => {
+    if (['diretor','apoio'].includes(user.perfil)) return a.criado_por === user.id || ['diretor','apoio'].includes(a.autor_perfil);
+    return user.perfil === 'chefe' && !a.diretriz_id && !!user.secao_id
+      && (await subarvore(db,user.secao_id)).includes(a.secao_id);
   };
   const chefeGere = async (user, acao) => {
     if (user.perfil !== 'chefe' || !user.secao_id || !(await subarvore(db, user.secao_id)).includes(acao.secao_id)) {
@@ -346,8 +353,8 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
       )).lastInsertRowid;
       for (const s of alvos) {
         const aId = (await run(
-          `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em) values (?,?,?,?,?,?,?,?)`,
-          d, s, titulo, detalhe, b.prazo, b.prazo, prioridade, agoraISO(),
+          `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em, criado_por) values (?,?,?,?,?,?,?,?,?)`,
+          d, s, titulo, detalhe, b.prazo, b.prazo, prioridade, agoraISO(), user.id,
         )).lastInsertRowid;
         await run(
           `insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)`,
@@ -412,9 +419,9 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
     const interna = b.interna !== undefined ? (b.interna ? 1 : 0) : 0;
     res.status(201);
     const id = (await run(
-      `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, interna, criada_em)
-       values (null, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      secaoId, titulo, detalhe, b.prazo, b.prazo, prioridade, interna, agoraISO(),
+      `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, interna, criada_em, criado_por)
+       values (null, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      secaoId, titulo, detalhe, b.prazo, b.prazo, prioridade, interna, agoraISO(), req.user.id,
     )).lastInsertRowid;
     await run(
       'insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
@@ -424,18 +431,21 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   }));
 
   app.delete('/api/acoes/:id', h(async (req) => {
-    const a = await acaoVisivel(req.user, Number(req.params.id));
-    await chefeGere(req.user, a);
-    if (a.diretriz_id) {
-      throw falha(403, 'Ações demandadas pelo Diretor não podem ser excluídas pela seção.');
+    try {
+      return await db.transaction(async () => {
+        const a = await acaoVisivel(req.user, Number(req.params.id));
+        if (!(await podeExcluirAcao(req.user,a))) throw falha(403,'Diretor e Apoio só podem excluir ações criadas pela gestão. Chefes não podem excluir demandas da direção.');
+        if (await q1('select id from acoes where acao_pai_id=?',a.id)) throw falha(409,'Exclua primeiro as ações derivadas desta ação.');
+        await run('delete from tempo where acao_id = ?', a.id);
+        await run('delete from acao_comentarios where acao_id = ?', a.id);
+        await run('delete from pedidos_prazo where acao_id = ?', a.id);
+        await run('delete from acoes where id = ?', a.id);
+        return { ok: true, id: a.id };
+      });
+    } catch(e) {
+      if(e.code==='23503' || String(e.code).startsWith('SQLITE_CONSTRAINT')) throw falha(409,'A ação possui vínculos que impedem a exclusão.');
+      throw e;
     }
-    await db.transaction(async () => {
-      await run('delete from tempo where acao_id = ?', a.id);
-      await run('delete from acao_comentarios where acao_id = ?', a.id);
-      await run('delete from pedidos_prazo where acao_id = ?', a.id);
-      await run('delete from acoes where id = ?', a.id);
-    });
-    return { ok: true, id: a.id };
   }));
 
   app.post('/api/acoes/:id/arquivar', h(async (req) => {
@@ -466,6 +476,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
     const a = await acaoVisivel(req.user, Number(req.params.id));
     return {
       ...acaoOut(a),
+      pode_excluir: await podeExcluirAcao(req.user,a),
       comentarios: await q(`select c.*, u.nome as usuario_nome from acao_comentarios c left join usuarios u on u.id = c.usuario_id where c.acao_id = ? order by c.id`, a.id),
       lancamentos: await q(`select t.*, u.nome as usuario_nome from tempo t left join usuarios u on u.id = t.usuario_id where t.acao_id = ? order by t.data desc, t.id desc`, a.id),
       pedidos: await q('select * from pedidos_prazo where acao_id = ? order by id desc', a.id),

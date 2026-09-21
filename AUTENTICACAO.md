@@ -122,3 +122,9 @@ O Diretor gerencia os cadastros em **Estrutura**:
 - **Exclusão:** somente cadastros sem referências podem ser removidos. Usuários com chefia atribuída ou histórico e seções com subseções, usuários ou registros relacionados retornam conflito com orientação para desativar. Exclusão de usuário remove seus vínculos e sessões Agilis na mesma transação, mas preserva a conta no Supabase Auth, que pode servir a outros aplicativos. Essa conta fica sem acesso ao Agilis.
 
 Contas vinculadas alteram e-mail pelo botão Login para atualizar também o provedor. O cadastro sem login permanece disponível para organizar os dados; não cria credenciais. As operações de escrita exigem Diretor, sessão válida, origem e CSRF. Não há migração de esquema nesta entrega.
+
+## Exclusão de ações pela gestão
+
+Diretor e Apoio podem excluir ações visíveis criadas por Diretor ou Apoio, incluindo demandas originadas em diretrizes. O detalhe recebe `pode_excluir` da API e só mostra o botão quando autorizado. A API verifica a permissão novamente no DELETE. A exclusão remove comentários, tempos e pedidos de prazo da ação em uma transação; ações derivadas impedem remover a ação pai. As atas já gravadas e a diretriz de origem são preservadas. As regras anteriores de acesso do Chefe e de privacidade continuam válidas.
+
+A migração 6 adiciona autoria estruturada (`acoes.criado_por`) e recupera autoria das diretrizes existentes. Ações antigas sem diretriz e sem autor comprovável permanecem sem atribuição: texto livre de comentários não concede permissão de exclusão. Novas ações registram o usuário autenticado; o cliente não escolhe o autor. Aplique a migração no destino explicitamente configurado junto da implantação desta versão.

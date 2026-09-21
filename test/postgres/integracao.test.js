@@ -28,6 +28,19 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
   const cluster = await clusterTemporario(t);
   t.diagnostic(cluster.versao);
 
+  await t.test('gestão exclui ações de autoria do Diretor e Apoio', async t => {
+    const [db] = await cluster.banco(t);
+    await seed(db);
+    const call = await servir(t,db);
+    for (const autor of [1,2]) {
+      const a = await call('POST','/acoes',{titulo:'Gestão',secao_id:1,prazo:'2030-01-01'},autor);
+      assert.equal(a.status,201);
+      assert.equal((await call('DELETE',`/acoes/${a.data.id}`,undefined,autor===1?2:1)).status,200);
+    }
+    const chefe = await call('POST','/acoes',{titulo:'Seção',prazo:'2030-01-01'},3);
+    assert.equal((await call('DELETE',`/acoes/${chefe.data.id}`,undefined,2)).status,403);
+  });
+
   await t.test('CRUD: transações, edição de hierarquia e exclusão respeitam vínculos', async t => {
     const [db] = await cluster.banco(t);
     await seed(db);
@@ -115,7 +128,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 2);
     await db.exec(`alter table decisoes drop constraint decisoes_reuniao_id_fkey,
       add constraint decisoes_reuniao_id_fkey foreign key (reuniao_id) references reunioes(id) on delete cascade`);
-    assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5]);
+    assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6]);
     assert.deepEqual(await Promise.all(relacoes.map(([nome]) => db.prepare(`select * from ${nome} order by id`).all())), antes);
     await conferirIntegridade(db);
   });
@@ -124,7 +137,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     const [a, b] = await cluster.banco();
     await assert.rejects(verificarMigracoes(a), /Migrações pendentes/);
     const resultados = await Promise.all([aplicarMigracoes(a), aplicarMigracoes(b)]);
-    assert.deepEqual(resultados.flat().sort(), [1, 2, 3, 4, 5]);
+    assert.deepEqual(resultados.flat().sort(), [1, 2, 3, 4, 5, 6]);
     await verificarMigracoes(b);
     assert.deepEqual(await aplicarMigracoes(a), []);
   });
@@ -139,7 +152,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     assert.equal((await db.prepare("select to_regclass('uq_pedido_pendente_acao') as nome").get()).nome, null);
     assert.equal((await db.prepare("select count(*) n from information_schema.columns where table_name = 'acoes' and column_name = 'arquivada'").get()).n, 0);
     await db.exec('drop table uq_reuniao_em_andamento');
-    assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5]);
+    assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6]);
   });
 
   await t.test('rollback não desfaz outra conexão nem expõe dados sem commit', async () => {

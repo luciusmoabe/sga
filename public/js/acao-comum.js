@@ -55,13 +55,14 @@ export async function abrirAcao(id, aoMudar) {
         ${a.arquivada
           ? `<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar ação</button>`
           : `<button type="button" class="btn btn-sec btn-mini" data-arquivar>Arquivar ação</button>`}
-        <button type="button" class="btn btn-perigo btn-mini" style="margin-left:auto" data-excluir>Excluir ação</button>
+
       </div>
     ` : `
       <div class="suave pequeno" style="margin-top:14px;padding-top:8px;border-top:1px solid var(--line)">
         🔒 <i>Esta ação foi demandada pelo Diretor e não pode ser excluída nem arquivada pela seção.</i>
       </div>
-    `}`;
+    `}
+    ${a.pode_excluir ? '<button type="button" class="btn btn-perigo" style="margin-top:12px" data-excluir>Excluir ação</button>' : ''}`;
   abrirForm({
     titulo: a.titulo,
     corpo,
@@ -97,7 +98,7 @@ export async function abrirAcao(id, aoMudar) {
         } catch (e) { toast(e.message, 'erro'); }
       });
       on(dlg, 'click', '[data-excluir]', async () => {
-        if (!confirm(`Deseja realmente excluir a ação "${a.titulo}"? Esta operação não pode ser desfeita.`)) return;
+        if (!confirm(`Deseja realmente excluir a ação "${a.titulo}"? Os comentários, tempos e pedidos de prazo dessa ação também serão excluídos. Esta operação não pode ser desfeita.`)) return;
         try {
           await del(`/acoes/${a.id}`);
           toast('Ação excluída com sucesso.');

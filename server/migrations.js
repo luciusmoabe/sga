@@ -73,6 +73,19 @@ const MIGRACOES = [
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },
+  {
+    id: 6, nome: 'autoria_acoes',
+    async aplicar(db) {
+      const colunas = db.isPg
+        ? await db.prepare("select column_name as nome from information_schema.columns where table_schema=current_schema() and table_name='acoes'").all()
+        : (await db.prepare('pragma table_info(acoes)').all()).map(c=>({nome:c.name}));
+      if (!colunas.some(c=>c.nome==='criado_por')) await db.exec('alter table acoes add column criado_por integer references usuarios(id)');
+      // Diretrizes registram autoria estruturada. Ações legadas sem essa origem
+      // permanecem sem autor conhecido; comentários livres não concedem permissão.
+      await db.exec('update acoes set criado_por=(select criado_por from diretrizes where diretrizes.id=acoes.diretriz_id) where criado_por is null and diretriz_id is not null');
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
 ];
 
 async function registros(db) {

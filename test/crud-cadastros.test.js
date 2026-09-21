@@ -49,3 +49,28 @@ test('CRUD: Diretor protegido, perfis não autorizados bloqueados e falhas são 
  assert.equal((await db.prepare('select nome from usuarios where id=3').get()).nome,antigo);
  assert.equal((await call('DELETE','/secoes/1')).status,409);
 });
+
+test('exclusão de ações: gestão exclui ações do Diretor e Apoio, mas não as do Chefe',async t=>{
+ const {call,db}=await ambiente(t);
+ for(const autor of [1,2]) for(const executor of [1,2]) {
+  const nova=await call('POST','/acoes',{titulo:'Excluir gestão',secao_id:1,prazo:'2030-01-01'},autor);
+  assert.equal(nova.status,201);
+  assert.equal((await call('GET',`/acoes/${nova.data.id}`,null,executor)).data.pode_excluir,true);
+  assert.equal((await call('DELETE',`/acoes/${nova.data.id}`,null,executor)).status,200);
+ }
+ const chefe=await call('POST','/acoes',{titulo:'Da seção',prazo:'2030-01-01'},3);
+ for(const executor of [1,2]) assert.equal((await call('DELETE',`/acoes/${chefe.data.id}`,null,executor)).status,403);
+ assert.ok(await db.prepare('select id from acoes where id=?').get(chefe.data.id));
+ const demandada=(await db.prepare('select id from acoes where diretriz_id is not null limit 1').get()).id;
+ await db.prepare('update acoes set criado_por=1 where id=?').run(demandada);
+ assert.equal((await call('DELETE',`/acoes/${demandada}`,null,3)).status,403);
+ assert.equal((await call('DELETE',`/acoes/${demandada}`,null,2)).status,200);
+});
+test('exclusão de ações: dependências impedem remoção sem apagar comentários',async t=>{
+ const {call,db}=await ambiente(t);
+ const a=(await call('POST','/acoes',{titulo:'Pai',secao_id:1,prazo:'2030-01-01'})).data;
+ const b=(await call('POST','/acoes',{titulo:'Filha',secao_id:1,prazo:'2030-01-01'})).data;
+ await db.prepare('update acoes set acao_pai_id=? where id=?').run(a.id,b.id);
+ assert.equal((await call('DELETE',`/acoes/${a.id}`)).status,409);
+ assert.ok(await db.prepare('select id from acao_comentarios where acao_id=?').get(a.id));
+});

@@ -7,6 +7,7 @@ export async function semearLegado(db) {
   await db.prepare('insert into schema_migrations values (?, ?, ?)').run(3, 'integridade_referencial', '2026-09-22');
   await db.prepare('insert into schema_migrations values (?, ?, ?)').run(4, 'identidade_institucional', '2026-09-22');
   await db.prepare('insert into schema_migrations values (?, ?, ?)').run(5, 'login_email_senha', '2026-09-22');
+  await db.prepare('insert into schema_migrations values (?, ?, ?)').run(6, 'autoria_acoes', '2026-09-22');
   await seed(db);
   await db.exec('delete from schema_migrations where id >= 3');
 }
