@@ -222,7 +222,9 @@ export function configurarPg(url, env = process.env) {
       rejectUnauthorized: true,
       ...(env.SGC_PG_CA_FILE ? { ca: fs.readFileSync(env.SGC_PG_CA_FILE, 'utf8') } : {}),
     },
-    max: Number(env.PG_POOL_MAX) || 10,
+    // Serverless (Vercel): cada instância abre o próprio pool; poucas conexões evitam esgotar o limite do banco.
+    max: Number(env.PG_POOL_MAX) || (env.VERCEL ? 5 : 10),
+    keepAlive: true,                 // evita refazer TLS (~1 s) em conexões ociosas
     idleTimeoutMillis: 30_000,       // fecha conexões ociosas após 30s
     connectionTimeoutMillis: 5_000,  // erro se não conectar em 5s
   };

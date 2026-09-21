@@ -971,3 +971,12 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 
 /* Ações do usuário no rodapé do menu */
 .usuario-acoes { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+
+/* Barra de progresso da troca de tela: só aparece se a tela demorar. */
+body.carregando::before {
+  content: ""; position: fixed; top: 0; left: 0; width: 100%; height: 3px; z-index: 9999;
+  background: var(--ink-2); transform-origin: left; transform: scaleX(0); opacity: 0;
+  animation: carregando 8s cubic-bezier(.1, .6, .2, 1) .15s forwards;
+}
+@keyframes carregando { from { transform: scaleX(0); opacity: 1; } to { transform: scaleX(.92); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { body.carregando::before { animation: none; } }

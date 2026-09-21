@@ -47,11 +47,13 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     return a;
   };
   const podeExcluirAcao = async (user, a) => {
+    if (user.perfil === 'administrador') return true;
     if (['diretor','apoio'].includes(user.perfil)) return a.criado_por === user.id || ['diretor','apoio'].includes(a.autor_perfil);
     return user.perfil === 'chefe' && !a.diretriz_id && !!user.secao_id
       && (await subarvore(db,user.secao_id)).includes(a.secao_id);
   };
   const chefeGere = async (user, acao) => {
+    if (user.perfil === 'administrador') return; // o Administrador age em qualquer seção
     if (user.perfil !== 'chefe' || !user.secao_id || !(await subarvore(db, user.secao_id)).includes(acao.secao_id)) {
       throw falha(403, 'Somente o chefe da seção responsável pode alterar esta ação.');
     }
@@ -105,7 +107,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     });
   }
 
-  app.post('/api/diretrizes', permit('diretor', 'apoio'), h(async (req, res) => {
+  app.post('/api/diretrizes', permit('diretor', 'apoio', 'administrador'), h(async (req, res) => {
     res.status(201);
     return await criarDiretriz(req.user, req.body || {});
   }));
@@ -144,7 +146,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
                        case when a.status != 'concluida' and a.prazo < '${hoje()}' then 0 else 1 end, a.prazo, a.id`, ...params)).map(acaoOut);
   }));
 
-  app.post('/api/acoes', permit('chefe', 'diretor', 'apoio'), h(async (req, res) => {
+  app.post('/api/acoes', permit('chefe', 'diretor', 'apoio', 'administrador'), h(async (req, res) => {
     const b = req.body || {};
     const titulo = texto(b.titulo, 140);
     if (!titulo) throw falha(400, 'Informe o título da ação.');
@@ -191,7 +193,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   app.post('/api/acoes/:id/arquivar', h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     await chefeGere(req.user, a);
-    if (a.diretriz_id) {
+    if (a.diretriz_id && req.user.perfil !== 'administrador') {
       throw falha(403, 'Ações demandadas pelo Diretor não podem ser arquivadas pela seção.');
     }
     await run('update acoes set arquivada = 1 where id = ?', a.id);
@@ -288,19 +290,19 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     return { ok: true };
   }));
 
-  app.post('/api/acoes/:id/encerrar', permit('diretor'), h(async (req) => {
+  app.post('/api/acoes/:id/encerrar', permit('diretor', 'administrador'), h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     if (a.status !== 'concluida') throw falha(409, 'Só é possível encerrar uma ação concluída.');
     await run('update acoes set encerrada = 1 where id = ?', a.id);
     return { ok: true };
   }));
-  app.post('/api/acoes/:id/devolver', permit('diretor'), h(async (req) => {
+  app.post('/api/acoes/:id/devolver', permit('diretor', 'administrador'), h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     const t = texto(req.body?.comentario, 1000);
     if (!t) throw falha(400, 'Explique o que falta para a ação ser aceita.');
     if (a.status !== 'concluida') throw falha(409, 'Só é possível devolver uma ação concluída.');
     await run(`update acoes set status = 'em_andamento', concluida_em = null, encerrada = 0 where id = ?`, a.id);
-    await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id, `Devolvida pelo Diretor: ${t}`, agoraISO());
+    await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id, `Devolvida pel${req.user.perfil === 'administrador' ? 'o Administrador' : 'o Diretor'}: ${t}`, agoraISO());
     return { ok: true };
   }));
 
@@ -313,16 +315,18 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
               where (${req.user.perfil === 'administrador' ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'}) ${st ? `and p.status = '${st}' and a.arquivada = 0 and a.encerrada = 0` : ''}
               order by p.criado_em desc`);
   }));
-  app.post('/api/pedidos-prazo/:id/decidir', permit('diretor', 'apoio'), h(async (req) => {
+  app.post('/api/pedidos-prazo/:id/decidir', permit('diretor', 'apoio', 'administrador'), h(async (req) => {
     const id = Number(req.params.id);
+    const todas = req.user.perfil === 'administrador'; // vê também as ações internas das subseções
+    const filtro = todas ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1';
     const visivel = await q1(`select p.acao_id from pedidos_prazo p join acoes a on a.id = p.acao_id
-      where p.id = ? and (a.interna = 0 or a.compartilhada = 1)`, id);
+      where p.id = ? and (${filtro})`, id);
     if (!visivel) throw falha(404, 'Pedido não encontrado.');
     return db.transaction(async () => {
       // Criar pedido e decidir pedido adquirem a mesma trava, sempre na ação.
       if (db.isPg) await q1('select id from acoes where id = ? for update', visivel.acao_id);
       const p = await q1(`select p.*, a.arquivada, a.encerrada, a.prazo from pedidos_prazo p join acoes a on a.id = p.acao_id
-        where p.id = ? and (a.interna = 0 or a.compartilhada = 1)`, id);
+        where p.id = ? and (${filtro})`, id);
       if (!p) throw falha(404, 'Pedido não encontrado.');
       if (p.arquivada || p.encerrada) throw falha(409, 'Não é possível decidir prazo de uma ação arquivada ou encerrada.');
       if (p.status !== 'pendente') throw falha(409, 'Este pedido já foi decidido.');

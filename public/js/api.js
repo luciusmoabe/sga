@@ -55,7 +55,11 @@ function _cacheKey(caminho) {
   return `${sessao.geracao}:${sessao.userId}:${caminho}`;
 }
 
+/** Contador de mutações: quem guarda dados derivados do servidor (ex.: o bootstrap) sabe quando revalidar. */
+export const versao = { mutacoes: 0 };
+
 function _invalidarCache() {
+  versao.mutacoes++;
   _cache.clear();
 }
 

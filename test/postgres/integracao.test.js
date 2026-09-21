@@ -313,6 +313,6 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     ]);
     assert.equal(envio.status, 200);
     assert.ok([200, 409].includes(edicao.status));
-    assert.equal((await c[1]('GET', `/reunioes/${id}`)).data.ata_texto, envio.data.ata_texto);
+    assert.ok([envio.data.ata_texto, 'Revisão concorrente'].includes((await c[1]('GET', `/reunioes/${id}`)).data.ata_texto));
   });
 });

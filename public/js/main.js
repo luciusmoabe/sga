@@ -1,5 +1,5 @@
 // Ponto de entrada: entrada simulada, casca da aplicação e roteamento por hash.
-import { entrar, entrarSenha, get, sair, sessao, limparSessao, modoAuth } from './api.js';
+import { entrar, entrarSenha, get, sair, sessao, limparSessao, modoAuth, versao } from './api.js';
 import { atualizarSessao, est } from './estado.js';
 import { $, esc, on, trilho, toast } from './ui.js';
 import { acoes, centro, direcionar, painel, pauta, prazos } from './telas-diretor.js';
@@ -11,7 +11,7 @@ import { inicioReuniao, viewReuniao } from './reuniao.js';
 import { ROTULO_PERFIL } from './regras.js';
 import { abrirTrocaSenha, telaTrocaSenha } from './senha.js';
 
-const GESTAO = ['diretor', 'apoio'];
+const GESTAO = ['diretor', 'apoio', 'administrador'];
 const LEITURA = ['diretor', 'apoio', 'administrador']; // telas de acompanhamento que o Administrador também consulta
 const TODOS = ['diretor', 'apoio', 'chefe', 'administrador'];
 const ROTAS = {
@@ -57,18 +57,8 @@ const MENU_CHEFE = [
   ['combinados', 'Combinados'],
   ['atas', 'Atas'],
 ];
-// O Administrador consulta o acompanhamento e gerencia contas e estrutura; não direciona ações nem conduz reunião.
-const MENU_ADMIN = [
-  ['#Acompanhamento'],
-  ['painel', 'Painel da semana'],
-  ['#Consulta'],
-  ['acoes', 'Ações'],
-  ['prazos', 'Pedidos de prazo', 'selo'],
-  ['combinados', 'Combinados'],
-  ['reunioes', 'Reuniões e atas'],
-  ['#Administração'],
-  ['estrutura', 'Contas e estrutura'],
-];
+// O Administrador tem acesso total: o menu do Diretor, com a estrutura como "Contas e estrutura".
+const MENU_ADMIN = MENU_GESTAO.map((m) => (m[0] === '#Organização' ? ['#Administração'] : m[0] === 'estrutura' ? ['estrutura', 'Contas e estrutura'] : m));
 const PERFIL = ROTULO_PERFIL;
 const app = document.getElementById('app');
 
@@ -81,8 +71,16 @@ function lerRota() {
 const casaDe = () => (est.user.perfil === 'chefe' ? '#/inicio' : '#/painel');
 
 
+// O bootstrap (usuário, semana, selo) muda pouco: reaproveitá-lo poupa uma ida ao servidor a cada troca de tela.
+// É refeito depois de 30 s, de qualquer gravação, de novo login ou troca de usuário.
+const VALIDADE_BOOT_MS = 30_000;
+let boot = { em: 0, mutacoes: -1, geracao: -1 };
 async function carregarSessao() {
+  const fresco = est.boot && est.user && boot.geracao === sessao.geracao && boot.mutacoes === versao.mutacoes && Date.now() - boot.em < VALIDADE_BOOT_MS;
+  if (fresco) return;
+  const geracao = sessao.geracao, mutacoes = versao.mutacoes;
   atualizarSessao(await get('/bootstrap'));
+  boot = { em: Date.now(), mutacoes, geracao };
 }
 
 // Tela para onde voltar depois de um novo login causado por sessão expirada.
@@ -162,17 +160,22 @@ function casca() {
   });
 }
 
-async function atualizarSelo() {
+// A contagem vem no bootstrap: não há requisição própria para o selo.
+function atualizarSelo() {
   if (est.user.perfil === 'chefe') return;
-  try {
-    const p = await get('/pedidos-prazo');
-    const s = $('#selo-prazos');
-    if (s) { s.textContent = p.length; s.classList.toggle('oculto', !p.length); }
-  } catch { /* o selo é só um lembrete */ }
+  const n = est.boot?.pedidos_pendentes ?? 0;
+  const s = $('#selo-prazos');
+  if (s) { s.textContent = n; s.classList.toggle('oculto', !n); }
 }
 
 let gen = 0;
+// Barra fina de progresso enquanto a próxima tela carrega (aparece só se demorar mais de ~150 ms).
 export async function render() {
+  const minha = gen + 1;
+  document.body.classList.add('carregando');
+  try { await renderizar(); } finally { if (minha === gen) document.body.classList.remove('carregando'); }
+}
+async function renderizar() {
   const minha = ++gen;
   try {
     const modo = await modoAuth();

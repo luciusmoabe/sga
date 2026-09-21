@@ -6,10 +6,17 @@ import { atualizacaoDe, cartoesReuniao, falha, h, marks, painelSemana, permit, t
 export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, semanaDe, SELECT_ACAO, acaoOut }) {
   // ---------- Bootstrap ----------
   app.get('/api/bootstrap', h(async (req) => {
-    const { dia, hora, config } = await cfgReuniao();
+    // Consultas independentes em paralelo; a contagem de pedidos alimenta o selo do menu sem uma requisição a mais.
+    const [{ dia, hora, config }, secao, pedidos] = await Promise.all([
+      cfgReuniao(),
+      req.user.secao_id ? q1('select id, nome, sigla, tipo from secoes where id = ?', req.user.secao_id) : null,
+      req.user.perfil === 'chefe' ? null : q1(
+        `select count(*) n from pedidos_prazo p join acoes a on a.id = p.acao_id
+         where p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and (${req.user.perfil === 'administrador' ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'})`),
+    ]);
     const semana = refDiaReuniao(agora(), dia, HORA_CORTE_PADRAO);
-    const secao = req.user.secao_id ? await q1('select id, nome, sigla, tipo from secoes where id = ?', req.user.secao_id) : null;
     return {
+      pedidos_pendentes: Number(pedidos?.n ?? 0),
       user: req.user,
       csrf: req.csrf,
       secao,
@@ -26,20 +33,30 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
 
 
   // ---------- Atualização semanal do chefe ----------
-  app.get('/api/atualizacao', permit('chefe'), h(async (req) => {
-    if (!req.user.secao_id) throw falha(409, 'Você ainda não está vinculado a uma seção. Peça ao Diretor para atribuí-lo.');
+  // O chefe age na própria seção; o Administrador, em qualquer seção ativa, informada em secao_id.
+  const secaoDaAtualizacao = async (req) => {
+    if (req.user.perfil !== 'administrador') {
+      if (!req.user.secao_id) throw falha(409, 'Você ainda não está vinculado a uma seção. Peça ao Diretor para atribuí-lo.');
+      return req.user.secao_id;
+    }
+    const id = Number(req.query.secao_id ?? req.body?.secao_id);
+    if (!id || !(await q1('select id from secoes where id = ?', id))) throw falha(400, 'Informe a seção da atualização (secao_id).');
+    return id;
+  };
+  app.get('/api/atualizacao', permit('chefe', 'administrador'), h(async (req) => {
+    const secaoId = await secaoDaAtualizacao(req);
     const semana = await semanaDe(req);
-    const anterior = (await q1(`select semana from atualizacoes where secao_id = ? and semana < ? order by semana desc limit 1`, req.user.secao_id, semana))?.semana;
-    const prev = anterior ? await ultimaAtualizacao(db, req.user.secao_id, anterior) : null;
+    const anterior = (await q1(`select semana from atualizacoes where secao_id = ? and semana < ? order by semana desc limit 1`, secaoId, semana))?.semana;
+    const prev = anterior ? await ultimaAtualizacao(db, secaoId, anterior) : null;
     return {
       semana,
       fechamento: fechamentoDe(semana),
-      atual: await ultimaAtualizacao(db, req.user.secao_id, semana),
+      atual: await ultimaAtualizacao(db, secaoId, semana),
       anterior: prev ? { semana: anterior, proximo: prev.proximo } : null,
     };
   }));
-  app.put('/api/atualizacao', permit('chefe'), h(async (req) => {
-    if (!req.user.secao_id) throw falha(409, 'Você ainda não está vinculado a uma seção.');
+  app.put('/api/atualizacao', permit('chefe', 'administrador'), h(async (req) => {
+    const secaoId = await secaoDaAtualizacao(req);
     const b = req.body || {};
     const { dia } = await cfgReuniao();
     const semana = b.semana || refDiaReuniao(agora(), dia, HORA_CORTE_PADRAO);
@@ -54,12 +71,12 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     return db.transaction(async () => {
       // A seção existe mesmo quando ainda não há atualização desta semana.
       // Travá-la serializa a escolha da próxima versão entre instâncias PostgreSQL.
-      if (db.isPg) await q1('select id from secoes where id = ? for update', req.user.secao_id);
-      const versao = ((await q1('select coalesce(max(versao), 0) v from atualizacoes where secao_id = ? and semana = ?', req.user.secao_id, semana)).v) + 1;
+      if (db.isPg) await q1('select id from secoes where id = ? for update', secaoId);
+      const versao = ((await q1('select coalesce(max(versao), 0) v from atualizacoes where secao_id = ? and semana = ?', secaoId, semana)).v) + 1;
       await run(`insert into atualizacoes (secao_id, semana, versao, feito, proximo, impedimentos, critico, apoio, usuario_id, enviada_em) values (?,?,?,?,?,?,?,?,?,?)`,
-        req.user.secao_id, semana, versao, JSON.stringify(feito), JSON.stringify(proximo), JSON.stringify(impedimentos),
+        secaoId, semana, versao, JSON.stringify(feito), JSON.stringify(proximo), JSON.stringify(impedimentos),
         b.critico && impedimentos.length ? 1 : 0, texto(b.apoio, 600), req.user.id, agoraISO());
-      return await ultimaAtualizacao(db, req.user.secao_id, semana);
+      return await ultimaAtualizacao(db, secaoId, semana);
     });
   }));
 
@@ -67,7 +84,8 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     (await q(`select a.* from atualizacoes a where a.secao_id = ?
        and a.versao = (select max(b.versao) from atualizacoes b where b.secao_id = a.secao_id and b.semana = a.semana)
        order by a.semana desc limit ?`, secaoId, limite)).map(atualizacaoDe);
-  app.get('/api/historico', permit('chefe'), h(async (req) => (req.user.secao_id ? await historicoDe(req.user.secao_id) : [])));
+  app.get('/api/historico', permit('chefe', 'administrador'), h(async (req) => (
+    req.user.perfil === 'administrador' || req.user.secao_id ? await historicoDe(await secaoDaAtualizacao(req)) : [])));
 
   // ---------- Painel do Diretor ----------
   app.get('/api/painel', permit('diretor', 'apoio', 'administrador'), h(async (req) => {
@@ -93,15 +111,20 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
   }));
   app.get('/api/secoes/:id/detalhe', permit('diretor', 'apoio', 'administrador'), h(async (req) => {
     const id = Number(req.params.id);
-    const s = await q1('select * from secoes where id = ? and pai_id is null', id);
-    if (!s) throw falha(404, 'Centro não encontrado.');
-    const semana = await semanaDe(req);
-    const item = (await painelSemana(db, semana, hoje())).find((i) => i.secao.id === id);
-    const ids = await subarvore(db, id);
     const todas = req.user.perfil === 'administrador';
-    const acoes = (await q(`${SELECT_ACAO} where a.secao_id in (${marks(ids)}) and (${todas ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'}) and a.encerrada = 0 and a.arquivada = 0
-                     order by case a.status when 'concluida' then 1 else 0 end, a.prazo`, ...ids)).map(acaoOut);
-    const tempoTotal = (await q1(`select coalesce(sum(t.minutos), 0) m from tempo t join acoes a on a.id = t.acao_id where a.secao_id in (${marks(ids)})`, ...ids))?.m ?? 0;
-    return { semana, item, historico: await historicoDe(id), acoes, tempo_total: tempoTotal, acoes_internas_visiveis: todas };
+    // Consultas independentes em paralelo (o tempo da tela é o número de idas em série ao banco).
+    const [s, semana, ids] = await Promise.all([
+      q1('select * from secoes where id = ? and pai_id is null', id), semanaDe(req), subarvore(db, id),
+    ]);
+    if (!s) throw falha(404, 'Centro não encontrado.');
+    const [painel, historico, acoes, tempo] = await Promise.all([
+      painelSemana(db, semana, hoje()),
+      historicoDe(id),
+      q(`${SELECT_ACAO} where a.secao_id in (${marks(ids)}) and (${todas ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'}) and a.encerrada = 0 and a.arquivada = 0
+                     order by case a.status when 'concluida' then 1 else 0 end, a.prazo`, ...ids),
+      q1(`select coalesce(sum(t.minutos), 0) m from tempo t join acoes a on a.id = t.acao_id where a.secao_id in (${marks(ids)})`, ...ids),
+    ]);
+    const item = painel.find((i) => i.secao.id === id);
+    return { semana, item, historico, acoes: acoes.map(acaoOut), tempo_total: tempo?.m ?? 0, acoes_internas_visiveis: todas };
   }));
 }

@@ -6,7 +6,6 @@ import { abrirForm, br, dataHora, esc, fmtMin, on, pilulaStatus, PRIO, toast } f
 export async function abrirAcao(id, aoMudar) {
   const a = await get(`/acoes/${id}`);
   const diretor = ehDiretor();
-  const leitura = ehAdmin(); // o Administrador consulta; não comenta, prioriza nem arquiva
   const prazoAlterado = a.prazo !== a.prazo_original;
   const corpo = `
     ${a.demandada_diretor ? `
@@ -31,7 +30,7 @@ export async function abrirAcao(id, aoMudar) {
       <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade]}</span>
       <span class="suave pequeno">${esc(a.secao_sigla)} · ${esc(a.secao_nome)}</span>
     </div>
-    ${leitura ? '' : `    <div class="linha" style="margin-bottom:10px;align-items:center">
+    ${`    <div class="linha" style="margin-bottom:10px;align-items:center">
       <label for="sel-prio" class="suave pequeno" style="margin:0"><b>Alterar prioridade:</b></label>
       <select id="sel-prio" data-mudar-prio style="width:auto;padding:3px 8px;font-size:0.84rem;margin-left:6px">
         <option value="alta" ${a.prioridade === 'alta' ? 'selected' : ''}>Alta</option>
@@ -48,10 +47,10 @@ export async function abrirAcao(id, aoMudar) {
     <h3 style="margin:12px 0 6px">Comentários</h3>
     ${a.comentarios.length ? a.comentarios.map((c) => `<div class="comentario"><b>${esc(c.usuario_nome || '')}</b>
       <span class="suave pequeno"> · ${dataHora(c.criado_em)}</span><br>${esc(c.texto)}</div>`).join('') : '<p class="suave pequeno">Nenhum comentário ainda.</p>'}
-    ${leitura ? '' : `<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>`}
+    ${`<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>`}
     ${diretor && a.status === 'concluida' && !a.encerrada ? `<div class="linha"><button type="button" class="btn btn-ok" data-encerrar>Aceitar e encerrar</button>
       <button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>` : ''}
-    ${leitura ? '' : !a.demandada_diretor ? `
+    ${!a.demandada_diretor || ehAdmin() ? `
       <div class="linha" style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line);align-items:center">
         ${a.arquivada
           ? `<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar ação</button>`
@@ -64,13 +63,12 @@ export async function abrirAcao(id, aoMudar) {
       </div>
     `}
     ${a.pode_excluir ? '<button type="button" class="btn btn-perigo" style="margin-top:12px" data-excluir>Excluir ação</button>' : ''}
-    ${leitura ? '<div class="rodape"><button type="button" class="btn btn-sec" data-fechar>Fechar</button></div>' : ''}`;
+`;
   abrirForm({
     titulo: a.titulo,
     corpo,
     rotulo: 'Comentar',
     cancelar: 'Fechar',
-    semRodape: leitura,
     aoEnviar: async (d) => {
       await post(`/acoes/${a.id}/comentarios`, { texto: d.texto });
       toast('Comentário registrado.');

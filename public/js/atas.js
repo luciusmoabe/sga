@@ -1,5 +1,5 @@
 // Reuniões e atas: histórico para Diretor e Apoio, leitura das atas enviadas para os chefes.
-import { get, post, put } from './api.js';
+import { del, get, post, put } from './api.js';
 import { est, podeOperar } from './estado.js';
 import { br, confirmar, dataHora, diaSemana, esc, on, plural, toast, vazio } from './ui.js';
 
@@ -39,15 +39,23 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
       : r.status === 'rascunho' ? `<div class="info">A ata foi montada a partir do que foi registrado na reunião. Revise, ajuste se precisar e envie aos chefes. Nesta versão do protótipo, "enviar" libera a leitura na tela Atas; não há e-mail.</div>
         <textarea class="ata-edicao" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
         <div class="linha" style="margin-top:10px"><button class="btn btn-sec" id="salvar">Salvar rascunho</button><button class="btn btn-primario" id="enviar">Enviar aos chefes</button>
-        <button class="btn btn-fantasma" id="reabrir">Reabrir a reunião</button></div>`
+        <button class="btn btn-fantasma" id="reabrir">Reabrir a reunião</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
+      : r.status === 'enviada' && podeOperar() ? `<p class="suave pequeno">Enviada aos chefes em ${dataHora(r.enviada_em)}. As correções valem para todos assim que você salvar.</p>
+        <textarea class="ata-edicao" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
+        <div class="linha" style="margin-top:10px"><button class="btn btn-primario" id="salvar">Salvar alterações</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
       : r.status === 'enviada' ? `<div class="ata">${esc(r.ata_texto)}</div><p class="suave pequeno">Enviada em ${dataHora(r.enviada_em)}.</p>`
       : '<p class="suave">A ata será montada quando a reunião for encerrada.</p>'}</div>`;
-  if (r.status !== 'rascunho' || !podeOperar()) return;
+  if (!['rascunho', 'enviada'].includes(r.status) || !podeOperar()) return;
   const erro = (e) => toast(e.message, 'erro');
   const texto = () => raiz.querySelector('#ata').value;
-  raiz.querySelector('#salvar').addEventListener('click', async () => { try { await put(`/reunioes/${id}/ata`, { ata_texto: texto() }); toast('Rascunho salvo.'); } catch (e) { erro(e); } });
+  raiz.querySelector('#salvar').addEventListener('click', async () => { try { await put(`/reunioes/${id}/ata`, { ata_texto: texto() }); toast(r.status === 'enviada' ? 'Alterações salvas.' : 'Rascunho salvo.'); } catch (e) { erro(e); } });
+  raiz.querySelector('#excluir').addEventListener('click', async () => {
+    if (!(await confirmar({ titulo: 'Excluir a ata', texto: 'A reunião, a ata e as decisões registradas serão apagadas e não poderão ser recuperadas. As ações criadas na reunião continuam existindo.', rotulo: 'Excluir ata', perigo: true }))) return;
+    try { await del(`/reunioes/${id}`); toast('Ata excluída.'); location.hash = '#/reunioes'; } catch (e) { erro(e); }
+  });
+  if (r.status !== 'rascunho') return;
   raiz.querySelector('#enviar').addEventListener('click', async () => {
-    if (!(await confirmar({ titulo: 'Enviar a ata', texto: 'Depois de enviada, a ata fica disponível para todos os chefes e não pode mais ser editada.', rotulo: 'Enviar aos chefes' }))) return;
+    if (!(await confirmar({ titulo: 'Enviar a ata', texto: 'Depois de enviada, a ata fica disponível para todos os chefes. Você ainda poderá corrigi-la depois.', rotulo: 'Enviar aos chefes' }))) return;
     try { await put(`/reunioes/${id}/ata`, { ata_texto: texto() }); await post(`/reunioes/${id}/enviar-ata`); toast('Ata enviada aos chefes.'); refresh(); } catch (e) { erro(e); }
   });
   raiz.querySelector('#reabrir').addEventListener('click', async () => {

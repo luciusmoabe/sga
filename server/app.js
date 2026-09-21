@@ -34,15 +34,6 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   const contas = adminAuth || (auth.mode === 'supabase' ? administradorAuth(auth) : null);
   instalarAuth(app, db, auth, provedor, contas);
 
-  // O Administrador consulta tudo e gerencia contas e estrutura, mas não registra nem decide nada do acompanhamento.
-  app.use('/api', (req, res, next) => {
-    const escrita = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
-    if (req.user?.perfil === 'administrador' && escrita && !/^\/(usuarios|secoes|auth)(\/|$)/.test(req.path)) {
-      return next(falha(403, 'O Administrador consulta os dados e gerencia contas e estrutura. Decisões e registros são do Diretor, do Apoio e dos Chefes.'));
-    }
-    next();
-  });
-
   rotasEstrutura(app, { ...ctx, auth, adminAuth: contas });
   const { criarDiretriz, SELECT_ACAO, acaoOut } = rotasAcoes(app, ctx);
   rotasSemana(app, { ...ctx, SELECT_ACAO, acaoOut });

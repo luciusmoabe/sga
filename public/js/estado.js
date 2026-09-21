@@ -6,10 +6,11 @@ export const agora = () => new Date(Date.now() + est.offset);
 export const isoDe = dataNoFuso;
 export const hoje = () => isoDe(agora());
 export const ehGestao = () => est.user && est.user.perfil !== 'chefe';
-export const ehDiretor = () => est.user?.perfil === 'diretor';
+/** Tem poderes de Diretor (aceitar, devolver e decidir): o Diretor e o Administrador. */
+export const ehDiretor = () => ['diretor', 'administrador'].includes(est.user?.perfil);
 export const ehAdmin = () => est.user?.perfil === 'administrador';
-/** Registra e decide (Diretor e Apoio). O Administrador só consulta e gerencia contas e estrutura. */
-export const podeOperar = () => ['diretor', 'apoio'].includes(est.user?.perfil);
+/** Registra e decide: Diretor, Apoio e Administrador (acesso total). */
+export const podeOperar = () => ['diretor', 'apoio', 'administrador'].includes(est.user?.perfil);
 
 export function atualizarSessao(boot) {
   est.boot = boot;

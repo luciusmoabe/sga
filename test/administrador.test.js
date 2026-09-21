@@ -1,4 +1,4 @@
-// Perfil Administrador: consulta tudo, gerencia contas e estrutura, não decide nem registra.
+// Perfil Administrador: acesso total (consulta, registra e decide tudo, gerencia contas e estrutura).
 // Troca obrigatória da senha inicial e comando do primeiro Administrador.
 process.env.SGC_NOW = '2026-09-19T10:00:00';
 
@@ -11,7 +11,7 @@ import { createApp } from '../server/app.js';
 import { vincularIdentidade } from '../server/vincular-identidade.js';
 import { criarAdministrador } from '../server/criar-administrador.js';
 
-const DIRETOR = 1, APOIO = 2, CPE = 3, COF = 4, ADMIN = 10;
+const DIRETOR = 1, APOIO = 2, CPE = 3, COF = 4, ADMIN = 10, CPE_SECAO = 1;
 
 // ---------- permissões (modo demonstração) ----------
 async function demo(t) {
@@ -51,27 +51,69 @@ test('Administrador consulta painel, pauta, ações (inclusive internas), pedido
   assert.ok(centro.data.acoes.length >= doDiretorNoCentro.acoes.length);
 });
 
-test('Administrador não registra nem decide nada do acompanhamento', async (t) => {
+test('Administrador pode registrar e decidir tudo do acompanhamento, em qualquer seção', async (t) => {
   const { db, call } = await demo(t);
-  const acao = await db.prepare('select id from acoes where interna = 0 limit 1').get();
-  const bloqueadas = [
-    ['POST', '/diretrizes', { titulo: 'X', prazo: '2026-12-31', destino: 'todos' }],
-    ['POST', '/acoes', { titulo: 'X', prazo: '2026-12-31', secao_id: 1 }],
-    ['PATCH', `/acoes/${acao.id}`, { status: 'em_andamento' }],
-    ['POST', `/acoes/${acao.id}/comentarios`, { texto: 'oi' }],
-    ['POST', `/acoes/${acao.id}/tempo`, { minutos: 5 }],
-    ['POST', `/acoes/${acao.id}/encerrar`, {}],
-    ['PUT', '/atualizacao', { proximo: ['x'] }],
-    ['POST', '/combinados', { texto: 'x' }],
-    ['PUT', '/config', { combinados_frequencia: 'sempre' }],
-    ['POST', '/reunioes/iniciar', {}],
-    ['POST', '/pedidos-prazo/1/decidir', { aprovar: true }],
+  const acao = await db.prepare(`select id from acoes where status = 'a_fazer' and encerrada = 0 and arquivada = 0 limit 1`).get();
+  const ok = [
+    ['POST', '/diretrizes', { titulo: 'X', prazo: '2026-12-31', destino: 'todos' }, 201],
+    ['POST', '/acoes', { titulo: 'X', prazo: '2026-12-31', secao_id: 1 }, 201],
+    ['PATCH', `/acoes/${acao.id}`, { status: 'em_andamento', prioridade: 'alta' }, 200],
+    ['POST', `/acoes/${acao.id}/comentarios`, { texto: 'oi' }, 201],
+    ['POST', `/acoes/${acao.id}/tempo`, { minutos: 5 }, 201],
+    ['POST', `/acoes/${acao.id}/pedido-prazo`, { novo_prazo: '2027-01-31', justificativa: 'preciso' }, 201],
+    ['POST', '/combinados', { texto: 'x' }, 201],
+    ['PUT', '/config', { combinados_frequencia: 'sempre' }, 200],
+    ['PUT', '/atualizacao', { secao_id: CPE_SECAO, proximo: ['x'] }, 200],
+    ['POST', '/reunioes/iniciar', {}, 201],
   ];
-  for (const [metodo, caminho, corpo] of bloqueadas) {
+  for (const [metodo, caminho, corpo, esperado] of ok) {
     const r = await call(ADMIN, metodo, caminho, corpo);
-    assert.equal(r.status, 403, `${metodo} ${caminho}`);
+    assert.equal(r.status, esperado, `${metodo} ${caminho}: ${JSON.stringify(r.data)}`);
   }
-  assert.equal((await db.prepare('select count(*) n from reunioes where status = ?').get('em_andamento')).n, 0);
+  // decide o pedido acima (sem depender de reunião) e depois arquiva e exclui uma ação da seção
+  const pedido = await db.prepare(`select id from pedidos_prazo where status = 'pendente' and acao_id = ?`).get(acao.id);
+  assert.equal((await call(ADMIN, 'POST', `/pedidos-prazo/${pedido.id}/decidir`, { aprovar: true })).status, 200);
+  assert.equal((await call(ADMIN, 'POST', `/acoes/${acao.id}/arquivar`, {})).status, 200);
+  assert.equal((await call(ADMIN, 'DELETE', `/acoes/${acao.id}`)).status, 200);
+  assert.equal((await call(ADMIN, 'PUT', '/atualizacao', { proximo: ['x'] })).status, 400, 'exige informar a seção');
+  assert.equal((await db.prepare('select count(*) n from reunioes where status = ?').get('em_andamento')).n, 1);
+});
+
+test('Diretor, Apoio e Administrador editam e excluem atas; Chefe não', async (t) => {
+  const { db, call } = await demo(t);
+  const antes = (await db.prepare('select count(*) n from reunioes').get()).n;
+  for (const uid of [DIRETOR, APOIO, ADMIN]) {
+    const id = (await call(uid, 'POST', '/reunioes/iniciar', {})).data.reuniao.id;
+    assert.equal((await call(uid, 'DELETE', `/reunioes/${id}`)).status, 409, 'em andamento: encerre antes');
+    await call(uid, 'POST', `/reunioes/${id}/encerrar`, {});
+    await call(uid, 'POST', `/reunioes/${id}/enviar-ata`, {});
+    assert.equal((await call(CPE, 'PUT', `/reunioes/${id}/ata`, { ata_texto: 'x' })).status, 403);
+    assert.equal((await call(CPE, 'DELETE', `/reunioes/${id}`)).status, 403);
+    assert.equal((await call(uid, 'PUT', `/reunioes/${id}/ata`, { ata_texto: `Corrigida por ${uid}` })).status, 200, 'edita depois de enviada');
+    assert.equal((await call(CPE, 'GET', `/reunioes/${id}`)).data.ata_texto, `Corrigida por ${uid}`);
+    assert.equal((await call(uid, 'DELETE', `/reunioes/${id}`)).status, 200);
+    assert.equal((await call(uid, 'GET', `/reunioes/${id}`)).status, 404);
+  }
+  assert.equal((await db.prepare('select count(*) n from reunioes').get()).n, antes);
+});
+
+test('desempenho: o bootstrap traz a contagem do selo e as telas pesadas usam poucas consultas', async (t) => {
+  const { db, call } = await demo(t);
+  for (const uid of [DIRETOR, APOIO, ADMIN]) {
+    const boot = (await call(uid, 'GET', '/bootstrap')).data;
+    const pedidos = (await call(uid, 'GET', '/pedidos-prazo')).data;
+    assert.equal(boot.pedidos_pendentes, pedidos.length, `selo de ${uid}`);
+  }
+  assert.equal((await call(CPE, 'GET', '/bootstrap')).data.pedidos_pendentes, 0, 'chefe não usa o selo');
+  // Com o banco distante, cada consulta em série custa uma ida pela rede: as telas pesadas têm teto.
+  let n = 0;
+  const prepare = db.prepare.bind(db);
+  db.prepare = (sql) => { n++; return prepare(sql); };
+  for (const [caminho, teto] of [['/painel', 9], ['/pauta', 12], ['/secoes/1/detalhe', 14], ['/bootstrap', 5]]) {
+    n = 0;
+    assert.equal((await call(DIRETOR, 'GET', caminho)).status, 200);
+    assert.ok(n <= teto, `${caminho} usou ${n} consultas (teto ${teto})`);
+  }
 });
 
 test('Administrador gerencia estrutura e perfis; Diretor não altera Diretor nem Administrador', async (t) => {
@@ -208,7 +250,7 @@ test('Administrador cria conta com senha inicial; o novo usuário é obrigado a 
   assert.equal((await db.prepare("select trocar_senha from usuarios where email = 'nova@orgao.gov.br'").get()).trocar_senha, 0);
 });
 
-test('Diretor cria só Chefe e Apoio; redefinir a senha de alguém exige nova troca; ninguém redefine a própria por aí', async (t) => {
+test('Diretor cria só Chefe e Apoio; redefinir a senha de alguém exige nova troca; o Administrador redefine até a própria', async (t) => {
   const { db, entrar, api } = await institucional(t);
   const dir = api(await entrar('diretor@orgao.gov.br', 'Senha-definitiva-2!'));
   assert.equal((await dir('POST', '/usuarios/acesso', { nome: 'D2', email: 'd2@orgao.gov.br', senha: 'Senha-inicial-123', perfil: 'diretor' })).status, 400);
@@ -219,7 +261,6 @@ test('Diretor cria só Chefe e Apoio; redefinir a senha de alguém exige nova tr
   // Diretor não altera o acesso do Administrador; o Administrador altera o de qualquer um
   assert.equal((await dir('PATCH', `/usuarios/${ADMIN}/login`, { senha: 'Outra-senha-forte-1' })).status, 403);
   const adm = api(await entrar('admin@orgao.gov.br', 'Senha-definitiva-1!'));
-  assert.equal((await adm('PATCH', `/usuarios/${ADMIN}/login`, { senha: 'Outra-senha-forte-1' })).status, 400, 'a própria senha se troca pelo menu');
   // primeiro a Apoio conclui a troca; depois o Administrador redefine e a exigência volta
   const ap = api(await entrar('apoio@orgao.gov.br', 'Senha-inicial-123'));
   assert.equal((await ap('POST', '/auth/trocar-senha', { senha_atual: 'Senha-inicial-123', senha_nova: 'Senha-da-apoio-nova' })).status, 200);
@@ -229,6 +270,10 @@ test('Diretor cria só Chefe e Apoio; redefinir a senha de alguém exige nova tr
   assert.equal((await ap('GET', '/painel')).status, 401, 'a sessão anterior foi encerrada na redefinição');
   const de = api(await entrar('apoio@orgao.gov.br', 'Senha-redefinida-9'));
   assert.equal((await de('GET', '/painel')).status, 403);
+  // o Administrador também redefine a própria senha: a sessão cai e a troca volta a ser exigida
+  assert.equal((await adm('PATCH', `/usuarios/${ADMIN}/login`, { senha: 'Outra-senha-forte-1' })).status, 200);
+  assert.equal((await adm('GET', '/painel')).status, 401);
+  assert.equal((await db.prepare('select trocar_senha from usuarios where id = ?').get(ADMIN)).trocar_senha, 1);
 });
 
 test('comando do primeiro Administrador: cria conta com senha provisória ou vincula conta existente', async (t) => {

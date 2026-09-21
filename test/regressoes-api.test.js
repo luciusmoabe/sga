@@ -285,7 +285,7 @@ test('API: reaberturas simultâneas de rascunhos distintos não abrem duas reuni
   assert.equal((await db.prepare("select count(*) n from reunioes where status = 'em_andamento'").get()).n, 1);
 });
 
-test('API: edição concorrente ao envio não modifica ata já publicada', async (t) => {
+test('API: edição concorrente ao envio deixa a ata consistente e editável depois de enviada', async (t) => {
   const db = openDb(':memory:');
   t.after(() => db.close());
   await seed(db);
@@ -300,8 +300,9 @@ test('API: edição concorrente ao envio não modifica ata já publicada', async
   assert.ok([200, 409].includes(edicao.status));
   const atual = (await call('GET', `/reunioes/${id}`)).data;
   assert.equal(atual.status, 'enviada');
-  assert.equal(atual.ata_texto, enviada.data.ata_texto);
-  assert.equal((await call('PUT', `/reunioes/${id}/ata`, { ata_texto: 'Edição tardia' })).status, 409);
+  assert.ok([enviada.data.ata_texto, 'Edição concorrente'].includes(atual.ata_texto));
+  assert.equal((await call('PUT', `/reunioes/${id}/ata`, { ata_texto: 'Edição tardia' })).status, 200);
+  assert.equal((await call('GET', `/reunioes/${id}`)).data.ata_texto, 'Edição tardia');
   assert.equal((await call('POST', `/reunioes/${id}/reabrir`)).status, 409);
 });
 

@@ -160,11 +160,14 @@ export function instalarAuth(app, db, config, provedor, contas) {
   app.use('/api', async (req, res, next) => {
     try {
       const token = cookie(req, sessaoCookie);
-      const sessao = token ? await q1(`select s.id, s.csrf, s.expira_em, s.criada_em, i.usuario_id from auth_sessoes_senha s
-        join auth_contas i on i.id = s.conta_id where s.id = ? and s.expira_em > ? and i.projeto = ?`,
+      // Sessão e usuário numa só consulta: cada ida ao banco custa a latência da rede em toda requisição.
+      const linha = token ? await q1(`select s.id as sessao_id, s.csrf as sessao_csrf, s.expira_em as sessao_expira_em, s.criada_em as sessao_criada_em, u.*
+        from auth_sessoes_senha s join auth_contas i on i.id = s.conta_id join usuarios u on u.id = i.usuario_id
+        where s.id = ? and s.expira_em > ? and i.projeto = ? and u.ativo = 1`,
       hash(token), segundos(), config.supabaseUrl) : null;
-      const u = sessao ? await q1('select * from usuarios where id = ? and ativo = 1', sessao.usuario_id) : null;
-      if (!u) throw falha(401, 'Entre com seu e-mail e senha.');
+      if (!linha) throw falha(401, 'Entre com seu e-mail e senha.');
+      const { sessao_id, sessao_csrf, sessao_expira_em, sessao_criada_em, ...u } = linha;
+      const sessao = { id: sessao_id, csrf: sessao_csrf, expira_em: sessao_expira_em, criada_em: sessao_criada_em };
       if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)
         && (req.get('origin') !== config.origin || !igual(req.get('x-csrf-token'), sessao.csrf))) {
         throw falha(403, 'Requisição inválida. Atualize a página e tente novamente.');

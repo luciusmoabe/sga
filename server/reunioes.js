@@ -5,7 +5,7 @@ const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quint
 const PRIO = { alta: 'alta', media: 'média', baixa: 'baixa' };
 
 export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretriz, cfg }) {
-  const gestao = permit('diretor', 'apoio');
+  const gestao = permit('diretor', 'apoio', 'administrador');
   const fmt = (r) => (r ? { ...r, combinados_snapshot: json(r.combinados_snapshot, []) } : null);
   const avisoLimite = async () => {
     const n = (await q1('select count(*) n from combinados where ativo = 1 and arquivado = 0'))?.n ?? 0;
@@ -270,11 +270,22 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
   }));
   app.put('/api/reunioes/:id/ata', gestao, h(async (req) => {
     return comReuniao(req.params.id, async (r) => {
-      if (r.status !== 'rascunho') throw falha(409, 'A ata só pode ser editada enquanto está em rascunho.');
+      if (r.status === 'em_andamento') throw falha(409, 'A ata só existe depois que a reunião é encerrada.');
       const t = texto(req.body?.ata_texto, 20000);
       if (!t) throw falha(400, 'A ata não pode ficar vazia.');
       await run('update reunioes set ata_texto = ? where id = ?', t, r.id);
       return fmt(await q1('select * from reunioes where id = ?', r.id));
+    });
+  }));
+  // Exclui a reunião e a ata. Ações criadas na reunião permanecem: só perdem o vínculo com ela.
+  app.delete('/api/reunioes/:id', gestao, h(async (req) => {
+    return comReuniao(req.params.id, async (r) => {
+      if (r.status === 'em_andamento') throw falha(409, 'Encerre a reunião antes de excluir a ata.');
+      await run('delete from decisoes where reuniao_id = ?', r.id);
+      await run('update diretrizes set reuniao_id = null where reuniao_id = ?', r.id);
+      await run('update pedidos_prazo set reuniao_id = null where reuniao_id = ?', r.id);
+      await run('delete from reunioes where id = ?', r.id);
+      return { ok: true, id: r.id };
     });
   }));
   app.post('/api/reunioes/:id/enviar-ata', gestao, h(async (req) => {

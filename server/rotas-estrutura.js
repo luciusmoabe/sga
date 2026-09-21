@@ -139,7 +139,6 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     if(!conta) throw falha(404,'Usuário sem login vinculado.');
     const alvo=await q1('select perfil from usuarios where id=?',id);
     if(req.user.perfil!=='administrador' && ['diretor','administrador'].includes(alvo?.perfil)) throw falha(403,'Somente o Administrador altera o acesso do Diretor e de outros Administradores.');
-    if(b.senha && id===req.user.id) throw falha(400,'Para alterar a sua própria senha, use "Alterar senha" no menu.');
     const dados={};
     if(b.email) {
       const email=String(b.email).trim().toLowerCase();

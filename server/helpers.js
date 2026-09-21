@@ -1,6 +1,5 @@
 import { addDays, semaforo } from './logic.js';
 import { porNecessidade as compararNecessidade } from '../public/js/regras.js';
-import { subarvore } from './db.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -54,84 +53,89 @@ export const ultimaAtualizacao = async (db, secaoId, semana) => {
   return atualizacaoDe(row);
 };
 
+/** Ids de cada Centro/Coordenação ativo e de suas subseções, numa única consulta recursiva
+ *  (antes eram N consultas, uma por Centro). `union` descarta repetições e protege contra ciclos. */
+export async function arvoresDosCentros(db) {
+  const rows = await db.prepare(
+    `with recursive t(centro_id, id) as (
+       select id, id from secoes where pai_id is null and ativa = 1
+       union select t.centro_id, s.id from secoes s join t on s.pai_id = t.id
+     ) select centro_id, id from t order by centro_id, id`,
+  ).all();
+  const arvores = new Map();
+  for (const r of rows) {
+    if (!arvores.has(r.centro_id)) arvores.set(r.centro_id, []);
+    arvores.get(r.centro_id).push(r.id);
+  }
+  return arvores;
+}
+
 /** Painel da semana: uma linha por Centro/Coordenação, somando as subseções abaixo.
- *  Implementação otimizada: 4 queries agregadas totais (independente do nº de Centros)
- *  em vez de 4 queries × N centros (N+1 problem). */
-export async function painelSemana(db, semana, hoje) {
-  const centros = (await db
-    .prepare(
+ *  Poucas consultas e todas independentes rodam em paralelo: com o banco distante, o tempo da tela
+ *  é o número de idas em série (não de consultas). `arvoresPre` evita repetir a árvore quando o chamador já a tem. */
+export async function painelSemana(db, semana, hoje, arvoresPre = null) {
+  const [centros, arvores] = await Promise.all([
+    db.prepare(
       `select s.*, u.nome as chefe_nome from secoes s left join usuarios u on u.id = s.chefe_id
        where s.pai_id is null and s.ativa = 1 order by s.ordem, s.id`,
-    )
-    .all()) || [];
-
+    ).all(),
+    arvoresPre ?? arvoresDosCentros(db),
+  ]);
   if (!centros.length) return [];
 
   const ate = addDays(hoje, 2);
-
-  // Monta mapa centroId → [ids da subárvore]
-  const arvores = new Map(await Promise.all(centros.map(async (c) => [c.id, await subarvore(db, c.id)])));
-  // Todos os ids de seções (raízes + descendentes), achatados com mapeamento para centro raiz
+  // Todos os ids de seções (raízes + descendentes), achatados com mapeamento para o centro raiz
   const todosIds = [];
   const idParaCentro = new Map();
-  for (const [centroId, ids] of arvores) {
-    for (const id of ids) {
+  for (const c of centros) {
+    for (const id of arvores.get(c.id) ?? [c.id]) {
       todosIds.push(id);
-      idParaCentro.set(id, centroId);
+      idParaCentro.set(id, c.id);
     }
   }
-
-  // ── Query 1: estatísticas de ações agrupadas por secao_id ──
-  const statsRows = todosIds.length
-    ? await db.prepare(
-        `select
-           secao_id,
-           coalesce(sum(case when status != 'concluida' and prazo < ? then 1 end), 0) atrasadas,
-           coalesce(sum(case when status != 'concluida' and prazo >= ? and prazo <= ? then 1 end), 0) vencendo,
-           coalesce(sum(case when status != 'concluida' then 1 end), 0) abertas,
-           coalesce(sum(case when status != 'concluida' and prazo < ? and interna = 1 and compartilhada = 0 then 1 end), 0) atrasadas_internas
-         from acoes
-         where encerrada = 0 and arquivada = 0 and secao_id in (${marks(todosIds)})
-         group by secao_id`,
-      ).all(hoje, hoje, ate, hoje, ...todosIds)
-    : [];
-
-  // ── Query 2: última atualização de cada seção, incluindo subseções ──
-  const atualizacaoRows = todosIds.length
-    ? await db.prepare(
-        `select a.*
-         from atualizacoes a
-         where a.secao_id in (${marks(todosIds)}) and a.semana = ?
-           and a.versao = (
-             select max(b.versao) from atualizacoes b
-             where b.secao_id = a.secao_id and b.semana = a.semana
-           )`,
-      ).all(...todosIds, semana)
-    : [];
-
-  // ── Query 3: tempo na semana, agrupado por seção ──
   const semanaInicio = addDays(semana, -7);
   const semanaFim = addDays(semana, -1);
-  const tempoRows = todosIds.length
-    ? await db.prepare(
-        `select a.secao_id, coalesce(sum(t.minutos), 0) minutos
-         from tempo t
-         join acoes a on a.id = t.acao_id
-         where a.secao_id in (${marks(todosIds)}) and t.data >= ? and t.data <= ?
-         group by a.secao_id`,
-      ).all(...todosIds, semanaInicio, semanaFim)
-    : [];
 
-  // ── Query 4: pedidos pendentes por seção ──
-  const pedidosRows = todosIds.length
-    ? await db.prepare(
-        `select a.secao_id, count(*) n
-         from pedidos_prazo p
-         join acoes a on a.id = p.acao_id
-         where p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and a.secao_id in (${marks(todosIds)})
-         group by a.secao_id`,
-      ).all(...todosIds)
-    : [];
+  const [statsRows, atualizacaoRows, tempoRows, pedidosRows] = await Promise.all([
+    // 1: estatísticas de ações agrupadas por secao_id
+    db.prepare(
+      `select
+         secao_id,
+         coalesce(sum(case when status != 'concluida' and prazo < ? then 1 end), 0) atrasadas,
+         coalesce(sum(case when status != 'concluida' and prazo >= ? and prazo <= ? then 1 end), 0) vencendo,
+         coalesce(sum(case when status != 'concluida' then 1 end), 0) abertas,
+         coalesce(sum(case when status != 'concluida' and prazo < ? and interna = 1 and compartilhada = 0 then 1 end), 0) atrasadas_internas
+       from acoes
+       where encerrada = 0 and arquivada = 0 and secao_id in (${marks(todosIds)})
+       group by secao_id`,
+    ).all(hoje, hoje, ate, hoje, ...todosIds),
+    // 2: última atualização de cada seção, incluindo subseções
+    db.prepare(
+      `select a.*
+       from atualizacoes a
+       where a.secao_id in (${marks(todosIds)}) and a.semana = ?
+         and a.versao = (
+           select max(b.versao) from atualizacoes b
+           where b.secao_id = a.secao_id and b.semana = a.semana
+         )`,
+    ).all(...todosIds, semana),
+    // 3: tempo na semana, agrupado por seção
+    db.prepare(
+      `select a.secao_id, coalesce(sum(t.minutos), 0) minutos
+       from tempo t
+       join acoes a on a.id = t.acao_id
+       where a.secao_id in (${marks(todosIds)}) and t.data >= ? and t.data <= ?
+       group by a.secao_id`,
+    ).all(...todosIds, semanaInicio, semanaFim),
+    // 4: pedidos pendentes por seção
+    db.prepare(
+      `select a.secao_id, count(*) n
+       from pedidos_prazo p
+       join acoes a on a.id = p.acao_id
+       where p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and a.secao_id in (${marks(todosIds)})
+       group by a.secao_id`,
+    ).all(...todosIds),
+  ]);
 
   // Agrega resultados por centroId
   const statsMap    = new Map();
@@ -185,34 +189,51 @@ export async function painelSemana(db, semana, hoje) {
 
 export const porNecessidade = (lista) => [...lista].sort(compararNecessidade);
 
-/** Cartões do Modo Reunião: painel + relato da semana + ações visíveis ao Diretor + pedidos de prazo. */
+/** Cartões do Modo Reunião: painel + relato da semana + ações visíveis ao Diretor + pedidos de prazo.
+ *  Consultas agrupadas para todos os Centros de uma vez (antes eram três por Centro). */
 export async function cartoesReuniao(db, semana, hoje) {
-  const painel = await painelSemana(db, semana, hoje);
+  const arvores = await arvoresDosCentros(db);
+  const painel = await painelSemana(db, semana, hoje, arvores);
   const itens = porNecessidade(painel);
-  return Promise.all(
-    itens.map(async (p) => {
-      const ids = await subarvore(db, p.secao.id);
-      const acoesRaw = (await db
-        .prepare(
-          `select a.id, a.titulo, a.prazo, a.status, a.prioridade, a.encerrada,
-                  coalesce((select sum(minutos) from tempo where acao_id = a.id), 0) tempo_total,
-                  s.sigla secao_sigla
-           from acoes a join secoes s on s.id = a.secao_id
-           where a.secao_id in (${marks(ids)}) and a.encerrada = 0 and a.arquivada = 0 and (a.interna = 0 or a.compartilhada = 1)
-           order by case a.status when 'concluida' then 1 else 0 end, a.prazo`,
-        )
-        .all(...ids)) || [];
-      const acoes = acoesRaw.map((a) => ({ ...a, atrasada: a.status !== 'concluida' && a.prazo < hoje }));
-      const pedidos = (await db
-        .prepare(
-          `select p.id, p.acao_id, p.novo_prazo, p.prazo_atual, p.justificativa, a.titulo acao_titulo
-           from pedidos_prazo p join acoes a on a.id = p.acao_id
-           where p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and (a.interna = 0 or a.compartilhada = 1)
-             and a.secao_id in (${marks(ids)}) order by p.criado_em`,
-        )
-        .all(...ids)) || [];
-      const at = await ultimaAtualizacao(db, p.secao.id, semana);
-      return { ...p, atualizacao: at, acoes, pedidos };
-    }),
-  );
+  const todosIds = itens.flatMap((p) => arvores.get(p.secao.id) ?? [p.secao.id]);
+  const centroDe = new Map(itens.flatMap((p) => (arvores.get(p.secao.id) ?? [p.secao.id]).map((id) => [id, p.secao.id])));
+  const raizes = itens.map((p) => p.secao.id);
+  const [acoesRaw, pedidosRaw, atRaw] = todosIds.length ? await Promise.all([
+    db.prepare(
+      `select a.id, a.secao_id, a.titulo, a.prazo, a.status, a.prioridade, a.encerrada,
+              coalesce((select sum(minutos) from tempo where acao_id = a.id), 0) tempo_total,
+              s.sigla secao_sigla
+       from acoes a join secoes s on s.id = a.secao_id
+       where a.secao_id in (${marks(todosIds)}) and a.encerrada = 0 and a.arquivada = 0 and (a.interna = 0 or a.compartilhada = 1)
+       order by case a.status when 'concluida' then 1 else 0 end, a.prazo`,
+    ).all(...todosIds),
+    db.prepare(
+      `select p.id, p.acao_id, a.secao_id, p.novo_prazo, p.prazo_atual, p.justificativa, a.titulo acao_titulo
+       from pedidos_prazo p join acoes a on a.id = p.acao_id
+       where p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and (a.interna = 0 or a.compartilhada = 1)
+         and a.secao_id in (${marks(todosIds)}) order by p.criado_em`,
+    ).all(...todosIds),
+    db.prepare(
+      `select a.* from atualizacoes a where a.secao_id in (${marks(raizes)}) and a.semana = ?
+         and a.versao = (select max(b.versao) from atualizacoes b where b.secao_id = a.secao_id and b.semana = a.semana)`,
+    ).all(...raizes, semana),
+  ]) : [[], [], []];
+  const porCentro = (linhas) => {
+    const m = new Map();
+    for (const l of linhas) {
+      const c = centroDe.get(l.secao_id);
+      if (!m.has(c)) m.set(c, []);
+      m.get(c).push(l);
+    }
+    return m;
+  };
+  const acoesPor = porCentro(acoesRaw);
+  const pedidosPor = porCentro(pedidosRaw);
+  const atPor = new Map(atRaw.map((r) => [r.secao_id, atualizacaoDe(r)]));
+  return itens.map((p) => ({
+    ...p,
+    atualizacao: atPor.get(p.secao.id) ?? null,
+    acoes: (acoesPor.get(p.secao.id) ?? []).map(({ secao_id, ...a }) => ({ ...a, atrasada: a.status !== 'concluida' && a.prazo < hoje })),
+    pedidos: (pedidosPor.get(p.secao.id) ?? []).map(({ secao_id, ...x }) => x),
+  }));
 }

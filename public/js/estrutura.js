@@ -80,7 +80,7 @@ export async function estrutura(raiz, { refresh }) {
     <nav class="estrutura-abas" aria-label="Áreas da estrutura">
       <button data-painel="secoes" aria-controls="estrutura-secoes">Seções</button>
       <button data-painel="usuarios" aria-controls="estrutura-usuarios">Usuários e acessos</button>
-      ${ehAdmin() ? '' : '<button data-painel="reuniao" aria-controls="estrutura-reuniao">Reunião semanal</button>'}
+      <button data-painel="reuniao" aria-controls="estrutura-reuniao">Reunião semanal</button>
     </nav>
     <section id="estrutura-secoes" class="estrutura-painel" aria-labelledby="titulo-secoes">
       <div class="estrutura-barra"><div><h2 id="titulo-secoes">Organização das seções</h2><p class="suave">Centros, coordenações e subseções em até três níveis.</p></div><button class="btn btn-primario" data-a="nova">+ Nova seção</button></div>
@@ -93,7 +93,7 @@ export async function estrutura(raiz, { refresh }) {
       <p id="contagem-usuarios" class="estrutura-contagem" role="status"></p>
       <div class="tabela-rolagem"><table class="estrutura-tabela"><thead><tr><th scope="col">Usuário</th><th scope="col">Perfil</th><th scope="col">Seção</th><th scope="col">Acesso</th><th scope="col">Ações</th></tr></thead><tbody id="lista-usuarios"></tbody></table></div>
     </section>
-    ${ehAdmin() ? '' : `<section id="estrutura-reuniao" class="estrutura-painel" aria-labelledby="titulo-reuniao" hidden>
+    <section id="estrutura-reuniao" class="estrutura-painel" aria-labelledby="titulo-reuniao" hidden>
       <div class="estrutura-barra"><div><h2 id="titulo-reuniao">Reunião semanal</h2><p class="suave">Defina o dia e o horário de acompanhamento.</p></div></div>
       <div class="estrutura-aviso">O prazo para os relatos encerra no dia anterior à reunião, às ${HORA_FECHAMENTO}h.</div>
       <form id="form-reuniao" novalidate>
@@ -119,7 +119,7 @@ export async function estrutura(raiz, { refresh }) {
         <div class="erro-form oculto" role="alert" id="erro-reuniao"></div>
       </form>
 
-    </section>`}
+    </section>
   </div>`;
   const renderSecoes = () => {
     const html = filhos(null).map(no).join('');
@@ -186,7 +186,7 @@ export async function estrutura(raiz, { refresh }) {
       <div class="campo"><label for="lu-email">Novo e-mail (opcional)</label><input id="lu-email" name="email" type="email" autocomplete="off"></div>
       <div class="campo"><label for="lu-senha">Nova senha (opcional)</label><input id="lu-senha" name="senha" type="password" autocomplete="new-password" minlength="12" maxlength="128"></div>
       <p>As sessões atuais serão encerradas e, ao alterar a senha, a pessoa precisará criar a própria no próximo acesso. Entregue a nova senha diretamente a ela.</p>`,
-      aoEnviar:async(d,form)=>{try{await patch(`/usuarios/${u.id}/login`,d);salvo('Login atualizado. Entre novamente se alterou sua própria conta.');}finally{form.querySelector('[name="senha"]').value='';d.senha='';}}
+      aoEnviar:async(d,form)=>{try{await patch(`/usuarios/${u.id}/login`,d);salvo('Login atualizado. Se alterou a sua própria conta, entre novamente.');}finally{form.querySelector('[name="senha"]').value='';d.senha='';}}
     });
   });
   on(raiz, 'click', '[data-excluir-u]', async el => {

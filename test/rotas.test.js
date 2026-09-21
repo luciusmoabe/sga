@@ -55,6 +55,7 @@ const ESPERADAS = [
   'POST /api/usuarios',
   'POST /api/usuarios/acesso',
   'POST /api/usuarios/chefes',
+  'DELETE /api/reunioes/:id',
   'PUT /api/atualizacao',
   'PUT /api/config',
   'PUT /api/reunioes/:id/ata',
