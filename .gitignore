@@ -38,3 +38,6 @@ data/
 # Pastas e arquivos temporários de referência
 Agendum/
 *.zip
+
+# Configuração local de servidores MCP (não versionar)
+.mcp.json
