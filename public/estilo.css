@@ -857,3 +857,92 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 #login-erro { margin: 0; color: #a4262c; }
 #login-erro:empty { display: none; }
 .login-ajuda { margin-top: 1rem; font-size: .9rem; }
+
+/* Administração / Estrutura */
+.estrutura-pagina { max-width: 1320px; margin-inline: auto; }
+.estrutura-pagina [hidden] { display: none !important; }
+.estrutura-cabecalho { margin-bottom: 24px; }
+.estrutura-sobretitulo { color: var(--ink-2); font-size: .75rem; font-weight: 700; letter-spacing: .13em; margin: 0 0 8px; }
+.estrutura-cabecalho h1 { margin: 0 0 8px; }
+.estrutura-resumo { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 14px; background: var(--card); margin-bottom: 28px; }
+.estrutura-resumo > div { padding: 20px 24px; display: flex; align-items: baseline; gap: 12px; }
+.estrutura-resumo > div + div { border-left: 1px solid var(--line); }
+.estrutura-resumo strong { font-family: var(--head); font-size: 1.8rem; font-weight: 750; }
+.estrutura-resumo span { color: var(--muted); }
+.estrutura-abas { display: flex; gap: 24px; border-bottom: 1px solid var(--line-str); margin-bottom: 24px; overflow-x: auto; }
+.estrutura-abas button { font: inherit; color: var(--muted); white-space: nowrap; padding: 12px 2px 16px; background: none; border: 0; border-bottom: 3px solid transparent; cursor: pointer; font-weight: 600; }
+.estrutura-abas button[aria-pressed="true"] { color: var(--ink-2); border-bottom-color: var(--ink-2); }
+.estrutura-painel { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
+.estrutura-barra { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+.estrutura-barra h2 { margin: 0 0 6px; font-size: 1.2rem; }
+.estrutura-barra p { margin: 0; }
+.estrutura-barra > .btn { flex-shrink: 0; }
+.estrutura-filtros { display: flex; align-items: flex-end; gap: 16px; background: var(--bg); padding: 16px; border-radius: 10px; margin-bottom: 20px; }
+.estrutura-filtros .campo { margin: 0; min-width: 140px; }
+.estrutura-filtros .campo:first-child { flex: 1; }
+.estrutura-filtros label { font-size: .82rem; }
+.estrutura-arvore, .estrutura-arvore ul { list-style: none; padding: 0; margin: 0; }
+.estrutura-arvore ul { margin-left: 20px; padding-left: 18px; border-left: 1px solid var(--line-str); }
+.estrutura-secao { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 20px 0; border-bottom: 1px solid var(--line); }
+.estrutura-identidade { display: flex; align-items: center; gap: 12px; flex: 1 1 240px; min-width: 0; }
+.estrutura-identidade strong { display: block; line-height: 1.5; overflow-wrap: anywhere; }
+.estrutura-metadados { color: var(--muted); font-size: .8rem; margin-top: 4px; }
+.estrutura-expandir, .estrutura-marcador { width: 30px; height: 30px; flex-shrink: 0; display: grid; place-items: center; }
+.estrutura-expandir { background: var(--pale); border: 1px solid var(--line); border-radius: 7px; color: var(--ink-2); cursor: pointer; font-size: 1.2rem; }
+.estrutura-marcador { color: var(--line-str); }
+.estrutura-responsavel { flex: 0 1 170px; display: grid; gap: 4px; font-size: .88rem; }
+.estrutura-legenda { color: var(--muted); font-size: .75rem; }
+.estrutura-status { display: inline-block; background: var(--pale); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: .76rem; white-space: nowrap; }
+.estrutura-status.ativo { color: var(--ink-2); background: var(--green-bg); }
+.estrutura-inativa .estrutura-identidade strong { color: var(--muted); }
+.estrutura-acoes { display: flex; align-items: flex-start; justify-content: flex-end; gap: 8px; }
+.estrutura-acoes .btn-mini { min-height: 34px; padding: 6px 12px; }
+.estrutura-opcoes { flex-shrink: 0; font-size: .85rem; }
+.estrutura-opcoes summary { cursor: pointer; padding: 7px 9px; min-height: 34px; color: var(--muted); border-radius: 6px; }
+.estrutura-opcoes summary:hover, .estrutura-opcoes[open] summary { color: var(--ink); background: var(--pale); }
+.estrutura-opcoes-itens { display: grid; min-width: 180px; padding: 6px; margin-top: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+.estrutura-opcoes-itens button { text-align: left; font: inherit; cursor: pointer; background: transparent; border: 0; border-radius: 5px; padding: 10px; color: var(--ink); }
+.estrutura-opcoes-itens button:hover { background: var(--pale); }
+.estrutura-opcoes-itens .estrutura-perigo { color: var(--vermelho); border-top: 1px solid var(--line); border-radius: 0; margin-top: 4px; }
+.estrutura-menu-nota { padding: 10px; max-width: 210px; color: var(--muted); font-size: .8rem; }
+.estrutura-pagina :is(button,summary,input,select):focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; }
+.estrutura-tabela { width: 100%; }
+.estrutura-tabela th { font-size: .76rem; letter-spacing: .03em; color: var(--muted); background: var(--bg); padding: 12px; }
+.estrutura-tabela td { padding: 18px 12px; vertical-align: top; }
+.estrutura-tabela td:first-child { min-width: 160px; }
+.estrutura-email { display: block; color: var(--muted); font-size: .8rem; margin-top: 5px; overflow-wrap: anywhere; }
+.estrutura-contagem { font-size: .82rem; color: var(--muted); margin-bottom: 12px; }
+.estrutura-vazio { text-align: center; padding: 48px 20px; }
+.estrutura-vazio strong { font-family: var(--head); font-size: 1.1rem; }
+.estrutura-vazio p { color: var(--muted); margin: 8px 0 0; }
+.estrutura-aviso { background: var(--pale); border-left: 3px solid var(--ink-2); padding: 16px; margin-bottom: 24px; line-height: 1.6; }
+#estrutura-reuniao form { max-width: 650px; }
+@media (max-width: 760px) {
+  .estrutura-resumo > div { padding: 14px 10px; flex-direction: column; gap: 4px; }
+  .estrutura-resumo span { font-size: .76rem; }
+  .estrutura-resumo strong { font-size: 1.4rem; }
+  .estrutura-painel { padding: 16px; }
+  .estrutura-barra { align-items: flex-start; flex-direction: column; gap: 14px; }
+  .estrutura-filtros { flex-wrap: wrap; padding: 12px; gap: 12px; }
+  .estrutura-filtros .campo { flex: 1; min-width: 100px; }
+  .estrutura-filtros .campo:first-child { flex-basis: 100%; }
+  .estrutura-abas { gap: 18px; }
+  .estrutura-abas button { font-size: .86rem; }
+  .estrutura-identidade { flex-basis: 100%; }
+  .estrutura-responsavel { flex: 1; }
+  .estrutura-secao > .estrutura-acoes { width: 100%; justify-content: flex-start; }
+  .estrutura-arvore ul { margin-left: 8px; padding-left: 10px; }
+  .estrutura-tabela thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .estrutura-tabela, .estrutura-tabela tbody { display: block; }
+  .estrutura-tabela tr { display: grid; grid-template-columns: 1fr 1fr; padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .estrutura-tabela td { display: block; padding: 6px 0; border: 0; }
+  .estrutura-tabela td:first-child, .estrutura-tabela td:last-child { grid-column: 1 / -1; }
+  .estrutura-tabela td:nth-child(2)::before { content: 'Perfil'; }
+  .estrutura-tabela td:nth-child(3)::before { content: 'Seção'; }
+  .estrutura-tabela td:nth-child(2)::before, .estrutura-tabela td:nth-child(3)::before { display: block; font-size: .72rem; color: var(--muted); margin-bottom: 3px; }
+  .estrutura-tabela .estrutura-acoes { justify-content: flex-start; margin-top: 8px; }
+}
+@media (max-width: 760px) {
+  .estrutura-expandir { width: 44px; height: 44px; }
+  .estrutura-acoes .btn-mini, .estrutura-opcoes summary { min-height: 44px; padding: 12px; }
+}
