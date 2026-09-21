@@ -153,6 +153,16 @@ O diagnóstico local confirmou ausência de `SGC_PUBLIC_ORIGIN`, `ENTRA_TENANT_I
 
 Limites: os testes de PostgreSQL real (`npm run test:postgres`) não foram executados aqui (sem binários); as expectativas de versão em `test/postgres/integracao.test.js` foram atualizadas, mas a migração 7 em PostgreSQL ainda precisa ser confirmada nesse ambiente. A expiração real de sessão na interface (aviso e retorno) foi verificada só por leitura do código e pelos testes de servidor. O ensaio na TV/HDMI real continua pendente.
 
+## Décima primeira entrega — início explícito da reunião e regras compartilhadas
+
+- [x] Abrir `#/reuniao` deixou de criar reunião: a rota mostra uma tela de conferência e só o botão "Iniciar reunião" cria; reunião em andamento é retomada por `#/reuniao/:id`, e reuniões já encerradas redirecionam para a ata. A abertura com combinados não se repete ao recarregar.
+- [x] Corrigido: reunião iniciada no próprio dia depois das 12h (por exemplo terça às 14h30) apontava para a semana seguinte e mostrava cartões vazios; agora trata da semana de hoje. O corte das 12h continua valendo só para o painel. Teste confirmado contra a versão anterior (falhava com `2026-09-29`).
+- [x] `public/js/regras.js` passou a ser a fonte única de status, transições, prioridades, ordem do semáforo e hora de fechamento; servidor e interface deixaram de ter cópias. `test/regras.test.js` detecta divergência de rótulos e transições.
+- [x] Textos do prazo de atualização passaram a usar a hora de fechamento compartilhada e o dia real (antes diziam "segunda" fixo).
+- [x] 108 testes gerais aprovados; fluxo verificado no Edge (início, retomada, recarga sem repetir abertura, reunião inexistente com erro amigável).
+
+Pendências vistas na inspeção: na TV, o subtítulo da Visão geral e o contador do topo (seções, decisões, ações) ficam pequenos demais para a sala; revisar no ensaio com a TV real.
+
 ## Próximas entregas
 
 1. Ampliar a integração para implantação com múltiplos processos, conexão de produção e cópia isolada dos dados reais quando houver ambiente destinado a isso.

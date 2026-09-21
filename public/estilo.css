@@ -948,3 +948,6 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
   .estrutura-expandir { width: 44px; height: 44px; }
   .estrutura-acoes .btn-mini, .estrutura-opcoes summary { min-height: 44px; padding: 12px; }
 }
+
+/* Tela de início da reunião */
+.lista-pre { margin: 6px 0 14px; padding-left: 1.2em; line-height: 1.7; }

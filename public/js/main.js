@@ -7,7 +7,7 @@ import { atualizacao, historico, inicio, minhasAcoes } from './telas-chefe.js';
 import { combinados } from './combinados.js';
 import { estrutura } from './estrutura.js';
 import { atas, reuniaoDetalhe, reunioes } from './atas.js';
-import { viewReuniao } from './reuniao.js';
+import { inicioReuniao, viewReuniao } from './reuniao.js';
 
 const GESTAO = ['diretor', 'apoio'];
 const TODOS = ['diretor', 'apoio', 'chefe'];
@@ -21,7 +21,8 @@ const ROTAS = {
   estrutura: { f: estrutura, perfis: ['diretor'], titulo: 'Estrutura' },
   combinados: { f: combinados, perfis: TODOS, titulo: 'Combinados' },
   reunioes: { f: (r, p) => (p.id ? reuniaoDetalhe(r, p) : reunioes(r, p)), perfis: GESTAO, titulo: 'Reuniões e atas' },
-  reuniao: { f: viewReuniao, perfis: GESTAO, tv: true, titulo: 'Modo Reunião' },
+  // Sem id: tela comum de início (nada é criado ao abrir a rota). Com id: Modo Reunião em tela cheia.
+  reuniao: { f: (r, p) => (p.id ? viewReuniao(r, p) : inicioReuniao(r, p)), perfis: GESTAO, tv: (p) => !!p.id, titulo: 'Modo Reunião' },
   inicio: { f: inicio, perfis: ['chefe'], trilho: true, titulo: 'Início' },
   atualizacao: { f: atualizacao, perfis: ['chefe'], trilho: true, titulo: 'Minha atualização' },
   'minhas-acoes': { f: minhasAcoes, perfis: ['chefe'], trilho: true, titulo: 'Minhas ações' },
@@ -167,7 +168,7 @@ export async function render() {
     if (!def || !def.perfis.includes(est.user.perfil)) { location.hash = casaDe(); return; }
     document.title = `${def.titulo} · Agilis`;
     const refresh = async () => { const y = window.scrollY; await render(); window.scrollTo(0, y); };
-    if (def.tv) {
+    if (def.tv?.({ id })) {
       document.body.classList.add('tv');
       app.innerHTML = '<div class="tv-app" id="tv"></div>';
       await def.f($('#tv'), { id, q, refresh });

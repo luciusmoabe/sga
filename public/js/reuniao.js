@@ -3,13 +3,55 @@
 // Ficam ocultos na projeção, por padrão: tempo em minutos e ações internas de subseções.
 import { get, post } from './api.js';
 import { est, hoje } from './estado.js';
-import { $, abrirForm, addDias, br, confirmar, diaSemana, esc, fmtMin, on, plural, sem, STATUS, toast } from './ui.js';
+import { $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, parseISO, plural, sem, STATUS, toast } from './ui.js';
 
-export async function viewReuniao(raiz) {
-  const ini = await post('/reunioes/iniciar');
+/**
+ * Tela de início (fora do modo TV). Abrir esta rota não cria nada: a reunião só nasce no botão,
+ * então recarregar a página, voltar no navegador ou um clique sem querer não abrem reunião.
+ */
+export async function inicioReuniao(raiz) {
+  const [lista, comb] = await Promise.all([get('/reunioes'), get('/combinados')]);
+  const aberta = lista.find((r) => r.status === 'em_andamento');
+  if (aberta) {
+    raiz.innerHTML = `<div class="cabeca"><div><h1>Modo Reunião</h1><div class="sub">Há uma reunião em andamento.</div></div></div>
+      <div class="cartao"><h2>Reunião de ${diaSemana(aberta.data)}, ${br(aberta.data)}</h2>
+        <p class="suave">Iniciada em ${dataHora(aberta.iniciada_em)}. Retome de onde parou: as decisões e ações já registradas foram mantidas.</p>
+        <a class="btn btn-primario" href="#/reuniao/${aberta.id}">Retomar reunião</a></div>`;
+    return;
+  }
+  // No dia da reunião, o painel já pode ter virado para a semana seguinte; a reunião trata de hoje.
+  const dia = est.boot.reuniao_dia ?? 2;
+  const semana = parseISO(hoje()).getUTCDay() === dia ? hoje() : est.boot.semana;
+  const p = await get(`/painel?semana=${semana}`);
+  const pendentes = p.resumo.pendentes;
+  raiz.innerHTML = `<div class="cabeca"><div><h1>Iniciar reunião</h1><div class="sub">Reunião de ${diaSemana(semana)}, ${br(semana)}, às ${est.boot.reuniao_hora || '10:00'}</div></div></div>
+    <div class="cartao"><h2>Antes de começar</h2>
+      <ul class="lista-pre">
+        <li>${plural(p.itens.length, 'seção será apresentada', 'seções serão apresentadas')}, das que mais precisam de atenção para as que estão em dia.</li>
+        <li>${pendentes ? `<b>${plural(pendentes, 'seção ainda não enviou', 'seções ainda não enviaram')}</b> a atualização da semana.` : 'Todas as seções enviaram a atualização da semana.'}</li>
+        <li>${plural(p.resumo.pedidos, 'pedido de novo prazo aguarda', 'pedidos de novo prazo aguardam')} decisão.</li>
+        <li>${plural(comb.ativos, 'combinado ativo abre', 'combinados ativos abrem')} a reunião.</li>
+      </ul>
+      <p class="suave pequeno">Ligue o notebook à TV antes de iniciar. Ao começar, a tela passa para o modo de apresentação; use as setas do teclado para avançar.</p>
+      <button class="btn btn-primario" id="iniciar-reuniao">Iniciar reunião</button></div>`;
+  const botao = $('#iniciar-reuniao', raiz);
+  botao.addEventListener('click', async () => {
+    botao.disabled = true;
+    try {
+      const ini = await post('/reunioes/iniciar');
+      location.hash = `#/reuniao/${ini.reuniao.id}${ini.mostrar_combinados && !ini.retomada ? '?abertura=1' : ''}`;
+    } catch (e) { botao.disabled = false; toast(e.message, 'erro'); }
+  });
+}
+
+export async function viewReuniao(raiz, { id: idRota, q }) {
+  const reuniao = await get(`/reunioes/${idRota}`);
+  if (reuniao.status !== 'em_andamento') { location.hash = `#/reunioes/${idRota}`; return; }
+  const comAbertura = q?.get('abertura') === '1';
+  if (comAbertura) history.replaceState(null, '', `#/reuniao/${idRota}`); // recarregar não repete a abertura
   const S = {
-    id: ini.reuniao.id,
-    passo: ini.mostrar_combinados ? 'abertura' : 'visao',
+    id: reuniao.id,
+    passo: comAbertura ? 'abertura' : 'visao',
     idx: 0,
     tempo: false,
     reuniao: null,

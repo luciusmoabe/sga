@@ -5,6 +5,7 @@ import {
   $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, STATUS, toast, vazio,
 } from './ui.js';
 import { abrirAcao } from './acao-comum.js';
+import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
 import { relatoHTML } from './telas-diretor.js';
 
 const semSecao = (raiz) => {
@@ -25,7 +26,7 @@ export async function inicio(raiz, { refresh }) {
     <div class="cartao"><div class="linha entre"><div>
       <h2>Sua atualização desta semana</h2>
       ${up.atual ? `<p class="suave" style="margin:2px 0 0">Enviada em ${dataHora(up.atual.enviada_em)} (versão ${up.atual.versao}). Se algo mudou, envie uma correção.</p>`
-        : `<p style="margin:2px 0 0">Pendente. Atualizações abertas até segunda, <b>${br(addDias(semana, -1))}</b>, às 18h.</p>`}</div>
+        : `<p style="margin:2px 0 0">Pendente. Atualizações abertas até ${diaSemana(addDias(semana, -1))}, <b>${br(addDias(semana, -1))}</b>, às ${HORA_FECHAMENTO}h.</p>`}</div>
       <a class="btn btn-primario" href="#/atualizacao">${up.atual ? 'Enviar correção' : 'Registrar atualização'}</a></div></div>
     <div class="espaco"></div>
     <div class="grade" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
@@ -74,7 +75,7 @@ export async function atualizacao(raiz) {
     try { sessionStorage.setItem(chaveRascunho, JSON.stringify({ ...st, critico: chk.checked, apoio: $('#apoio', raiz).value })); } catch { /* segue sem rascunho */ }
   };
   raiz.innerHTML = `
-    <div class="cabeca"><div><h1>Minha atualização</h1><div class="sub">Para a reunião de ${diaSemana(semana)}, ${br(semana)} · prazo regular ${diaSemana(addDias(semana, -1))}, ${br(addDias(semana, -1))}, às 18h</div></div></div>
+    <div class="cabeca"><div><h1>Minha atualização</h1><div class="sub">Para a reunião de ${diaSemana(semana)}, ${br(semana)} · prazo regular ${diaSemana(addDias(semana, -1))}, ${br(addDias(semana, -1))}, às ${HORA_FECHAMENTO}h</div></div></div>
     ${at ? `<div class="info">Você já enviou esta atualização (versão ${at.versao}). Ao enviar de novo, a nova versão substitui a anterior e o histórico é mantido.</div>` : ''}
     ${recuperado ? '<div class="info" role="status">Recuperamos o rascunho que você não chegou a enviar. Confira e envie quando estiver pronto.</div>' : ''}
     <form id="form-at" novalidate>
@@ -139,8 +140,6 @@ export async function atualizacao(raiz) {
 }
 
 // ---------- Minhas ações ----------
-const TRANS = { a_fazer: ['em_andamento'], em_andamento: ['a_fazer', 'bloqueada', 'concluida'], bloqueada: ['em_andamento'], concluida: ['em_andamento'] };
-
 export async function minhasAcoes(raiz) {
   if (!est.user.secao_id) return semSecao(raiz);
   const buscar = () => Promise.all([
@@ -203,7 +202,7 @@ export async function minhasAcoes(raiz) {
         ${a.detalhe ? `<p class="suave" style="margin:0">${esc(a.detalhe)}</p>` : ''}
         ${!a.arquivada ? `
           <div class="segmento" role="group" aria-label="Status da ação">${Object.entries(STATUS).map(([k, v]) =>
-            `<button type="button" data-status="${k}" aria-pressed="${a.status === k}" ${a.status !== k && !TRANS[a.status].includes(k) ? 'disabled' : ''}>${v}</button>`).join('')}</div>
+            `<button type="button" data-status="${k}" aria-pressed="${a.status === k}" ${a.status !== k && !TRANSICOES[a.status].includes(k) ? 'disabled' : ''}>${v}</button>`).join('')}</div>
           <div class="tempo-linha">Tempo gasto: <b class="num">${fmtMin(a.tempo_total)}</b>
             <input type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="minutos" aria-label="Minutos gastos" data-min>
             <button type="button" class="btn btn-sec btn-mini" data-tempo>Adicionar tempo</button></div>

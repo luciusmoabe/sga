@@ -1,4 +1,5 @@
-import { addDays, semaforo, ORDEM_COR } from './logic.js';
+import { addDays, semaforo } from './logic.js';
+import { porNecessidade as compararNecessidade } from '../public/js/regras.js';
 import { subarvore } from './db.js';
 
 export class HttpError extends Error {
@@ -182,8 +183,7 @@ export async function painelSemana(db, semana, hoje) {
   });
 }
 
-export const porNecessidade = (lista) =>
-  [...lista].sort((a, b) => ORDEM_COR[a.cor] - ORDEM_COR[b.cor] || a.secao.id - b.secao.id);
+export const porNecessidade = (lista) => [...lista].sort(compararNecessidade);
 
 /** Cartões do Modo Reunião: painel + relato da semana + ações visíveis ao Diretor + pedidos de prazo. */
 export async function cartoesReuniao(db, semana, hoje) {

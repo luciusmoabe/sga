@@ -1,7 +1,9 @@
 // Regras puras do SGC: datas, semana da reunião e semáforo.
 // Para testes e demonstrações, defina SGC_NOW (ex.: 2026-09-21T17:00:00) e o "agora" do servidor muda.
 import { dataNoFuso, dataValida, instante, parseData, partesNoFuso, somarDias } from '../public/js/datas.js';
+import { HORA_FECHAMENTO } from '../public/js/regras.js';
 export { FUSO_NEGOCIO } from '../public/js/datas.js';
+export { HORA_FECHAMENTO, ORDEM_COR, PRIORIDADES, STATUS, TRANSICOES } from '../public/js/regras.js'; // fonte única, compartilhada com a interface
 
 export const pad = (n) => String(n).padStart(2, '0');
 export const iso = dataNoFuso;
@@ -17,7 +19,6 @@ export const br = (s) => (s ? s.split('-').reverse().join('/') : '');
 export const DIA_PADRAO = 2;         // terça-feira (0 = domingo … 6 = sábado)
 export const HORA_PADRAO = '10:00';  // horário de início exibido na ata e no trilho
 export const HORA_CORTE_PADRAO = 12; // até esta hora, na própria terça, ainda vale a reunião do dia
-export const HORA_FECHAMENTO = 18;   // hora do fechamento (dia anterior à reunião)
 
 /**
  * Data da próxima reunião à qual as atualizações de hoje se referem.
@@ -61,16 +62,6 @@ export function semaforo({ enviada, atrasadas, vencendo, critico }) {
   if (!enviada || vencendo > 0) return 'amarelo';
   return 'verde';
 }
-export const ORDEM_COR = { vermelho: 0, amarelo: 1, verde: 2 };
-
-export const STATUS = ['a_fazer', 'em_andamento', 'bloqueada', 'concluida'];
-export const TRANSICOES = {
-  a_fazer: ['em_andamento'],
-  em_andamento: ['bloqueada', 'concluida', 'a_fazer'],
-  bloqueada: ['em_andamento'],
-  concluida: ['em_andamento'],
-};
-export const PRIORIDADES = ['alta', 'media', 'baixa'];
 export const FREQUENCIAS = ['sempre', 'primeira_do_mes', 'quando_mudarem'];
 export const LIMITE_NIVEIS = 3; // Centro (1) > subseção (2) > subseção (3)
 export const LIMITE_COMBINADOS = 7;

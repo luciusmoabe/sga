@@ -1,6 +1,8 @@
 // Utilidades de interface: formatação, diálogos, avisos e o Trilho da Semana.
 import { agora, isoDe } from './estado.js';
 import { instante, parseData, partesNoFuso, somarDias } from './datas.js';
+import { HORA_FECHAMENTO } from './regras.js';
+export { porNecessidade } from './regras.js';
 
 export const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -31,8 +33,6 @@ export const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 export const STATUS = { a_fazer: 'A fazer', em_andamento: 'Em andamento', bloqueada: 'Bloqueada', concluida: 'Concluída' };
 export const PRIO = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 export const COR = { verde: 'Em dia', amarelo: 'Atenção', vermelho: 'Crítico' };
-export const ORDEM_COR = { vermelho: 0, amarelo: 1, verde: 2 };
-export const porNecessidade = (a, b) => ORDEM_COR[a.cor] - ORDEM_COR[b.cor] || a.secao.id - b.secao.id;
 
 export const sem = (cor) => `<span class="sem sem-${cor}">${COR[cor]}</span>`;
 export const pilulaStatus = (a) =>
@@ -112,13 +112,13 @@ export function trilho(boot) {
   const agoraMs = agora().getTime();
   // Fechamento = dia anterior à reunião, 18h
   const diaAntes = addDias(semana, -1);
-  const fechamento = ts(diaAntes, '18:00');
+  const fechamento = ts(diaAntes, `${String(HORA_FECHAMENTO).padStart(2, '0')}:00`);
   // Lembrete = 4 dias antes da reunião (ex.: se reunião é terça, lembrete é na sexta anterior)
   const marcos = [
     { t: ini, rot: 'Reunião anterior', sub: `${nomeDia} ${horaReuniao}`, marco: true },
     { t: ts(addDias(semana, -4), '15:00'), rot: 'Lembrete', sub: `${NOMES_DIA[(diaSemana + 3) % 7]} 15h` },
     { t: ts(diaAntes, '09:00'), rot: '', sub: '' },
-    { t: fechamento, rot: 'Fechamento', sub: `${NOMES_DIA[(diaSemana + 6) % 7]} 18h`, marco: true },
+    { t: fechamento, rot: 'Fechamento', sub: `${NOMES_DIA[(diaSemana + 6) % 7]} ${HORA_FECHAMENTO}h`, marco: true },
     { t: fim, rot: 'Reunião', sub: `${nomeDia} ${horaReuniao}`, marco: true },
   ];
   const falta = (ms) => {
@@ -129,7 +129,7 @@ export function trilho(boot) {
     return d ? `${plural(d, 'dia', 'dias')}${r ? ` e ${r} h` : ''}` : `${h} h`;
   };
   let estado;
-  if (agoraMs < fechamento) estado = `Atualizações abertas até ${NOMES_DIA_COMPLETO[(diaSemana + 6) % 7]}, ${br(diaAntes)}, às 18h · faltam ${falta(fechamento - agoraMs)}`;
+  if (agoraMs < fechamento) estado = `Atualizações abertas até ${NOMES_DIA_COMPLETO[(diaSemana + 6) % 7]}, ${br(diaAntes)}, às ${HORA_FECHAMENTO}h · faltam ${falta(fechamento - agoraMs)}`;
   else if (agoraMs < fim) estado = `Prazo regular encerrado; correções disponíveis · reunião em ${falta(fim - agoraMs)}`;
   else estado = 'Hoje é dia de reunião';
   const p = pos(agoraMs) * 100;

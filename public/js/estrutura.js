@@ -2,6 +2,7 @@
 import { get, patch, post, put, del } from './api.js';
 import { atualizarSessao } from './estado.js';
 import { abrirForm, confirmar, esc, on, toast } from './ui.js';
+import { HORA_FECHAMENTO } from './regras.js';
 
 const TIPO = { centro: 'Centro', coordenacao: 'Coordenação', subsecao: 'Subseção' };
 const PERFIL = { diretor: 'Diretor', apoio: 'Apoio', chefe: 'Chefe' };
@@ -92,7 +93,7 @@ export async function estrutura(raiz, { refresh }) {
     </section>
     <section id="estrutura-reuniao" class="estrutura-painel" aria-labelledby="titulo-reuniao" hidden>
       <div class="estrutura-barra"><div><h2 id="titulo-reuniao">Reunião semanal</h2><p class="suave">Defina o dia e o horário de acompanhamento.</p></div></div>
-      <div class="estrutura-aviso">O prazo para os relatos encerra no dia anterior à reunião, às 18h.</div>
+      <div class="estrutura-aviso">O prazo para os relatos encerra no dia anterior à reunião, às ${HORA_FECHAMENTO}h.</div>
       <form id="form-reuniao" novalidate>
         <div class="dois" style="align-items:flex-end;gap:12px">
           <div class="campo">

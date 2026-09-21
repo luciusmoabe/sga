@@ -51,7 +51,7 @@ Na tela de entrada não há senha: escolha um perfil.
 
 ### Modo Reunião (para a TV)
 
-Pelo menu "Iniciar reunião". Pensado para o notebook ligado por HDMI à TV da sala.
+Pelo menu "Iniciar reunião", que abre uma tela de conferência (seções sem atualização, pedidos de prazo, combinados) e só cria a reunião no botão **Iniciar reunião**; recarregar a página ou voltar no navegador não abre reunião nova, e uma reunião em andamento é retomada pelo botão **Retomar reunião**. Pensado para o notebook ligado por HDMI à TV da sala.
 
 1. Abertura com os **Combinados da reunião** (conforme a frequência configurada).
 2. Visão geral das seções, em ordem de necessidade (vermelhas primeiro).
@@ -90,6 +90,7 @@ server/   API Express + SQLite (better-sqlite3) ou PostgreSQL (pg)
   seed.js      dados fictícios
 public/   interface (JavaScript puro, sem build)
   js/          uma tela por arquivo; main.js faz roteamento por hash
+  js/regras.js status, transições, prioridades e ordem do semáforo, compartilhados com o servidor
   estilo.css   sistema visual, modo TV e impressão
 test/     testes da API
 ```

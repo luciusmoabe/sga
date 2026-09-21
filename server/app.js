@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { subarvore, nivel } from './db.js';
 import {
-  DIA_PADRAO, FUSO_NEGOCIO, HORA_PADRAO, HORA_CORTE_PADRAO, LIMITE_NIVEIS, PRIORIDADES, TRANSICOES,
+  DIA_PADRAO, FUSO_NEGOCIO, HORA_PADRAO, HORA_CORTE_PADRAO, LIMITE_NIVEIS, PRIORIDADES, STATUS, TRANSICOES,
   agora, ehISO, ehDiaReuniao, fechamentoDe, hojeISO, refDiaReuniao,
 } from './logic.js';
 import { atualizacaoDe, cartoesReuniao, falha, h, marks, painelSemana, permit, texto, ultimaAtualizacao } from './helpers.js';
@@ -381,7 +381,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
          (select count(*) from acoes a where a.diretriz_id = d.id and a.status = 'concluida') concluidas
        from diretrizes d left join usuarios u on u.id = d.criado_por order by d.criado_em desc, d.id desc limit 30`)));
 
-  const STATUS_OK = new Set(['a_fazer', 'em_andamento', 'bloqueada', 'concluida']);
+  const STATUS_OK = new Set(STATUS);
 
   app.get('/api/acoes', h(async (req) => {
     const v = await visiveisAcoes(req.user);

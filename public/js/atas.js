@@ -26,7 +26,7 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
   raiz.innerHTML = `
     <div class="cabeca"><div><a href="#/reunioes" class="pequeno">← Reuniões e atas</a><h1>Reunião de ${br(r.data)}</h1>
       <div class="sub"><span class="pilula ${cls[r.status]}">${ST[r.status]}</span> · iniciada em ${dataHora(r.iniciada_em)}${r.encerrada_em ? ` · encerrada em ${dataHora(r.encerrada_em)}` : ''}</div></div>
-      ${r.status === 'em_andamento' ? '<div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao">Voltar ao Modo Reunião</a></div>' : ''}</div>
+      ${r.status === 'em_andamento' ? '<div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao/${r.id}">Voltar ao Modo Reunião</a></div>' : ''}</div>
     <div class="dois" style="align-items:start">
       <div class="cartao"><h2>Combinados vigentes</h2>${lista(r.combinados_snapshot, (c) => esc(c.texto))}</div>
       <div class="cartao"><h2>Decisões</h2>${lista(r.decisoes, (d) => `<b>${esc(d.secao_sigla || 'Geral')}</b> · ${esc(d.texto)}`)}</div>
@@ -50,7 +50,7 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
     try { await put(`/reunioes/${id}/ata`, { ata_texto: texto() }); await post(`/reunioes/${id}/enviar-ata`); toast('Ata enviada aos chefes.'); refresh(); } catch (e) { erro(e); }
   });
   raiz.querySelector('#reabrir').addEventListener('click', async () => {
-    try { await post(`/reunioes/${id}/reabrir`); location.hash = '#/reuniao'; } catch (e) { erro(e); }
+    try { await post(`/reunioes/${id}/reabrir`); location.hash = `#/reuniao/${id}`; } catch (e) { erro(e); }
   });
 }
 

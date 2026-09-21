@@ -1,4 +1,4 @@
-import { FREQUENCIAS, HORA_PADRAO, LIMITE_COMBINADOS, addDays, agora, br, parseISO, refDiaReuniao } from './logic.js';
+import { FREQUENCIAS, HORA_PADRAO, LIMITE_COMBINADOS, addDays, agora, br, ehDiaReuniao, parseISO, refDiaReuniao } from './logic.js';
 import { cartoesReuniao, falha, h, json, permit, texto } from './helpers.js';
 
 const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
@@ -131,9 +131,12 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       const mostrar = await mostrarCombinados();
       const snapshot = await q('select id, texto, ordem from combinados where ativo = 1 and arquivado = 0 order by ordem, id');
       const { dia } = await cfgAoVivo();
+      // Iniciada no próprio dia da reunião, ela trata das atualizações de hoje, mesmo depois do corte do meio-dia
+      // (que só serve para o painel virar para a semana seguinte). Em outro dia, vale a próxima reunião.
+      const semana = ehDiaReuniao(hoje(), dia) ? hoje() : refDiaReuniao(agora(), dia);
       const id = (await run(
         `insert into reunioes (data, semana, iniciada_em, status, combinados_snapshot, criada_por) values (?,?,?,?,?,?)`,
-        hoje(), refDiaReuniao(agora(), dia), agoraISO(), 'em_andamento', JSON.stringify(snapshot), req.user.id,
+        hoje(), semana, agoraISO(), 'em_andamento', JSON.stringify(snapshot), req.user.id,
       )).lastInsertRowid;
       res.status(201);
       return { reuniao: fmt(await q1('select * from reunioes where id = ?', id)), retomada: false, mostrar_combinados: mostrar };
