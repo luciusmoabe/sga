@@ -242,7 +242,17 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       if (novo !== a.status) {
         if (!TRANSICOES[a.status].includes(novo)) throw falha(409, 'Essa mudança de status não é permitida a partir do status atual.');
         if (novo === 'concluida' && a.tempo_total <= 0) throw falha(422, 'Informe o tempo gasto, em minutos, antes de concluir a ação.');
-        await run('update acoes set status = ?, concluida_em = ? where id = ?', novo, novo === 'concluida' ? agoraISO() : null, a.id);
+        await db.transaction(async () => {
+          await run('update acoes set status = ?, concluida_em = ? where id = ?', novo, novo === 'concluida' ? agoraISO() : null, a.id);
+          // Voltar para "a fazer" reabre o trabalho do zero: o tempo já registrado não descreve mais o que falta.
+          if (novo === 'a_fazer' && a.tempo_total > 0) {
+            await run('delete from tempo where acao_id = ?', a.id);
+            const h = Math.floor(a.tempo_total / 60), min = a.tempo_total % 60;
+            const tempoFmt = h ? `${h} h${min ? ` ${min} min` : ''}` : `${min} min`;
+            await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
+              a.id, req.user.id, `Status voltou para "a fazer": ${tempoFmt} de tempo registrado foram excluídos.`, agoraISO());
+          }
+        });
       }
     }
     return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id));

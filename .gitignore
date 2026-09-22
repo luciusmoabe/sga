@@ -41,3 +41,5 @@ Agendum/
 
 # Configuração local de servidores MCP (não versionar)
 .mcp.json
+.vercel
+.env*

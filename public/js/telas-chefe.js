@@ -294,6 +294,14 @@ export async function minhasAcoes(raiz) {
   on(raiz, 'click', '[data-status]', async (el) => {
     const a = acaoDe(el);
     if (el.getAttribute('aria-pressed') === 'true') return;
+    if (el.dataset.status === 'a_fazer' && a.tempo_total > 0) {
+      const ok = await confirmar({
+        titulo: 'Voltar para "a fazer"',
+        texto: `O tempo já registrado nesta ação (<b>${fmtMin(a.tempo_total)}</b>) será excluído, porque a ação recomeça do zero.`,
+        rotulo: 'Voltar e excluir o tempo', perigo: true,
+      });
+      if (!ok) return;
+    }
     try { await patch(`/acoes/${a.id}`, { status: el.dataset.status }); toast(`Status: ${STATUS[el.dataset.status]}.`); await recarregar(); }
     catch (e) {
       erro(e);

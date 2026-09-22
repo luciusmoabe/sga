@@ -330,3 +330,30 @@ test('ações demandadas pelo Diretor NÃO podem ser arquivadas nem excluídas (
   assert.equal(del.status, 403);
   assert.match(del.data.erro, /Diretor/);
 });
+
+test('voltar o status para "a fazer" exclui o tempo já registrado e registra um comentário', async () => {
+  const criada = await call(CHEFE.CPE, 'POST', '/acoes', { titulo: 'Ação para testar reinício', prazo: '2026-12-31' });
+  const id = criada.data.id;
+  assert.equal((await call(CHEFE.CPE, 'PATCH', `/acoes/${id}`, { status: 'em_andamento' })).status, 200);
+  assert.equal((await call(CHEFE.CPE, 'POST', `/acoes/${id}/tempo`, { minutos: 40 })).status, 201);
+  const comTempo = await call(CHEFE.CPE, 'GET', `/acoes/${id}`);
+  assert.equal(comTempo.data.tempo_total, 40);
+  assert.equal(comTempo.data.lancamentos.length, 1);
+
+  const voltou = await call(CHEFE.CPE, 'PATCH', `/acoes/${id}`, { status: 'a_fazer' });
+  assert.equal(voltou.status, 200);
+  assert.equal(voltou.data.tempo_total, 0, 'o tempo é excluído ao voltar para a_fazer');
+
+  const depois = await call(CHEFE.CPE, 'GET', `/acoes/${id}`);
+  assert.equal(depois.data.lancamentos.length, 0, 'os lançamentos de tempo somem');
+  assert.match(depois.data.comentarios.at(-1).texto, /40 min.*exclu[ií]dos/i);
+
+  // Sem tempo registrado, voltar para a_fazer não deixa comentário extra nem quebra nada
+  const semTempo = await call(CHEFE.CPE, 'POST', '/acoes', { titulo: 'Ação sem tempo', prazo: '2026-12-31' });
+  const idSemTempo = semTempo.data.id;
+  await call(CHEFE.CPE, 'PATCH', `/acoes/${idSemTempo}`, { status: 'em_andamento' });
+  const antes = (await call(CHEFE.CPE, 'GET', `/acoes/${idSemTempo}`)).data.comentarios.length;
+  assert.equal((await call(CHEFE.CPE, 'PATCH', `/acoes/${idSemTempo}`, { status: 'a_fazer' })).status, 200);
+  const depoisSemTempo = await call(CHEFE.CPE, 'GET', `/acoes/${idSemTempo}`);
+  assert.equal(depoisSemTempo.data.comentarios.length, antes, 'sem tempo registrado, não há comentário extra');
+});
