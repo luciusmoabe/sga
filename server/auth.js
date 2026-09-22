@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { falha, h } from './helpers.js';
 import { TAM_SENHA } from '../public/js/regras.js';
+import { ehProducao } from './ambiente.js';
 
 export const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const hash = valor => createHash('sha256').update(valor).digest('hex');
@@ -24,7 +25,7 @@ export function origemValida(valor, { permitirLocal = false } = {}) {
 export function configurarAuth(env = process.env) {
   const mode = env.SGC_AUTH_MODE || 'supabase';
   if (mode === 'demo') {
-    if (env.NODE_ENV === 'production' || env.VERCEL) throw new Error('Login de demonstração é proibido em produção.');
+    if (ehProducao(env)) throw new Error('Login de demonstração é proibido em produção.');
     return { mode };
   }
   if (mode !== 'supabase') throw new Error('SGC_AUTH_MODE deve ser supabase ou demo.');
@@ -35,7 +36,7 @@ export function configurarAuth(env = process.env) {
   let anon = false;
   try { anon = JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString()).role === 'anon'; } catch { /* não é chave legada */ }
   if (!/^sb_publishable_[A-Za-z0-9_-]+$/.test(key) && !anon) throw new Error('Use chave publishable ou anon; chaves administrativas não são aceitas no login.');
-  const permitirLocal = env.NODE_ENV !== 'production' && !env.VERCEL;
+  const permitirLocal = !ehProducao(env);
   const origin = origemValida(env.SGC_PUBLIC_ORIGIN, { permitirLocal });
   const supabaseUrl = origemValida(env.SUPABASE_URL, { permitirLocal });
   return { mode, origin, supabaseUrl, key, secure: origin.startsWith('https:') };
@@ -105,7 +106,7 @@ export function instalarAuth(app, db, config, provedor, contas) {
   app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); res.set('Referrer-Policy', 'no-referrer'); next(); });
   app.get('/api/auth/config', (req, res) => res.json({ modo: config.mode }));
   if (config.mode === 'demo') {
-    if (process.env.NODE_ENV === 'production' || process.env.VERCEL) throw new Error('Login de demonstração é proibido em produção.');
+    if (ehProducao()) throw new Error('Login de demonstração é proibido em produção.');
     app.get('/api/usuarios-demo', h(() => db.prepare(`select u.id, u.nome, u.perfil, u.secao_id, s.nome as secao_nome, s.sigla as secao_sigla
       from usuarios u left join secoes s on s.id = u.secao_id where u.ativo = 1
       order by case u.perfil when 'diretor' then 0 when 'apoio' then 1 when 'administrador' then 2 else 3 end, u.nome`).all()));

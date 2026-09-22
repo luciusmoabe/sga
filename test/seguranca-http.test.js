@@ -43,16 +43,16 @@ test('HSTS é enviado apenas quando o site é servido por HTTPS', async () => {
 });
 
 test('proxy confiável só é ativado por configuração explícita (a Vercel o ativa por padrão)', () => {
-  const antes = { v: process.env.VERCEL, t: process.env.SGC_TRUST_PROXY };
+  const antes = { v: process.env.VERCEL, n: process.env.NETLIFY, t: process.env.SGC_TRUST_PROXY };
   try {
-    delete process.env.VERCEL; delete process.env.SGC_TRUST_PROXY;
+    delete process.env.VERCEL; delete process.env.NETLIFY; delete process.env.SGC_TRUST_PROXY;
     assert.equal(createApp(db, { auth: { mode: 'demo' } }).get('trust proxy'), false);
     process.env.SGC_TRUST_PROXY = 'true'; // valor não numérico: um salto
     assert.equal(createApp(db, { auth: { mode: 'demo' } }).get('trust proxy'), 1);
     process.env.SGC_TRUST_PROXY = '2';
     assert.equal(createApp(db, { auth: { mode: 'demo' } }).get('trust proxy'), 2);
   } finally {
-    for (const [k, v] of [['VERCEL', antes.v], ['SGC_TRUST_PROXY', antes.t]]) {
+    for (const [k, v] of [['VERCEL', antes.v], ['NETLIFY', antes.n], ['SGC_TRUST_PROXY', antes.t]]) {
       if (v === undefined) delete process.env[k]; else process.env[k] = v;
     }
   }

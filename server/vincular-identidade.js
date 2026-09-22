@@ -2,12 +2,13 @@ import { pathToFileURL } from 'node:url';
 import { openDb } from './db.js';
 import { GUID, origemValida } from './auth.js';
 import { verificarMigracoes } from './migrations.js';
+import { ehProducao } from './ambiente.js';
 
 export async function vincularIdentidade(db, usuario, projeto, subject) {
   if (!Number.isSafeInteger(usuario) || usuario < 1 || !GUID.test(subject)) {
     throw new Error('Informe ID numérico do usuário, URL do projeto e UUID do usuário Supabase válidos.');
   }
-  projeto = origemValida(projeto, { permitirLocal: process.env.NODE_ENV !== 'production' && !process.env.VERCEL });
+  projeto = origemValida(projeto, { permitirLocal: !ehProducao() });
   await verificarMigracoes(db);
   return db.transaction(async () => {
     const u = await db.prepare('select id from usuarios where id = ? and ativo = 1').get(usuario);
