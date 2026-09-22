@@ -4,6 +4,7 @@ import { openDb } from './db.js';
 import { semearSeVazio } from './seed.js';
 import { aplicarMigracoes, verificarMigracoes } from './migrations.js';
 import { configurarAuth } from './auth.js';
+import { ehServerless } from './ambiente.js';
 
 const auth = configurarAuth();
 const db = openDb();
@@ -20,9 +21,10 @@ if (db.isPg) {
 
 export const app = createApp(db, { auth });
 
-// Modo standalone (local/VPS): escuta na porta configurada
-// Em produção na Vercel, este arquivo é importado como módulo e `app` é usado como handler
-if (!process.env.VERCEL) {
+// Modo standalone (local/VPS): escuta na porta configurada.
+// Em produção serverless (Netlify/Vercel), `app` é importado como handler e ninguém escuta porta:
+// no Netlify quem importa é netlify/functions/api.mjs.
+if (!ehServerless()) {
   const porta = Number(process.env.PORT || 3000);
   app.listen(porta, auth.mode === 'demo' ? '127.0.0.1' : undefined, () => {
     console.log(`SGC/Agilis em http://localhost:${porta}`);

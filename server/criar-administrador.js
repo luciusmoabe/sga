@@ -9,6 +9,7 @@ import { openDb } from './db.js';
 import { GUID, origemValida } from './auth.js';
 import { verificarMigracoes } from './migrations.js';
 import { administradorAuth, cadastrarChefe } from './cadastro-chefes.js';
+import { ehProducao } from './ambiente.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -39,7 +40,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     throw new Error('Uso: node server/criar-administrador.js --sqlite ARQUIVO|--postgres "Nome" email');
   }
   if (modo === '--postgres' && !process.env.SGC_MIGRATION_DATABASE_URL) throw new Error('Configure SGC_MIGRATION_DATABASE_URL explicitamente.');
-  const local = process.env.NODE_ENV !== 'production' && !process.env.VERCEL;
+  const local = !ehProducao();
   const config = { supabaseUrl: origemValida(process.env.SUPABASE_URL || '', { permitirLocal: local }) };
   const subject = process.env.SGC_ADMIN_SUBJECT || null;
   const db = modo === '--sqlite' ? openDb(arquivo, { databaseUrl: null })

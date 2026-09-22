@@ -11,6 +11,7 @@ import { rotasReunioes } from './reunioes.js';
 import { cabecalhosSeguranca } from './seguranca-http.js';
 import { configurarAuth, instalarAuth } from './auth.js';
 import { administradorAuth } from './cadastro-chefes.js';
+import { ehServerless } from './ambiente.js';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -20,9 +21,9 @@ const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  */
 export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } = {}) {
   const app = express();
-  // Atrás do proxy da Vercel (ou de outro proxy confiável), o IP real vem de X-Forwarded-For.
-  // Sem isso o limite de tentativas de login trataria todos os usuários como um só IP.
-  if (process.env.VERCEL || process.env.SGC_TRUST_PROXY) app.set('trust proxy', Number(process.env.SGC_TRUST_PROXY) || 1);
+  // Atrás do proxy da plataforma (Netlify, Vercel ou outro proxy confiável), o IP real vem de
+  // X-Forwarded-For. Sem isso o limite de tentativas de login trataria todos os usuários como um só IP.
+  if (ehServerless() || process.env.SGC_TRUST_PROXY) app.set('trust proxy', Number(process.env.SGC_TRUST_PROXY) || 1);
   app.disable('x-powered-by');
   app.use(cabecalhosSeguranca({ https: !!auth?.secure }));
   app.use(compression({ threshold: 512 })); // gzip/brotli: reduz JSON em ~70-80%

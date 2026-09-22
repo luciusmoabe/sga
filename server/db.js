@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import 'dotenv/config';
+import { ehServerless } from './ambiente.js';
 
 const { Pool, types } = pg;
 // Garante que contadores e identificadores int8 sejam retornados como Number no JavaScript
@@ -222,8 +223,8 @@ export function configurarPg(url, env = process.env) {
       rejectUnauthorized: true,
       ...(env.SGC_PG_CA_FILE ? { ca: fs.readFileSync(env.SGC_PG_CA_FILE, 'utf8') } : {}),
     },
-    // Serverless (Vercel): cada instância abre o próprio pool; poucas conexões evitam esgotar o limite do banco.
-    max: Number(env.PG_POOL_MAX) || (env.VERCEL ? 5 : 10),
+    // Serverless (Netlify/Vercel): cada instância abre o próprio pool; poucas conexões evitam esgotar o limite do banco.
+    max: Number(env.PG_POOL_MAX) || (ehServerless(env) ? 5 : 10),
     keepAlive: true,                 // evita refazer TLS (~1 s) em conexões ociosas
     idleTimeoutMillis: 30_000,       // fecha conexões ociosas após 30s
     connectionTimeoutMillis: 5_000,  // erro se não conectar em 5s
@@ -301,8 +302,8 @@ export function createPgDb(pool) {
 
 export function openDb(target = process.env.SGC_DB || 'data/sgc.db', { databaseUrl = process.env.DATABASE_URL } = {}) {
   const dbUrl = databaseUrl;
-  if (process.env.VERCEL && (!dbUrl || target === ':memory:')) {
-    throw new Error('Configure DATABASE_URL PostgreSQL na Vercel; SQLite não é suportado nesse ambiente.');
+  if (ehServerless() && (!dbUrl || target === ':memory:')) {
+    throw new Error('Configure DATABASE_URL PostgreSQL na hospedagem; SQLite não é suportado nesse ambiente.');
   }
   if (target !== ':memory:' && dbUrl) {
     return openPgDb(dbUrl);
