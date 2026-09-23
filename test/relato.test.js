@@ -7,22 +7,22 @@ import { once } from 'node:events';
 import { openDb } from '../server/db.js';
 import { seed } from '../server/seed.js';
 import { createApp } from '../server/app.js';
-import { janelasDoRelato, segundaDe } from '../server/relato.js';
+import { janelasDoRelato, montarRelato, segundaDe } from '../server/relato.js';
 
 const DIRETOR = 1, ADMIN = 10, CHEFE_CPE = 3;
 const SEMANA = '2026-09-22';
 
-test('janelas: concluídas da segunda anterior à véspera; programadas do dia da reunião ao domingo', () => {
+test('janelas: concluídas da segunda anterior à véspera; atrasadas antes de hoje; programadas de hoje ao domingo', () => {
   assert.equal(segundaDe('2026-09-22'), '2026-09-21');
   assert.equal(segundaDe('2026-09-27'), '2026-09-21', 'domingo pertence à semana que começou na segunda');
   assert.equal(segundaDe('2026-09-21'), '2026-09-21');
-  // Reunião na terça 22/09
-  assert.deepEqual(janelasDoRelato('2026-09-22'), {
-    concluidas: { de: '2026-09-14', ate: '2026-09-21' }, programadas: { de: '2026-09-22', ate: '2026-09-27' }, atrasadas: { antes: '2026-09-22' },
+  // Reunião na terça 22/09, vista na segunda 21/09
+  assert.deepEqual(janelasDoRelato('2026-09-22', '2026-09-21'), {
+    concluidas: { de: '2026-09-14', ate: '2026-09-21' }, programadas: { de: '2026-09-21', ate: '2026-09-27' }, atrasadas: { antes: '2026-09-21' },
   });
-  // Reunião na quarta 23/09 (o caso do Departamento): concluídas de 14/09 a 22/09
-  assert.deepEqual(janelasDoRelato('2026-09-23'), {
-    concluidas: { de: '2026-09-14', ate: '2026-09-22' }, programadas: { de: '2026-09-23', ate: '2026-09-27' }, atrasadas: { antes: '2026-09-23' },
+  // Reunião na quarta 30/09, vista na quarta 23/09 (o caso do Departamento)
+  assert.deepEqual(janelasDoRelato('2026-09-30', '2026-09-23'), {
+    concluidas: { de: '2026-09-21', ate: '2026-09-29' }, programadas: { de: '2026-09-23', ate: '2026-10-04' }, atrasadas: { antes: '2026-09-23' },
   });
 });
 
@@ -66,8 +66,9 @@ test('o relato traz as concluídas, atrasadas e programadas nas janelas certas, 
   assert.equal(status, 200);
   const titulos = (bloco) => data.relato[bloco].map((a) => a.titulo).filter((x) => x.startsWith('R-'));
   assert.deepEqual(titulos('concluidas'), ['R-conc-inicio', 'R-conc-arquivada', 'R-conc-subsecao', 'R-conc-vespera-noite']);
-  assert.deepEqual(titulos('atrasadas'), ['R-atrasada', 'R-atrasada-vespera']);
-  assert.deepEqual(titulos('programadas'), ['R-prog-dia-reuniao', 'R-prog-domingo']);
+  // Hoje é 21/09: só o que venceu antes de hoje é atrasado; o prazo de hoje ainda é programado.
+  assert.deepEqual(titulos('atrasadas'), ['R-atrasada']);
+  assert.deepEqual(titulos('programadas'), ['R-atrasada-vespera', 'R-prog-dia-reuniao', 'R-prog-domingo']);
   assert.deepEqual(data.relato.janelas.concluidas, { de: '2026-09-14', ate: '2026-09-21' });
   assert.equal(data.desatualizada, null, 'ainda não foi enviado');
   // A subseção só aparece porque o chefe do Centro enxerga a árvore inteira.
@@ -195,4 +196,18 @@ test('a ata não cria a seção de impedimentos críticos quando não há nenhum
   const reuniao = (await call(DIRETOR, 'POST', '/reunioes/iniciar', {})).data.reuniao;
   const ata = (await call(DIRETOR, 'POST', `/reunioes/${reuniao.id}/encerrar`, {})).data.ata_texto;
   assert.ok(!ata.includes('Impedimentos críticos em aberto'));
+});
+
+test('atrasada é a que venceu antes de hoje, não antes da reunião; o prazo entre hoje e a reunião é programado', async (t) => {
+  const { db, nova } = await montar(t);
+  await nova(1, 'T-prazo-25', { prazo: '2026-09-25', status: 'a_fazer' });
+  const em = async (hoje) => {
+    const rel = await montarRelato(db, 1, '2026-09-30', hoje); // reunião na quarta 30/09
+    const noBloco = (bloco) => rel[bloco].some((a) => a.titulo === 'T-prazo-25');
+    return { atrasada: noBloco('atrasadas'), programada: noBloco('programadas') };
+  };
+  assert.deepEqual(await em('2026-09-23'), { atrasada: false, programada: true }, 'ainda não venceu: aparece em "será feito"');
+  assert.deepEqual(await em('2026-09-25'), { atrasada: false, programada: true }, 'no dia do prazo ainda não está atrasada');
+  assert.deepEqual(await em('2026-09-26'), { atrasada: true, programada: false }, 'venceu ontem');
+  assert.deepEqual(await em('2026-09-29'), { atrasada: true, programada: false }, 'ao enviar, na véspera da reunião');
 });

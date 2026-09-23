@@ -49,7 +49,8 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     const semana = await semanaDe(req);
     const anterior = (await q1(`select semana from atualizacoes where secao_id = ? and semana < ? order by semana desc limit 1`, secaoId, semana))?.semana;
     const prev = anterior ? await ultimaAtualizacao(db, secaoId, anterior) : null;
-    const [atual, relato] = await Promise.all([ultimaAtualizacao(db, secaoId, semana), montarRelato(db, secaoId, semana)]);
+    const resumo = req.query.resumo === '1'; // o Início só precisa do relato enviado: poupa as consultas do relato ao vivo
+    const [atual, relato] = await Promise.all([ultimaAtualizacao(db, secaoId, semana), resumo ? null : montarRelato(db, secaoId, semana, hoje())]);
     // Depois de enviado, o relato pode mudar (ação concluída, prazo novo, impedimento resolvido): avisa o chefe.
     const enviado = atual?.feito?.snapshot;
     return {
@@ -58,7 +59,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
       atual,
       anterior: prev ? { semana: anterior, proximo: prev.proximo } : null,
       relato,
-      desatualizada: enviado ? assinatura(paraSnapshot(relato)) !== assinatura(enviado) : null,
+      desatualizada: enviado && relato ? assinatura(paraSnapshot(relato)) !== assinatura(enviado) : null,
     };
   }));
   // Envio do relato montado a partir das ações: o servidor recalcula os blocos e congela a cópia; o cliente só
@@ -67,7 +68,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     const observacoes = texto(b.observacoes, 600);
     return db.transaction(async () => {
       if (db.isPg) await q1('select id from secoes where id = ? for update', secaoId);
-      const relato = await montarRelato(db, secaoId, semana);
+      const relato = await montarRelato(db, secaoId, semana, hoje());
       const snapshot = paraSnapshot(relato, observacoes);
       const total = ['concluidas', 'atrasadas', 'programadas', 'impedimentos'].reduce((n, k) => n + relato[k].length, 0);
       if (!total && !observacoes) {

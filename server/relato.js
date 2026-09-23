@@ -3,22 +3,22 @@
 // para que o histórico e a reunião não mudem depois. Ações internas entram só como contagem na cópia.
 import { subarvore } from './db.js';
 import { dataNoFuso, instante } from '../public/js/datas.js';
-import { addDays, parseISO } from './logic.js';
+import { addDays, hojeISO, parseISO } from './logic.js';
 import { marks } from './helpers.js';
 
 /** Segunda-feira da semana (segunda a domingo) que contém a data. */
 export const segundaDe = (data) => addDays(data, -((parseISO(data).getUTCDay() + 6) % 7));
 
-/** Janelas do relato para a reunião de `semana` (data ISO do dia da reunião).
+/** Janelas do relato para a reunião de `semana` (data ISO do dia da reunião), vistas em `hoje`.
  *  Concluídas: da segunda-feira da semana anterior até a véspera da reunião.
- *  Programadas: do dia da reunião até o domingo da mesma semana.
- *  Atrasadas: prazo anterior ao dia da reunião. */
-export function janelasDoRelato(semana) {
+ *  Atrasadas: prazo anterior a hoje (a mesma regra do semáforo), ainda não concluídas.
+ *  Programadas: prazo de hoje até o domingo da semana da reunião. */
+export function janelasDoRelato(semana, hoje = hojeISO()) {
   const segunda = segundaDe(semana);
   return {
     concluidas: { de: addDays(segunda, -7), ate: addDays(semana, -1) },
-    programadas: { de: semana, ate: addDays(segunda, 6) },
-    atrasadas: { antes: semana },
+    programadas: { de: hoje, ate: addDays(segunda, 6) },
+    atrasadas: { antes: hoje },
   };
 }
 
@@ -33,8 +33,8 @@ const acaoOut = (a) => ({
 });
 
 /** Relato ao vivo de uma seção: quatro blocos e as janelas usadas. Inclui ações internas (marcadas). */
-export async function montarRelato(db, secaoId, semana) {
-  const janelas = janelasDoRelato(semana);
+export async function montarRelato(db, secaoId, semana, hoje = hojeISO()) {
+  const janelas = janelasDoRelato(semana, hoje);
   const ids = await subarvore(db, secaoId);
   const lugares = marks(ids);
   const base = `select a.id, a.titulo, a.prazo, a.status, a.prioridade, a.secao_id, a.interna, a.compartilhada, a.concluida_em,
@@ -60,7 +60,7 @@ export async function montarRelato(db, secaoId, semana) {
     semana,
     janelas,
     concluidas: concluidas.map(acaoOut),
-    atrasadas: abertas.filter((a) => a.prazo < semana).map(acaoOut),
+    atrasadas: abertas.filter((a) => a.prazo < janelas.atrasadas.antes).map(acaoOut),
     programadas: abertas.filter((a) => a.prazo >= janelas.programadas.de && a.prazo <= janelas.programadas.ate).map(acaoOut),
     impedimentos: impedimentos.map((i) => ({
       id: i.id, acao_id: i.acao_id, acao_titulo: i.acao_titulo, acao_status: i.acao_status,

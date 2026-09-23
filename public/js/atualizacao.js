@@ -57,7 +57,7 @@ export async function atualizacao(raiz, { refresh }) {
     <form id="form-at" novalidate>
       <div class="erro-form oculto" role="alert"></div>
       ${bloco('O que foi feito', `Ações concluídas de ${br(j.concluidas.de)} a ${br(j.concluidas.ate)}`, rel.concluidas.map((a) => linhaAcao(a, { concluida: true })), 'Nenhuma ação concluída neste período.')}
-      ${bloco('Atrasadas', `Prazo anterior a ${br(j.atrasadas.antes)} e ainda não concluídas. Deixam a seção em vermelho.`, rel.atrasadas.map((a) => linhaAcao(a)), 'Nenhuma ação atrasada.')}
+      ${bloco('Atrasadas', `Prazo vencido antes de hoje (${br(j.atrasadas.antes)}) e ainda não concluídas. Deixam a seção em vermelho.`, rel.atrasadas.map((a) => linhaAcao(a)), 'Nenhuma ação atrasada.')}
       ${bloco('O que será feito nesta semana', `Ações com prazo de ${br(j.programadas.de)} a ${br(j.programadas.ate)}`, rel.programadas.map((a) => linhaAcao(a)), 'Nenhuma ação com prazo neste período.')}
       ${bloco('O que trava', 'Impedimentos ainda abertos nas suas ações. Para registrar um novo, use o botão da ação.', rel.impedimentos.map(linhaImpedimento), 'Nenhum impedimento aberto.')}
       <div class="cartao"><h2>Observações</h2><div class="campo"><label for="obs" class="suave pequeno">Algo que não está nas ações (opcional)</label>
