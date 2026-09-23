@@ -149,7 +149,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     const [a, b] = await cluster.banco();
     await assert.rejects(verificarMigracoes(a), /Migrações pendentes/);
     const resultados = await Promise.all([aplicarMigracoes(a), aplicarMigracoes(b)]);
-    assert.deepEqual(resultados.flat().sort(), [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert.deepEqual(resultados.flat().sort(), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
     await verificarMigracoes(b);
     assert.deepEqual(await aplicarMigracoes(a), []);
   });
@@ -164,7 +164,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     assert.equal((await db.prepare("select to_regclass('uq_pedido_pendente_acao') as nome").get()).nome, null);
     assert.equal((await db.prepare("select count(*) n from information_schema.columns where table_name = 'acoes' and column_name = 'arquivada'").get()).n, 0);
     await db.exec('drop table uq_reuniao_em_andamento');
-    assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
   await t.test('rollback não desfaz outra conexão nem expõe dados sem commit', async () => {

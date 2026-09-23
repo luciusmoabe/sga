@@ -11,7 +11,7 @@ with consultas (ordem, secao, item, tabela, consulta) as (values
     'select version() as v'),
   (11, '1. Ambiente', 'Papel desta conexão (o SQL Editor usa o dono do banco)', null,
     'select current_user || '' | bypassrls='' || (select rolbypassrls::text from pg_roles where rolname = current_user) as v'),
-  (20, '2. Migrações', 'Versões aplicadas (o código atual espera 1 a 8)', 'public.schema_migrations',
+  (20, '2. Migrações', 'Versões aplicadas (o código atual espera 1 a 9)', 'public.schema_migrations',
     'select coalesce(string_agg(id::text, '', '' order by id), ''nenhuma'') as v from public.schema_migrations'),
   (30, '3. Tabelas', 'Tabelas do esquema public e nº de linhas', null,
     'select coalesce(string_agg(t.table_name || '' = '' || (xpath(''/row/c/text()'', query_to_xml(format(''select count(*) as c from %I.%I'', t.table_schema, t.table_name), false, true, '''')))[1]::text, '', '' order by t.table_name), ''nenhuma'') as v from information_schema.tables t where t.table_schema = ''public'' and t.table_type = ''BASE TABLE'''),

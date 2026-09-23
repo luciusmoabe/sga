@@ -56,7 +56,7 @@ Antes de qualquer alteração:
 
    | Linha do diagnóstico | Se for assim | O que fazer |
    | --- | --- | --- |
-   | Versões aplicadas | "tabela ausente" | Normal em banco criado só com o esquema base ou com a carga inicial: o migrador aplica as versões 1 a 8 |
+   | Versões aplicadas | "tabela ausente" | Normal em banco criado só com o esquema base ou com a carga inicial: o migrador aplica as versões 1 a 9 |
    | Versões aplicadas | Termina antes da 8 | O migrador aplica as que faltam |
    | Reuniões em andamento | Mais de 1 | A migração 2 **interrompe** sem apagar nada. Decida qual reunião fica e encerre as demais (veja "Se houver duplicidades antigas" em [MIGRACOES.md](MIGRACOES.md)) |
    | Ações com mais de um pedido de prazo pendente | Mais de 0 | Mesma situação: resolva os pedidos duplicados antes |
@@ -75,7 +75,7 @@ Antes de qualquer alteração:
    ```
 
    **Esperado:** a lista de versões aplicadas termina na 8. Rodar de novo não aplica nada. Se a migração parar com um diagnóstico de duplicidades, nada foi alterado: corrija os dados apontados e repita.
-5. **Rode o diagnóstico de novo.** Esperado: versões 1 a 8, restrição de perfil com `administrador`, RLS ligada em todas as tabelas, índices únicos presentes e permissões de `anon`/`authenticated` iguais a "nenhuma".
+5. **Rode o diagnóstico de novo.** Esperado: versões 1 a 9, restrição de perfil com `administrador`, RLS ligada em todas as tabelas, índices únicos presentes e permissões de `anon`/`authenticated` iguais a "nenhuma".
 
 ### 3.2 Se o banco estiver vazio (projeto novo)
 

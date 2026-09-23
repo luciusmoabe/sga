@@ -1,5 +1,5 @@
 export const TABELAS_APP = ['secoes', 'usuarios', 'diretrizes', 'acoes', 'acao_comentarios', 'tempo',
-  'pedidos_prazo', 'atualizacoes', 'combinados', 'config', 'reunioes', 'decisoes'];
+  'pedidos_prazo', 'atualizacoes', 'combinados', 'config', 'reunioes', 'decisoes', 'impedimentos'];
 
 // Escopo restrito aos objetos do Agilis. A conexão do backend usa proprietário
 // ou papel administrado com BYPASSRLS; navegadores só acessam a API Express.

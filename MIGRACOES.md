@@ -38,6 +38,7 @@ O migrador não utiliza `DATABASE_URL` como destino implícito. Não registre a 
 | 6 | `autoria_acoes` | Adiciona `acoes.criado_por` e preenche a autoria das ações vindas de diretrizes; reaplica RLS e revogações em PostgreSQL/public |
 | 8 | `perfil_administrador` | Aceita o perfil `administrador` em `usuarios.perfil` e adiciona `usuarios.trocar_senha` (0 nos usuários existentes). No SQLite a tabela `usuarios` é reconstruída, como na versão 3, preservando dados, índices, views e triggers; no PostgreSQL a restrição de perfil é recriada. Reaplica RLS e revogações em PostgreSQL/public |
 | 7 | `sessao_deslizante` | Adiciona `auth_sessoes_senha.criada_em` (0 nas sessões já abertas, que expiram no prazo original); reaplica RLS e revogações em PostgreSQL/public |
+| 9 | `impedimentos_da_acao` | Cria `impedimentos` (ligados a `acoes`, com `critico`, `apoio`, autoria e ciclo aberto → resolvido) e seus índices, inclusive o parcial dos abertos; em PostgreSQL/public reaplica RLS e revogações. Não altera nem apaga dados existentes; os impedimentos em texto dos relatos já enviados continuam nesses relatos |
 
 A unicidade das versões semanais já faz parte do esquema base (`secao_id`, `semana`, `versao`). Os destinos e as regras de exclusão/atualização de todas as FKs do esquema migrado são comparados automaticamente entre SQLite e PostgreSQL.
 

@@ -1,6 +1,6 @@
 -- Agilis / Supabase PostgreSQL
 -- ATENÇÃO: remove TODAS as ações, inclusive concluídas, encerradas e arquivadas,
--- e TODOS os comentários, lançamentos de tempo e pedidos de prazo associados.
+-- e TODOS os comentários, impedimentos, lançamentos de tempo e pedidos de prazo associados.
 -- Faça backup antes de executar e suspenda o uso do app durante a limpeza.
 -- Execute o arquivo inteiro no SQL Editor do projeto correto, como administrador.
 --
@@ -15,6 +15,7 @@ set local statement_timeout = '60s';
 
 truncate table
   public.acao_comentarios,
+  public.impedimentos,
   public.tempo,
   public.pedidos_prazo,
   public.acoes
@@ -23,6 +24,7 @@ continue identity restrict;
 select
   (select count(*) from public.acoes) as acoes_restantes,
   (select count(*) from public.acao_comentarios) as comentarios_restantes,
+  (select count(*) from public.impedimentos) as impedimentos_restantes,
   (select count(*) from public.tempo) as tempos_restantes,
   (select count(*) from public.pedidos_prazo) as pedidos_restantes;
 

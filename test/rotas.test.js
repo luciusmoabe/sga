@@ -40,6 +40,8 @@ const ESPERADAS = [
   'POST /api/acoes/:id/desarquivar',
   'POST /api/acoes/:id/devolver',
   'POST /api/acoes/:id/encerrar',
+  'POST /api/acoes/:id/impedimentos',
+  'POST /api/acoes/:id/impedimentos/:iid/resolver',
   'POST /api/acoes/:id/pedido-prazo',
   'POST /api/acoes/:id/tempo',
   'POST /api/combinados',

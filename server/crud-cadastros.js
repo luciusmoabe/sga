@@ -34,6 +34,8 @@ export async function excluirCadastro(db, tabela, id) {
           ['acoes','criado_por','ações criadas'],
           ['diretrizes','criado_por','diretrizes'],
           ['acao_comentarios','usuario_id','comentários'],
+          ['impedimentos','criado_por','impedimentos registrados'],
+          ['impedimentos','resolvido_por','resoluções de impedimento'],
           ['tempo','usuario_id','lançamentos de tempo'],
           ['pedidos_prazo','usuario_id','pedidos de prazo'],
           ['pedidos_prazo','decidido_por','decisões de prazo'],

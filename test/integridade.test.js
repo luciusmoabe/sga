@@ -32,7 +32,7 @@ test('SQLite: versão 3 preserva dados, índices, views e triggers do esquema an
     end`);
   const tabelas = ['secoes', 'usuarios', 'acoes', 'tempo', 'decisoes', 'pedidos_prazo'];
   const antes = await Promise.all(tabelas.map(nome => db.prepare(`select * from ${nome} order by id`).all()));
-  assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6, 7, 8, 9]);
   const depois = await Promise.all(tabelas.map(nome => db.prepare(`select * from ${nome} order by id`).all()));
   for (const acao of depois[2]) delete acao.criado_por; // coluna adicionada pela migração 6
   assert.deepEqual(depois, antes);
@@ -53,7 +53,7 @@ test('SQLite: chefe órfão impede migração sem alterar registros ou versão',
   assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 2);
   assert.equal((await db.prepare('pragma foreign_keys').get()).foreign_keys, 1);
   await db.exec('update secoes set chefe_id = 3 where id = 1');
-  assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6, 7, 8, 9]);
 });
 
 test('SQLite: erro após reconstrução desfaz o esquema e restaura fiscalização das FKs', async t => {
@@ -76,7 +76,7 @@ test('SQLite: erro após reconstrução desfaz o esquema e restaura fiscalizaç�
   assert.ok(!(await db.prepare('pragma foreign_key_list(secoes)').all()).some(c => c.from === 'chefe_id'));
   assert.equal((await db.prepare('pragma foreign_keys').get()).foreign_keys, 1);
   await assert.rejects(db.exec('update acoes set secao_id = 9999 where id = 1'), /FOREIGN KEY/);
-  assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6, 7, 8, 9]);
 });
 
 test('SQLite: verificação final impede commit de referências inválidas no modo de reconstrução', async t => {

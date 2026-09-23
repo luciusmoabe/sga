@@ -9,9 +9,9 @@ test('migrações: aplicação concorrente é idempotente e registra a versão',
   t.after(() => db.close());
   await assert.rejects(verificarMigracoes(db), /Migrações pendentes/);
   const resultados = await Promise.all([aplicarMigracoes(db), aplicarMigracoes(db)]);
-  assert.deepEqual(resultados, [[1, 2, 3, 4, 5, 6, 7, 8], []]);
+  assert.deepEqual(resultados, [[1, 2, 3, 4, 5, 6, 7, 8, 9], []]);
   await verificarMigracoes(db);
-  assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 8);
+  assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 9);
 });
 
 test('migrações: esquema antigo recebe arquivamento sem perder ações existentes', async (t) => {
@@ -20,7 +20,7 @@ test('migrações: esquema antigo recebe arquivamento sem perder ações existen
   await seed(db);
   const antes = await db.prepare('select id, titulo from acoes order by id').all();
   await db.exec('drop index uq_pedido_pendente_acao; drop index uq_reuniao_em_andamento; drop table schema_migrations; alter table acoes drop column arquivada');
-  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   assert.deepEqual(await db.prepare('select id, titulo from acoes order by id').all(), antes);
   assert.ok((await db.prepare('select arquivada from acoes').all()).every(a => a.arquivada === 0));
 });
@@ -61,7 +61,7 @@ test('migrações: erro de DDL desfaz índices e registro da migração', async 
   await assert.rejects(aplicarMigracoes(db), /Falha de DDL/);
   assert.deepEqual(await db.prepare("select name from sqlite_master where name in ('schema_migrations','uq_pedido_pendente_acao')").all(), []);
   db.exec = executar;
-  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
 });
 
 test('migrações: índices impedem duplicidades até em escritas diretas', async (t) => {
@@ -125,5 +125,25 @@ test('migrações: banco anterior à versão 8 ganha o perfil Administrador sem 
   assert.deepEqual(await db.prepare('pragma foreign_key_check').all(), [], 'nenhuma referência ficou órfã');
   assert.equal((await db.prepare("select count(*) n from sqlite_master where name in ('idx_usuarios_perfil','chefes_ativos')").get()).n, 2, 'índice e view preservados');
   assert.ok((await db.prepare('select count(*) n from secoes where chefe_id is not null').get()).n > 0);
+  assert.deepEqual(await aplicarMigracoes(db), [], 'reexecução não altera nada');
+});
+
+test('migrações: banco anterior à versão 9 ganha os impedimentos das ações sem perder dados', async (t) => {
+  const db = openDb(':memory:');
+  t.after(() => db.close());
+  await seed(db);
+  await db.exec('drop table impedimentos; delete from schema_migrations where id = 9');
+  const acoes = (await db.prepare('select count(*) n from acoes').get()).n;
+  assert.ok(acoes > 0);
+
+  assert.deepEqual(await aplicarMigracoes(db), [9]);
+
+  assert.equal((await db.prepare('select count(*) n from acoes').get()).n, acoes, 'as ações seguem intactas');
+  const acao = await db.prepare('select id from acoes limit 1').get();
+  const id = (await db.prepare("insert into impedimentos (acao_id, descricao, critico, criado_em) values (?, 'Teste', 1, '2026-09-19T10:00:00')").run(acao.id)).lastInsertRowid;
+  const linha = await db.prepare('select * from impedimentos where id = ?').get(id);
+  assert.deepEqual([linha.critico, linha.resolvido_em, linha.resolvido_por, linha.apoio], [1, null, null, null]);
+  await assert.rejects(db.prepare("insert into impedimentos (acao_id, descricao, criado_em) values (999999, 'Órfão', 'x')").run(), /FOREIGN KEY/);
+  assert.equal((await db.prepare("select count(*) n from sqlite_master where name in ('idx_impedimentos_acao','idx_impedimentos_abertos')").get()).n, 2);
   assert.deepEqual(await aplicarMigracoes(db), [], 'reexecução não altera nada');
 });

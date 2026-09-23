@@ -3,7 +3,7 @@ begin;
 do $seguranca$
 declare tabela text; papel text; colunas text; sequencia text;
 begin
-  foreach tabela in array array['secoes', 'usuarios', 'diretrizes', 'acoes', 'acao_comentarios', 'tempo', 'pedidos_prazo', 'atualizacoes', 'combinados', 'config', 'reunioes', 'decisoes', 'schema_migrations', 'auth_identidades', 'auth_sessoes', 'auth_fluxos', 'auth_contas', 'auth_sessoes_senha', 'auth_tentativas'] loop
+  foreach tabela in array array['secoes', 'usuarios', 'diretrizes', 'acoes', 'acao_comentarios', 'tempo', 'pedidos_prazo', 'atualizacoes', 'combinados', 'config', 'reunioes', 'decisoes', 'impedimentos', 'schema_migrations', 'auth_identidades', 'auth_sessoes', 'auth_fluxos', 'auth_contas', 'auth_sessoes_senha', 'auth_tentativas'] loop
     if to_regclass(format('public.%I', tabela)) is null then continue; end if;
     execute format('alter table public.%I enable row level security', tabela);
     select string_agg(format('%I', column_name), ', ') into colunas from information_schema.columns

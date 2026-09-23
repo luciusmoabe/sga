@@ -20,7 +20,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       d.reuniao_id,
       r.semana as reuniao_semana,
       coalesce((select sum(minutos) from tempo where acao_id = a.id), 0) as tempo_total,
-      exists(select 1 from pedidos_prazo p where p.acao_id = a.id and p.status = 'pendente') as pedido_pendente
+      exists(select 1 from pedidos_prazo p where p.acao_id = a.id and p.status = 'pendente') as pedido_pendente,
+      (select count(*) from impedimentos i where i.acao_id = a.id and i.resolvido_em is null) as impedimentos_abertos,
+      exists(select 1 from impedimentos i where i.acao_id = a.id and i.resolvido_em is null and i.critico = 1) as impedimento_critico
     from acoes a
     join secoes s on s.id = a.secao_id
     left join usuarios ua on ua.id = a.criado_por
@@ -34,12 +36,15 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     encerrada: !!a.encerrada,
     arquivada: !!a.arquivada,
     pedido_pendente: !!a.pedido_pendente,
+    impedimentos_abertos: Number(a.impedimentos_abertos || 0),
+    impedimento_critico: !!a.impedimento_critico,
     atrasada: a.status !== 'concluida' && !a.encerrada && !a.arquivada && a.prazo < hoje(),
     demandada_diretor: !!a.diretriz_id || a.demandado_por_perfil === 'diretor',
     demandado_em: a.demandado_em || a.criada_em,
     demandado_por_nome: a.demandado_por_nome,
     reuniao_semana: a.reuniao_semana,
   });
+  const impedimentoOut = (i) => ({ ...i, critico: !!i.critico, aberto: !i.resolvido_em });
   const acaoVisivel = async (user, id) => {
     const v = await visiveisAcoes(user);
     const a = await q1(`${SELECT_ACAO} where a.id = ? and ${v.where}`, id, ...v.params);
@@ -180,6 +185,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         if (await q1('select id from acoes where acao_pai_id=?',a.id)) throw falha(409,'Exclua primeiro as ações derivadas desta ação.');
         await run('delete from tempo where acao_id = ?', a.id);
         await run('delete from acao_comentarios where acao_id = ?', a.id);
+        await run('delete from impedimentos where acao_id = ?', a.id);
         await run('delete from pedidos_prazo where acao_id = ?', a.id);
         await run('delete from acoes where id = ?', a.id);
         return { ok: true, id: a.id };
@@ -222,6 +228,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       comentarios: await q(`select c.*, u.nome as usuario_nome from acao_comentarios c left join usuarios u on u.id = c.usuario_id where c.acao_id = ? order by c.id`, a.id),
       lancamentos: await q(`select t.*, u.nome as usuario_nome from tempo t left join usuarios u on u.id = t.usuario_id where t.acao_id = ? order by t.data desc, t.id desc`, a.id),
       pedidos: await q('select * from pedidos_prazo where acao_id = ? order by id desc', a.id),
+      impedimentos: (await q(`select i.*, uc.nome as criado_por_nome, ur.nome as resolvido_por_nome from impedimentos i
+        left join usuarios uc on uc.id = i.criado_por left join usuarios ur on ur.id = i.resolvido_por
+        where i.acao_id = ? order by i.id desc`, a.id)).map(impedimentoOut),
     };
   }));
 
@@ -244,6 +253,11 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         if (novo === 'concluida' && a.tempo_total <= 0) throw falha(422, 'Informe o tempo gasto, em minutos, antes de concluir a ação.');
         await db.transaction(async () => {
           await run('update acoes set status = ?, concluida_em = ? where id = ?', novo, novo === 'concluida' ? agoraISO() : null, a.id);
+          // Ação concluída não tem mais o que travar: os impedimentos abertos são encerrados, e o histórico fica.
+          if (novo === 'concluida') {
+            await run('update impedimentos set resolvido_em = ?, resolvido_por = ?, resolucao = ? where acao_id = ? and resolvido_em is null',
+              agoraISO(), req.user.id, 'Ação concluída.', a.id);
+          }
           // Voltar para "a fazer" reabre o trabalho do zero: o tempo já registrado não descreve mais o que falta.
           if (novo === 'a_fazer' && a.tempo_total > 0) {
             await run('delete from tempo where acao_id = ?', a.id);
@@ -298,6 +312,71 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     });
     res.status(201);
     return { ok: true };
+  }));
+
+  // ---------- Impedimentos da ação ----------
+  // Histórico com ciclo aberto → resolvido; nunca editado nem excluído (correção = resolver e registrar outro).
+  // O chefe age na própria árvore; Diretor, Apoio e Administrador, em qualquer ação que possam ver.
+  const perfisImpedimento = permit('chefe', 'diretor', 'apoio', 'administrador');
+  const podeAgirNoImpedimento = async (user, acao) => { if (user.perfil === 'chefe') await chefeGere(user, acao); };
+
+  app.post('/api/acoes/:id/impedimentos', perfisImpedimento, h(async (req, res) => {
+    const id = Number(req.params.id);
+    const b = req.body || {};
+    const descricao = texto(b.descricao, 600);
+    if (!descricao) throw falha(400, 'Descreva o impedimento.');
+    const apoio = texto(b.apoio, 600) || null;
+    const critico = b.critico ? 1 : 0;
+    const out = await db.transaction(async () => {
+      if (db.isPg) await q1('select id from acoes where id = ? for update', id);
+      const a = await acaoVisivel(req.user, id);
+      await podeAgirNoImpedimento(req.user, a);
+      if (a.encerrada || a.arquivada) throw falha(409, 'Ação arquivada ou encerrada não recebe impedimentos.');
+      if (a.status === 'concluida') throw falha(409, 'Uma ação concluída não recebe impedimentos.');
+      if (b.bloquear && a.status !== 'bloqueada') {
+        if (!TRANSICOES[a.status].includes('bloqueada')) {
+          throw falha(409, 'Para bloquear, a ação precisa estar em andamento. Inicie a ação ou registre o impedimento sem bloquear.');
+        }
+        await run("update acoes set status = 'bloqueada' where id = ?", a.id);
+      }
+      const iid = (await run(
+        'insert into impedimentos (acao_id, descricao, critico, apoio, criado_em, criado_por) values (?,?,?,?,?,?)',
+        a.id, descricao, critico, apoio, agoraISO(), req.user.id,
+      )).lastInsertRowid;
+      await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id,
+        `Impedimento registrado${critico ? ' (crítico)' : ''}${b.bloquear ? ', ação bloqueada' : ''}: ${descricao}`, agoraISO());
+      return {
+        impedimento: impedimentoOut(await q1('select * from impedimentos where id = ?', iid)),
+        acao: acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id)),
+      };
+    });
+    res.status(201);
+    return out;
+  }));
+
+  app.post('/api/acoes/:id/impedimentos/:iid/resolver', perfisImpedimento, h(async (req) => {
+    const id = Number(req.params.id);
+    const iid = Number(req.params.iid);
+    const resolucao = texto(req.body?.resolucao, 600) || null;
+    return db.transaction(async () => {
+      if (db.isPg) await q1('select id from acoes where id = ? for update', id);
+      const a = await acaoVisivel(req.user, id);
+      await podeAgirNoImpedimento(req.user, a);
+      const imp = await q1('select * from impedimentos where id = ? and acao_id = ?', iid, a.id);
+      if (!imp) throw falha(404, 'Impedimento não encontrado.');
+      if (imp.resolvido_em) throw falha(409, 'Este impedimento já foi resolvido.');
+      const r = await run('update impedimentos set resolvido_em = ?, resolvido_por = ?, resolucao = ? where id = ? and resolvido_em is null',
+        agoraISO(), req.user.id, resolucao, imp.id);
+      if (!r.changes) throw falha(409, 'Este impedimento já foi resolvido. Atualize a tela.');
+      const retomar = !!req.body?.retomar && a.status === 'bloqueada' && !a.encerrada && !a.arquivada;
+      if (retomar) await run("update acoes set status = 'em_andamento' where id = ?", a.id);
+      await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id,
+        `Impedimento resolvido${resolucao ? `: ${resolucao}` : ''}${retomar ? '. Ação retomada (em andamento).' : ''}`, agoraISO());
+      return {
+        impedimento: impedimentoOut(await q1('select * from impedimentos where id = ?', imp.id)),
+        acao: acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id)),
+      };
+    });
   }));
 
   app.post('/api/acoes/:id/encerrar', permit('diretor', 'administrador'), h(async (req) => {

@@ -96,7 +96,7 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
   const semanaInicio = addDays(semana, -7);
   const semanaFim = addDays(semana, -1);
 
-  const [statsRows, atualizacaoRows, tempoRows, pedidosRows] = await Promise.all([
+  const [statsRows, atualizacaoRows, tempoRows, pedidosRows, criticosRows] = await Promise.all([
     // 1: estatísticas de ações agrupadas por secao_id
     db.prepare(
       `select
@@ -135,12 +135,22 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
        where p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and a.secao_id in (${marks(todosIds)})
        group by a.secao_id`,
     ).all(...todosIds),
+    // 5: impedimentos críticos ainda abertos em ações em curso, por seção (deixam a seção em vermelho)
+    db.prepare(
+      `select a.secao_id, count(*) n
+       from impedimentos i
+       join acoes a on a.id = i.acao_id
+       where i.resolvido_em is null and i.critico = 1
+         and a.status != 'concluida' and a.arquivada = 0 and a.encerrada = 0 and a.secao_id in (${marks(todosIds)})
+       group by a.secao_id`,
+    ).all(...todosIds),
   ]);
 
   // Agrega resultados por centroId
   const statsMap    = new Map();
   const tempoMap    = new Map();
   const pedidosMap  = new Map();
+  const criticosMap = new Map();
   const atMap       = new Map(atualizacaoRows.map((r) => [r.secao_id, atualizacaoDe(r)]));
 
   for (const row of statsRows) {
@@ -164,11 +174,19 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
     if (cId == null) continue;
     pedidosMap.set(cId, (pedidosMap.get(cId) ?? 0) + Number(row.n));
   }
+  for (const row of criticosRows) {
+    const cId = idParaCentro.get(row.secao_id);
+    if (cId == null) continue;
+    criticosMap.set(cId, (criticosMap.get(cId) ?? 0) + Number(row.n));
+  }
 
   return centros.map((c) => {
     const st  = statsMap.get(c.id)   ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0 };
     const at  = atMap.get(c.id)      ?? null;
-    const critico = arvores.get(c.id).some(id => atMap.get(id)?.critico);
+    const impedimentosCriticos = criticosMap.get(c.id) ?? 0;
+    // Crítico = impedimento crítico aberto em ação em curso. A marca do relato semanal antigo ainda vale
+    // enquanto o relato da semana a trouxer (transição: some quando a tela do relato deixar de oferecê-la).
+    const critico = impedimentosCriticos > 0 || arvores.get(c.id).some(id => atMap.get(id)?.critico);
     const cor = semaforo({ enviada: !!at, atrasadas: st.atrasadas, vencendo: st.vencendo, critico });
     return {
       secao: { id: c.id, nome: c.nome, sigla: c.sigla, tipo: c.tipo, chefe_nome: c.chefe_nome },
@@ -176,6 +194,7 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
       enviada:            !!at,
       enviada_em:         at?.enviada_em ?? null,
       critico,
+      impedimentos_criticos: impedimentosCriticos,
       atrasadas:          st.atrasadas,
       vencendo:           st.vencendo,
       abertas:            st.abertas,
