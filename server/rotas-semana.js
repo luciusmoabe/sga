@@ -1,6 +1,7 @@
 // Sessão inicial, atualização semanal do chefe e painel, pauta e detalhe do Diretor.
 import { subarvore } from './db.js';
 import { FUSO_NEGOCIO, HORA_CORTE_PADRAO, agora, ehDiaReuniao, fechamentoDe, refDiaReuniao } from './logic.js';
+import { assinatura, camposLegados, ehCorpoLegado, montarRelato, paraSnapshot } from './relato.js';
 import { atualizacaoDe, cartoesReuniao, falha, h, marks, painelSemana, permit, texto, ultimaAtualizacao } from './helpers.js';
 
 export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, semanaDe, SELECT_ACAO, acaoOut }) {
@@ -48,19 +49,46 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     const semana = await semanaDe(req);
     const anterior = (await q1(`select semana from atualizacoes where secao_id = ? and semana < ? order by semana desc limit 1`, secaoId, semana))?.semana;
     const prev = anterior ? await ultimaAtualizacao(db, secaoId, anterior) : null;
+    const [atual, relato] = await Promise.all([ultimaAtualizacao(db, secaoId, semana), montarRelato(db, secaoId, semana)]);
+    // Depois de enviado, o relato pode mudar (ação concluída, prazo novo, impedimento resolvido): avisa o chefe.
+    const enviado = atual?.feito?.snapshot;
     return {
       semana,
       fechamento: fechamentoDe(semana),
-      atual: await ultimaAtualizacao(db, secaoId, semana),
+      atual,
       anterior: prev ? { semana: anterior, proximo: prev.proximo } : null,
+      relato,
+      desatualizada: enviado ? assinatura(paraSnapshot(relato)) !== assinatura(enviado) : null,
     };
   }));
+  // Envio do relato montado a partir das ações: o servidor recalcula os blocos e congela a cópia; o cliente só
+  // manda a semana e as observações. Cada envio é uma nova versão; o histórico é mantido.
+  const enviarRelato = (req, secaoId, semana, b) => {
+    const observacoes = texto(b.observacoes, 600);
+    return db.transaction(async () => {
+      if (db.isPg) await q1('select id from secoes where id = ? for update', secaoId);
+      const relato = await montarRelato(db, secaoId, semana);
+      const snapshot = paraSnapshot(relato, observacoes);
+      const total = ['concluidas', 'atrasadas', 'programadas', 'impedimentos'].reduce((n, k) => n + relato[k].length, 0);
+      if (!total && !observacoes) {
+        throw falha(400, 'Não há ações nem impedimentos para relatar nesta semana. Se houve algo fora das ações, escreva nas observações.');
+      }
+      const legado = camposLegados(snapshot);
+      const versao = ((await q1('select coalesce(max(versao), 0) v from atualizacoes where secao_id = ? and semana = ?', secaoId, semana)).v) + 1;
+      await run(`insert into atualizacoes (secao_id, semana, versao, feito, proximo, impedimentos, critico, apoio, usuario_id, enviada_em) values (?,?,?,?,?,?,?,?,?,?)`,
+        secaoId, semana, versao, JSON.stringify(legado.feito), JSON.stringify(legado.proximo), JSON.stringify(legado.impedimentos),
+        legado.critico, legado.apoio, req.user.id, agoraISO());
+      return await ultimaAtualizacao(db, secaoId, semana);
+    });
+  };
   app.put('/api/atualizacao', permit('chefe', 'administrador'), h(async (req) => {
     const secaoId = await secaoDaAtualizacao(req);
     const b = req.body || {};
     const { dia } = await cfgReuniao();
     const semana = b.semana || refDiaReuniao(agora(), dia, HORA_CORTE_PADRAO);
     if (!ehDiaReuniao(semana, dia)) throw falha(400, 'Semana inválida.');
+    if (!ehCorpoLegado(b)) return enviarRelato(req, secaoId, semana, b);
+    // Formato antigo (listas em texto livre): mantido para telas e clientes que ainda o usam.
     const lista = (v) => (Array.isArray(v) ? v.map((x) => texto(x, 400)).filter(Boolean).slice(0, 30) : []);
     const previstos = (Array.isArray(b.feito?.previstos) ? b.feito.previstos : [])
       .map((p) => ({ texto: texto(p?.texto, 400), cumprido: !!p?.cumprido })).filter((p) => p.texto);

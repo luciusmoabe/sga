@@ -980,3 +980,10 @@ body.carregando::before {
 }
 @keyframes carregando { from { transform: scaleX(0); opacity: 1; } to { transform: scaleX(.92); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { body.carregando::before { animation: none; } }
+
+/* Relato semanal montado a partir das ações e histórico de impedimentos. */
+.relato-item { align-items: flex-start; flex-wrap: wrap; background: transparent; border: 1px solid var(--line); }
+.relato-item > span:first-child { min-width: 220px; }
+.relato-item .linha { flex: 0 0 auto; flex-wrap: wrap; }
+.impedimento { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 6px 0; display: grid; gap: 4px; background: var(--card); }
+.impedimento.resolvido { opacity: .78; background: var(--pale); }

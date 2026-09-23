@@ -3,6 +3,57 @@ import { del, get, patch, post } from './api.js';
 import { ehAdmin, ehDiretor } from './estado.js';
 import { abrirForm, br, dataHora, esc, fmtMin, on, pilulaStatus, PRIO, toast } from './ui.js';
 
+// ---------- Impedimentos (formulários usados também pela atualização semanal e por Minhas ações) ----------
+/** Ação em que ainda faz sentido registrar impedimento. */
+export const aceitaImpedimento = (a) => !a.encerrada && !a.arquivada && a.status !== 'concluida';
+
+/** `a` precisa de id, titulo e status. `aoConcluir` recarrega a tela de quem chamou. */
+export function abrirNovoImpedimento(a, aoConcluir) {
+  abrirForm({
+    titulo: 'Registrar impedimento',
+    corpo: `<p class="suave pequeno">Ação: <b>${esc(a.titulo)}</b></p>
+      <div class="campo"><label for="ni-desc">O que está impedindo?</label><textarea id="ni-desc" name="descricao" required maxlength="600"></textarea></div>
+      <div class="campo"><label for="ni-apoio">Apoio de que você precisa (opcional)</label><textarea id="ni-apoio" name="apoio" maxlength="600" placeholder="O que o Diretor pode fazer para ajudar?"></textarea></div>
+      <div class="escolha"><label><input type="checkbox" name="critico" value="1"> Impedimento crítico (coloca a seção em vermelho)</label></div>
+      ${a.status === 'em_andamento' ? '<div class="escolha"><label><input type="checkbox" name="bloquear" value="1"> A ação está bloqueada (o status muda para "Bloqueada")</label></div>'
+        : '<p class="suave pequeno">Para marcar a ação como bloqueada, ela precisa estar em andamento.</p>'}`,
+    rotulo: 'Registrar impedimento',
+    aoEnviar: async (d) => {
+      await post(`/acoes/${a.id}/impedimentos`, { descricao: d.descricao, apoio: d.apoio, critico: d.critico === '1', bloquear: d.bloquear === '1' });
+      toast('Impedimento registrado.');
+      await aoConcluir?.();
+    },
+  });
+}
+
+/** `imp` precisa de id e descricao. Se a ação está bloqueada, oferece retomá-la. */
+export function abrirResolverImpedimento(a, imp, aoConcluir) {
+  abrirForm({
+    titulo: 'Resolver impedimento',
+    corpo: `<p class="suave pequeno">Ação: <b>${esc(a.titulo)}</b></p><p>${esc(imp.descricao)}</p>
+      <div class="campo"><label for="ri-res">Como foi resolvido? (opcional)</label><textarea id="ri-res" name="resolucao" maxlength="600"></textarea></div>
+      ${a.status === 'bloqueada' ? '<div class="escolha"><label><input type="checkbox" name="retomar" value="1" checked> Retomar a ação (volta para "Em andamento")</label></div>' : ''}`,
+    rotulo: 'Resolver impedimento',
+    aoEnviar: async (d) => {
+      await post(`/acoes/${a.id}/impedimentos/${imp.id}/resolver`, { resolucao: d.resolucao, retomar: d.retomar === '1' });
+      toast('Impedimento resolvido.');
+      await aoConcluir?.();
+    },
+  });
+}
+
+const impedimentoHTML = (i) => `<div class="impedimento ${i.aberto ? '' : 'resolvido'}">
+  <div class="linha" style="gap:6px;flex-wrap:wrap;align-items:center">
+    <span class="pilula ${i.aberto ? 'st-bloqueada' : 'st-concluida'}">${i.aberto ? 'Aberto' : 'Resolvido'}</span>
+    ${i.critico ? '<span class="pilula atraso">Crítico</span>' : ''}
+    <span class="suave pequeno">${dataHora(i.criado_em)} · ${esc(i.criado_por_nome || '')}</span>
+    ${i.aberto ? `<button type="button" class="btn btn-fantasma btn-mini" data-resolver-imp="${i.id}" style="margin-left:auto">Resolver</button>` : ''}
+  </div>
+  <div>${esc(i.descricao)}</div>
+  ${i.apoio ? `<div class="pequeno"><b>Apoio solicitado:</b> ${esc(i.apoio)}</div>` : ''}
+  ${!i.aberto ? `<div class="suave pequeno">Resolvido em ${dataHora(i.resolvido_em)}${i.resolvido_por_nome ? ` por ${esc(i.resolvido_por_nome)}` : ''}${i.resolucao ? `: ${esc(i.resolucao)}` : ''}</div>` : ''}
+</div>`;
+
 export async function abrirAcao(id, aoMudar) {
   const a = await get(`/acoes/${id}`);
   const diretor = ehDiretor();
@@ -44,6 +95,9 @@ export async function abrirAcao(id, aoMudar) {
       `<li class="num">${br(t.data)} · ${fmtMin(t.minutos)} · ${esc(t.usuario_nome || '')}</li>`).join('')}</ul>` : ''}
     ${a.pedidos.length ? `<h3 style="margin:10px 0 6px">Pedidos de novo prazo</h3>${a.pedidos.map((p) => `<div class="comentario pequeno">
       ${br(p.prazo_atual)} → <b>${br(p.novo_prazo)}</b> · ${esc(p.status)} <br><span class="suave">${esc(p.justificativa)}</span></div>`).join('')}` : ''}
+    <h3 style="margin:12px 0 6px">Impedimentos</h3>
+    ${a.impedimentos.length ? a.impedimentos.map(impedimentoHTML).join('') : '<p class="suave pequeno">Nenhum impedimento registrado.</p>'}
+    ${aceitaImpedimento(a) ? '<button type="button" class="btn btn-sec btn-mini" data-novo-imp>Registrar impedimento</button>' : ''}
     <h3 style="margin:12px 0 6px">Comentários</h3>
     ${a.comentarios.length ? a.comentarios.map((c) => `<div class="comentario"><b>${esc(c.usuario_nome || '')}</b>
       <span class="suave pequeno"> · ${dataHora(c.criado_em)}</span><br>${esc(c.texto)}</div>`).join('') : '<p class="suave pequeno">Nenhum comentário ainda.</p>'}
@@ -75,6 +129,13 @@ export async function abrirAcao(id, aoMudar) {
       aoMudar?.();
     },
     aoAbrir: (dlg) => {
+      // Depois de registrar ou resolver, reabre o detalhe já com o histórico novo.
+      const recarregar = async () => { dlg.close(); aoMudar?.(); await abrirAcao(a.id, aoMudar); };
+      on(dlg, 'click', '[data-novo-imp]', () => abrirNovoImpedimento(a, recarregar));
+      on(dlg, 'click', '[data-resolver-imp]', (el) => {
+        const imp = a.impedimentos.find((i) => i.id === Number(el.dataset.resolverImp));
+        if (imp) abrirResolverImpedimento(a, imp, recarregar);
+      });
       on(dlg, 'change', '[data-mudar-prio]', async (el) => {
         try {
           await patch(`/acoes/${a.id}`, { prioridade: el.value });

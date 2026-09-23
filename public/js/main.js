@@ -3,7 +3,8 @@ import { entrar, entrarSenha, get, sair, sessao, limparSessao, modoAuth, versao 
 import { atualizarSessao, est } from './estado.js';
 import { $, esc, on, trilho, toast } from './ui.js';
 import { acoes, centro, direcionar, painel, pauta, prazos } from './telas-diretor.js';
-import { atualizacao, historico, inicio, minhasAcoes } from './telas-chefe.js';
+import { historico, inicio, minhasAcoes } from './telas-chefe.js';
+import { atualizacao } from './atualizacao.js';
 import { combinados } from './combinados.js';
 import { estrutura } from './estrutura.js';
 import { atas, reuniaoDetalhe, reunioes } from './atas.js';

@@ -1,10 +1,10 @@
 // Telas do chefe de seção: início, atualização semanal, ações e histórico.
-import { del, get, patch, post, put } from './api.js';
+import { del, get, patch, post } from './api.js';
 import { est } from './estado.js';
 import {
   $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, STATUS, toast, vazio,
 } from './ui.js';
-import { abrirAcao } from './acao-comum.js';
+import { abrirAcao, abrirNovoImpedimento, aceitaImpedimento } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
 import { relatoHTML } from './telas-diretor.js';
 
@@ -17,7 +17,7 @@ const semSecao = (raiz) => {
 export async function inicio(raiz, { refresh }) {
   if (!est.user.secao_id) return semSecao(raiz);
   const semana = est.boot.semana;
-  const [up, abertas] = await Promise.all([get(`/atualizacao?semana=${semana}`), get('/acoes?situacao=abertas')]);
+  const [up, abertas] = await Promise.all([get(`/atualizacao?semana=${semana}&resumo=1`), get('/acoes?situacao=abertas')]);
   const atrasadas = abertas.filter((a) => a.atrasada).length;
   const vencendo = abertas.filter((a) => !a.atrasada && a.prazo <= addDias(est.boot.hoje, 2)).length;
   const pedidos = abertas.filter((a) => a.pedido_pendente).length;
@@ -44,99 +44,6 @@ export async function inicio(raiz, { refresh }) {
   const abrir = (el) => abrirAcao(el.dataset.acao, refresh).catch((e) => toast(e.message, 'erro'));
   on(raiz, 'click', 'tr[data-acao]', abrir);
   on(raiz, 'keydown', 'tr[data-acao]', (el, ev) => { if (ev.key === 'Enter') abrir(el); });
-}
-
-// ---------- Atualização semanal ----------
-export async function atualizacao(raiz) {
-  if (!est.user.secao_id) return semSecao(raiz);
-  const semana = est.boot.semana;
-  const d = await get(`/atualizacao?semana=${semana}`);
-  const at = d.atual;
-  const st = {
-    previstos: at ? at.feito.previstos : (d.anterior?.proximo || []).map((texto) => ({ texto, cumprido: false })),
-    extras: at ? [...at.feito.extras] : [],
-    proximo: at ? [...at.proximo] : [],
-    impedimentos: at ? [...at.impedimentos] : [],
-    critico: at ? at.critico : false,
-    apoio: at?.apoio || '',
-  };
-  // Rascunho local (só nesta aba): sobrevive a recarga, queda de sessão ou fechamento sem querer.
-  const chaveRascunho = `agilis-rascunho:${est.user.id}:${semana}`;
-  let recuperado = false;
-  try {
-    const r = JSON.parse(sessionStorage.getItem(chaveRascunho));
-    const lista = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
-    if (r && Array.isArray(r.previstos) && r.previstos.every((p) => typeof p?.texto === 'string') && lista(r.extras) && lista(r.proximo) && lista(r.impedimentos)) {
-      Object.assign(st, { previstos: r.previstos.map((p) => ({ texto: p.texto, cumprido: !!p.cumprido })), extras: r.extras, proximo: r.proximo, impedimentos: r.impedimentos, critico: !!r.critico, apoio: String(r.apoio || '') });
-      recuperado = true;
-    }
-  } catch { /* sem rascunho ou armazenamento indisponível */ }
-  const gravarRascunho = () => {
-    try { sessionStorage.setItem(chaveRascunho, JSON.stringify({ ...st, critico: chk.checked, apoio: $('#apoio', raiz).value })); } catch { /* segue sem rascunho */ }
-  };
-  raiz.innerHTML = `
-    <div class="cabeca"><div><h1>Minha atualização</h1><div class="sub">Para a reunião de ${diaSemana(semana)}, ${br(semana)} · prazo regular ${diaSemana(addDias(semana, -1))}, ${br(addDias(semana, -1))}, às ${HORA_FECHAMENTO}h</div></div></div>
-    ${at ? `<div class="info">Você já enviou esta atualização (versão ${at.versao}). Ao enviar de novo, a nova versão substitui a anterior e o histórico é mantido.</div>` : ''}
-    ${recuperado ? '<div class="info" role="status">Recuperamos o rascunho que você não chegou a enviar. Confira e envie quando estiver pronto.</div>' : ''}
-    <form id="form-at" novalidate>
-      <div class="erro-form oculto" role="alert"></div>
-      <div class="cartao"><h2>O que foi feito</h2>
-        <div id="l-previstos" class="itens"></div>
-        <div id="l-extras" class="itens"></div>
-        <div class="add-linha"><input id="i-extras" placeholder="Outra entrega da semana" aria-label="Outra entrega da semana"><button type="button" class="btn btn-sec" data-add="extras">Adicionar</button></div></div>
-      <div class="cartao"><h2>O que será feito nesta semana</h2>
-        <div id="l-proximo" class="itens"></div>
-        <div class="add-linha"><input id="i-proximo" placeholder="Próximo passo concreto" aria-label="Próximo passo"><button type="button" class="btn btn-sec" data-add="proximo">Adicionar</button></div></div>
-      <div class="cartao"><h2>O que trava</h2>
-        <div id="l-impedimentos" class="itens"></div>
-        <div class="add-linha"><input id="i-impedimentos" placeholder="Impedimento" aria-label="Impedimento"><button type="button" class="btn btn-sec" data-add="impedimentos">Adicionar</button></div>
-        <div class="escolha" style="margin-top:10px"><label><input type="checkbox" id="critico"> Impedimento crítico (coloca a seção em vermelho)</label></div>
-        <div class="campo" style="margin-top:14px"><label for="apoio">Preciso de apoio</label><textarea id="apoio" placeholder="O que o Diretor pode fazer para ajudar?">${esc(st.apoio)}</textarea></div></div>
-      <div class="espaco"></div>
-      <button class="btn btn-primario" type="submit">${at ? 'Enviar correção' : 'Enviar atualização'}</button>
-    </form>`;
-  const chk = $('#critico', raiz);
-  chk.checked = st.critico;
-  const desenhar = () => {
-    $('#l-previstos', raiz).innerHTML = st.previstos.length
-      ? `<div class="pequeno suave">Previsto na semana anterior: marque o que foi cumprido</div>${st.previstos.map((p, i) => `<div class="item previsto"><label><input type="checkbox" data-prev="${i}" ${p.cumprido ? 'checked' : ''}> ${esc(p.texto)}</label></div>`).join('')}` : '';
-    for (const k of ['extras', 'proximo', 'impedimentos']) {
-      $(`#l-${k}`, raiz).innerHTML = st[k].map((t, i) => `<div class="item"><span>${esc(t)}</span><button type="button" class="btn btn-fantasma btn-mini" data-rem="${k}:${i}" aria-label="Remover">Remover</button></div>`).join('');
-    }
-  };
-  desenhar();
-  const adicionar = (k) => {
-    const inp = $(`#i-${k}`, raiz);
-    const v = inp.value.trim();
-    if (!v) return;
-    st[k].push(v);
-    inp.value = '';
-    desenhar();
-    gravarRascunho();
-    inp.focus();
-  };
-  on(raiz, 'click', '[data-add]', (el) => adicionar(el.dataset.add));
-  on(raiz, 'keydown', 'input[id^=i-]', (el, ev) => { if (ev.key === 'Enter') { ev.preventDefault(); adicionar(el.id.slice(2)); } });
-  on(raiz, 'click', '[data-rem]', (el) => { const [k, i] = el.dataset.rem.split(':'); st[k].splice(Number(i), 1); desenhar(); gravarRascunho(); });
-  on(raiz, 'change', '[data-prev]', (el) => { st.previstos[Number(el.dataset.prev)].cumprido = el.checked; gravarRascunho(); });
-  on(raiz, 'input', '#apoio', gravarRascunho);
-  on(raiz, 'change', '#critico', gravarRascunho);
-  $('#form-at', raiz).addEventListener('submit', async (e) => {
-    e.preventDefault();
-    for (const k of ['extras', 'proximo', 'impedimentos']) adicionar(k); // aproveita o que ficou digitado e não foi adicionado
-    const erro = $('.erro-form', raiz);
-    erro.classList.add('oculto');
-    try {
-      await put('/atualizacao', { semana, feito: { previstos: st.previstos, extras: st.extras }, proximo: st.proximo, impedimentos: st.impedimentos, critico: chk.checked, apoio: $('#apoio', raiz).value });
-      try { sessionStorage.removeItem(chaveRascunho); } catch { /* ignora */ }
-      toast('Atualização enviada. Obrigado!');
-      location.hash = '#/inicio';
-    } catch (ex) {
-      erro.textContent = ex.message;
-      erro.classList.remove('oculto');
-      erro.scrollIntoView({ block: 'center' });
-    }
-  });
 }
 
 // ---------- Minhas ações ----------
@@ -186,6 +93,7 @@ export async function minhasAcoes(raiz) {
             ${a.demandada_diretor ? '<span class="pilula diretor" title="Ações demandadas pelo Diretor não podem ser arquivadas nem excluídas pela seção">Demandada pelo Diretor</span>' : ''}
             <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade].toLowerCase()}</span>
             ${a.pedido_pendente ? '<span class="pilula">Pedido de prazo enviado</span>' : ''}
+            ${a.impedimento_critico ? '<span class="pilula atraso">Impedimento crítico</span>' : a.impedimentos_abertos ? '<span class="pilula st-bloqueada">Impedimento aberto</span>' : ''}
             ${a.status === 'concluida' && !a.arquivada ? '<span class="pilula st-concluida">Aguardando aceite</span>' : ''}
             ${a.arquivada ? '<span class="pilula enc">Arquivada</span>' : ''}
           </div>
@@ -201,6 +109,7 @@ export async function minhasAcoes(raiz) {
         <footer class="acao-rodape">
           <button type="button" class="btn btn-fantasma btn-mini" data-detalhe>Detalhes e histórico</button>
           ${!a.arquivada && a.status !== 'concluida' && !a.pedido_pendente ? '<button type="button" class="btn btn-fantasma btn-mini" data-prazo>Pedir novo prazo</button>' : ''}
+          ${aceitaImpedimento(a) ? '<button type="button" class="btn btn-fantasma btn-mini" data-impedimento>Impedimento</button>' : ''}
           ${!a.demandada_diretor ? `<details class="mais"><summary class="btn btn-fantasma btn-mini">Mais</summary>
             <div class="mais-itens">
               ${a.arquivada ? '<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar</button>' : '<button type="button" class="btn btn-sec btn-mini" data-arquivar>Arquivar</button>'}
@@ -231,6 +140,8 @@ export async function minhasAcoes(raiz) {
     aba = el.dataset.aba;
     renderizar();
   });
+
+  on(raiz, 'click', '[data-impedimento]', (el) => abrirNovoImpedimento(acaoDe(el), recarregar));
 
   on(raiz, 'click', '[data-arquivar]', async (el) => {
     const a = acaoDe(el);
