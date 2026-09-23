@@ -5,6 +5,7 @@ import {
   $, addDias, br, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, porNecessidade, PRIO, sem, STATUS, toast, vazio,
 } from './ui.js';
 import { abrirAcao } from './acao-comum.js';
+import { itensDoRelato, resumoInternas } from './relato-vista.js';
 
 const NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const nomeDiaReuniao = () => NOMES_DIA[est.boot?.reuniao_dia ?? 2];
@@ -13,14 +14,20 @@ const horaReuniao = () => est.boot?.reuniao_hora || '10:00';
 /** Relato de uma atualização semanal (feito, próximo, impedimentos, apoio). */
 export function relatoHTML(at) {
   if (!at) return '<p class="suave">Nenhuma atualização enviada para esta semana.</p>';
-  const lista = (arr) => (arr.length ? `<ul>${arr.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="suave pequeno">Nada informado.</p>');
-  const feitos = [...at.feito.previstos.map((p) => `${p.texto} (${p.cumprido ? 'cumprido' : 'não cumprido'})`), ...at.feito.extras];
+  const r = itensDoRelato(at);
+  const lista = (arr, vazioTxt = 'Nada informado.') => (arr.length
+    ? `<ul>${arr.map((x) => `<li>${esc(x.texto)}${x.detalhe ? ` <span class="suave pequeno">${esc(x.detalhe)}</span>` : ''}${x.critico && r.formato === 2 ? ' <span class="sem sem-vermelho">Crítico</span>' : ''}</li>`).join('')}</ul>`
+    : `<p class="suave pequeno">${vazioTxt}</p>`);
+  const critico = r.impedimentos.some((i) => i.critico);
   return `<div class="dois">
-    <div><h3>Feito</h3>${lista(feitos)}</div>
-    <div><h3>Próximo</h3>${lista(at.proximo)}</div>
-    <div><h3>Impedimentos ${at.critico ? '<span class="sem sem-vermelho">Crítico</span>' : ''}</h3>${lista(at.impedimentos)}</div>
-    <div><h3>Apoio necessário</h3>${at.apoio ? `<p>${esc(at.apoio)}</p>` : '<p class="suave pequeno">Nada informado.</p>'}</div>
-  </div><p class="suave pequeno">Enviada em ${dataHora(at.enviada_em)} · versão ${at.versao}</p>`;
+    <div><h3>Feito</h3>${lista(r.feitos)}</div>
+    <div><h3>Próximo</h3>${lista(r.proximo)}</div>
+    ${r.formato === 2 ? `<div><h3>Atrasadas</h3>${lista(r.atrasadas, 'Nenhuma ação atrasada.')}</div>` : ''}
+    <div><h3>Impedimentos ${critico && r.formato === 1 ? '<span class="sem sem-vermelho">Crítico</span>' : ''}</h3>${lista(r.impedimentos, 'Nenhum impedimento.')}</div>
+    <div><h3>Apoio necessário</h3>${r.apoios.length ? `<ul>${r.apoios.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : '<p class="suave pequeno">Nada informado.</p>'}</div>
+    ${r.observacoes ? `<div><h3>Observações</h3><p>${esc(r.observacoes)}</p></div>` : ''}
+  </div>${resumoInternas(r.internas) ? `<p class="suave pequeno">${esc(resumoInternas(r.internas))}</p>` : ''}
+  <p class="suave pequeno">Enviada em ${dataHora(at.enviada_em)} · versão ${at.versao}</p>`;
 }
 
 function navSemana(rota, semana) {
@@ -54,7 +61,8 @@ export async function painel(raiz, { q }) {
     <div class="grade">${itens.map((i) => {
       const fatos = [
         i.enviada ? `<span>Atualização enviada em ${dataHora(i.enviada_em)}</span>` : '<span class="atencao">Atualização pendente</span>',
-        i.critico ? '<span class="ruim">Impedimento crítico informado</span>' : '',
+        i.impedimentos_criticos ? `<span class="ruim">${plural(i.impedimentos_criticos, 'impedimento crítico aberto', 'impedimentos críticos abertos')}</span>`
+          : i.critico ? '<span class="ruim">Impedimento crítico informado</span>' : '',
         i.atrasadas ? `<span class="ruim">${plural(i.atrasadas, 'ação atrasada', 'ações atrasadas')}</span>` : '',
         i.vencendo ? `<span class="atencao">${plural(i.vencendo, 'ação vence', 'ações vencem')} em até 2 dias</span>` : '',
         i.atrasadas_internas ? `<span class="suave">Resumo: ${i.atrasadas_internas} atrasada(s) em subseções (detalhe é da seção)</span>` : '',
@@ -204,18 +212,27 @@ export async function prazos(raiz, { refresh }) {
 export async function pauta(raiz, { q }) {
   const semana = q.get('semana') || est.boot.semana;
   const d = await get(`/pauta?semana=${semana}`);
-  const lista = (arr) => (arr.length ? `<ul style="margin:2px 0 6px;padding-left:18px">${arr.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<span class="suave"> nada informado</span>');
+  const lista = (arr) => (arr.length ? `<ul style="margin:2px 0 6px;padding-left:18px">${arr.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<div class="suave" style="margin:2px 0 6px">nada informado</div>');
+  const rotulo = (x) => (x.detalhe ? `${x.texto} (${x.detalhe})` : x.texto);
   raiz.innerHTML = `
     <div class="cabeca"><div><a href="#/painel?semana=${semana}" class="pequeno nao-imprimir">← Painel da semana</a>
       <h1>Pauta da reunião de ${diaSemana(semana)}, ${br(semana)}</h1><div class="sub">Versão para impressão, em ordem de necessidade. Tempo registrado e ações internas não constam.</div></div>
       <div class="acoes-topo"><button class="btn btn-primario" id="imprimir">Imprimir</button></div></div>
     <div class="pauta">${d.cartoes.map((c) => {
       const at = c.atualizacao;
-      const feitos = at ? [...at.feito.previstos.map((p) => `${p.texto} (${p.cumprido ? 'cumprido' : 'não cumprido'})`), ...at.feito.extras] : [];
+      // Feito e próximo como foram reportados; impedimentos e apoio como estão agora (abertos hoje).
+      const r = itensDoRelato(at, c.impedimentos);
+      const impedimentos = (c.impedimentos.length || r?.formato === 2 ? c.impedimentos.map((i) => ({ texto: `${i.acao_titulo}: ${i.descricao}`, critico: i.critico })) : r?.impedimentos) || [];
+      const apoios = c.impedimentos.length || r?.formato === 2 ? c.impedimentos.filter((i) => i.apoio).map((i) => `${i.acao_titulo}: ${i.apoio}`) : r?.apoios || [];
       return `<section class="secao-pauta" style="border-left-color:var(--${c.cor === 'verde' ? 'verde' : c.cor === 'amarelo' ? 'amarelo' : 'vermelho'})">
         <div class="linha entre"><h3>${esc(c.secao.nome)} (${esc(c.secao.sigla || '')})</h3>${sem(c.cor)}</div>
-        ${at ? `<div><b>Feito:</b>${lista(feitos)}<b>Próximo:</b>${lista(at.proximo)}<b>Impedimentos${at.critico ? ' (crítico)' : ''}:</b>${lista(at.impedimentos)}
-          ${at.apoio ? `<b>Apoio necessário:</b> ${esc(at.apoio)}` : ''}</div>` : '<p class="suave">Atualização pendente.</p>'}
+        ${at ? `<div><b>Feito:</b>${lista(r.feitos.map(rotulo))}<b>Próximo:</b>${lista(r.proximo.map(rotulo))}
+          ${r.formato === 2 ? `<b>Atrasadas:</b>${lista(r.atrasadas.map(rotulo))}` : ''}
+          <b>Impedimentos${impedimentos.some((i) => i.critico) ? ' (com crítico)' : ''}:</b>${lista(impedimentos.map((i) => (i.critico ? `${i.texto} [CRÍTICO]` : i.texto)))}
+          ${apoios.length ? `<b>Apoio necessário:</b>${lista(apoios)}` : ''}
+          ${r.observacoes ? `<b>Observações:</b> ${esc(r.observacoes)}<br>` : ''}
+          ${resumoInternas(r.internas) ? `<span class="suave">${esc(resumoInternas(r.internas))}</span>` : ''}</div>`
+        : (c.impedimentos.length ? `<p class="suave">Atualização pendente.</p><div><b>Impedimentos abertos:</b>${lista(c.impedimentos.map((i) => `${i.acao_titulo}: ${i.descricao}${i.critico ? ' [CRÍTICO]' : ''}`))}</div>` : '<p class="suave">Atualização pendente.</p>')}
         ${c.acoes.filter((a) => a.status !== 'concluida').length ? `<div><b>Ações abertas:</b>${lista(c.acoes.filter((a) => a.status !== 'concluida').map((a) => `${a.titulo} — prazo ${br(a.prazo)}${a.atrasada ? ' (atrasada)' : ''}`))}</div>` : ''}
         ${c.pedidos.length ? `<div><b>Pedidos de novo prazo:</b>${lista(c.pedidos.map((p) => `${p.acao_titulo}: ${br(p.prazo_atual)} → ${br(p.novo_prazo)}`))}</div>` : ''}
       </section>`;

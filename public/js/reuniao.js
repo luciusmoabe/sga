@@ -2,6 +2,7 @@
 // Abre com os Combinados, mostra as seções por ordem de necessidade e registra decisões e ações ao vivo.
 // Ficam ocultos na projeção, por padrão: tempo em minutos e ações internas de subseções.
 import { get, post } from './api.js';
+import { itensDoRelato, resumoInternas } from './relato-vista.js';
 import { est, hoje } from './estado.js';
 import { $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, parseISO, plural, sem, STATUS, toast } from './ui.js';
 
@@ -116,16 +117,24 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
     const c = S.cartoes[S.idx];
     if (!c) return '<div class="tv-palco"><p class="nada">Nenhuma seção cadastrada.</p></div>';
     const at = c.atualizacao;
-    const feitos = at ? [...at.feito.previstos.map((p) => li(`${p.cumprido ? '✓ ' : 'Não cumprido: '}${p.texto}`, p.cumprido ? 'ok' : 'pend')), ...at.feito.extras.map((t) => li(t))] : [];
+    // Feito e próximo como foram reportados; impedimentos e apoio como estão agora (abertos hoje).
+    const r = itensDoRelato(at, c.impedimentos);
+    const vivos = c.impedimentos.length > 0 || r?.formato === 2;
+    const imps = vivos ? c.impedimentos.map((i) => ({ texto: `${i.acao_titulo}: ${i.descricao}`, critico: i.critico })) : (r?.impedimentos || []);
+    const apoios = vivos ? c.impedimentos.filter((i) => i.apoio).map((i) => `${i.acao_titulo}: ${i.apoio}`) : (r?.apoios || []);
+    const mostraRelato = !!at || imps.length > 0;
+    const feitos = r ? r.feitos.map((x) => li(x.detalhe ? `${x.texto} · ${x.detalhe}` : x.texto)) : [];
     const decs = S.reuniao.decisoes.filter((d) => d.secao_id === c.secao.id);
     return `<div class="tv-palco"><div class="tv-cabeca"><h2>${esc(c.secao.nome)}</h2>${sem(c.cor)}
         <span class="suave">${esc(c.secao.chefe_nome || 'sem chefe')} · ${S.idx + 1} de ${S.cartoes.length}</span></div>
       <div class="tv-blocos">
         <div class="tv-relato">
-          <div class="tv-cartao tv-caixa"><h3>Feito</h3>${at ? relatoLista(feitos, 'Nada informado.') : '<p class="nada">Atualização ainda não enviada.</p>'}</div>
-          <div class="tv-cartao tv-caixa"><h3>Próximo</h3>${at ? relatoLista(at.proximo.map((t) => li(t)), 'Nada informado.') : '<p class="nada">—</p>'}</div>
-          <div class="tv-cartao tv-caixa ${c.critico ? 'critico' : ''}"><h3>Impedimentos${c.critico ? ' · crítico' : ''}</h3>${at ? relatoLista(at.impedimentos.map((t) => li(t)), 'Nenhum impedimento.') : '<p class="nada">—</p>'}</div>
-          <div class="tv-cartao tv-caixa"><h3>Apoio necessário</h3>${at?.apoio ? `<p style="margin:0;font-size:1.1rem">${esc(at.apoio)}</p>` : '<p class="nada">Nada informado.</p>'}</div>
+          <div class="tv-cartao tv-caixa"><h3>Feito</h3>${at ? relatoLista(feitos, 'Nada informado.') : '<p class="nada">Atualização ainda não enviada.</p>'}
+            ${at && resumoInternas(r.internas) ? `<p class="nada" style="font-size:.85rem">${esc(resumoInternas(r.internas))}</p>` : ''}</div>
+          <div class="tv-cartao tv-caixa"><h3>Próximo</h3>${at ? relatoLista(r.proximo.map((x) => li(x.detalhe ? `${x.texto} · ${x.detalhe}` : x.texto)), 'Nada informado.') : '<p class="nada">—</p>'}</div>
+          <div class="tv-cartao tv-caixa ${c.critico ? 'critico' : ''}"><h3>Impedimentos${c.critico ? ' · crítico' : ''}</h3>${mostraRelato ? relatoLista(imps.map((i) => li(i.critico ? `CRÍTICO · ${i.texto}` : i.texto, i.critico ? 'pend' : '')), 'Nenhum impedimento.') : '<p class="nada">—</p>'}</div>
+          <div class="tv-cartao tv-caixa"><h3>Apoio necessário</h3>${apoios.length ? apoios.map((a) => `<p style="margin:0 0 6px;font-size:1.1rem">${esc(a)}</p>`).join('') : '<p class="nada">Nada informado.</p>'}
+            ${r?.observacoes ? `<p class="nada" style="margin-top:8px">Observações: ${esc(r.observacoes)}</p>` : ''}</div>
         </div>
         <div class="tv-acoes">
           ${c.pedidos.map((p) => `<div class="tv-pedido"><b>Pedido de novo prazo</b><span>${esc(p.acao_titulo)}</span><span class="num">${br(p.prazo_atual)} → <b>${br(p.novo_prazo)}</b></span>

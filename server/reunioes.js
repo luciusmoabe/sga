@@ -247,6 +247,15 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       ped.forEach((p) => linhas.push(`- [${p.sigla}] "${p.titulo}": novo prazo ${br(p.novo_prazo)} ${p.status === 'aprovado' ? 'aprovado' : 'recusado'}.`));
       linhas.push('');
     }
+    // Impedimentos críticos ainda abertos (só de ações visíveis ao Diretor): ficam registrados na ata para a próxima reunião.
+    const criticos = await q(`select i.descricao, i.apoio, a.titulo, s.sigla from impedimentos i join acoes a on a.id = i.acao_id
+      join secoes s on s.id = a.secao_id where i.resolvido_em is null and i.critico = 1 and a.status != 'concluida'
+        and a.arquivada = 0 and a.encerrada = 0 and (a.interna = 0 or a.compartilhada = 1) order by s.ordem, s.id, i.id`);
+    if (criticos.length) {
+      linhas.push('Impedimentos críticos em aberto:');
+      criticos.forEach((c) => linhas.push(`- [${c.sigla}] "${c.titulo}": ${c.descricao}${c.apoio ? ` (apoio solicitado: ${c.apoio})` : ''}`));
+      linhas.push('');
+    }
     const proximaData = addDays(r.semana, 7);
     linhas.push(`Próxima reunião: ${DIAS[dia]}, ${br(proximaData)}, às ${hora}.`);
     return linhas.join('\n');

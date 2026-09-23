@@ -38,6 +38,7 @@ export const sem = (cor) => `<span class="sem sem-${cor}">${COR[cor]}</span>`;
 export const pilulaStatus = (a) =>
   `<span class="pilula st-${a.status}">${STATUS[a.status]}</span>` +
   (a.atrasada ? ' <span class="pilula atraso">Atrasada</span>' : '') +
+  (a.impedimento_critico ? ' <span class="pilula atraso">Impedimento crítico</span>' : a.impedimentos_abertos ? ' <span class="pilula st-bloqueada">Impedimento aberto</span>' : '') +
   (a.encerrada ? ' <span class="pilula enc">Encerrada</span>' : '');
 export const vazio = (titulo, texto = '') => `<div class="vazio"><b>${esc(titulo)}</b>${esc(texto)}</div>`;
 

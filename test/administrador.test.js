@@ -109,7 +109,7 @@ test('desempenho: o bootstrap traz a contagem do selo e as telas pesadas usam po
   let n = 0;
   const prepare = db.prepare.bind(db);
   db.prepare = (sql) => { n++; return prepare(sql); };
-  for (const [caminho, teto] of [['/painel', 9], ['/pauta', 12], ['/secoes/1/detalhe', 14], ['/bootstrap', 5]]) {
+  for (const [caminho, teto] of [['/painel', 9], ['/pauta', 13], ['/secoes/1/detalhe', 14], ['/bootstrap', 5]]) {
     n = 0;
     assert.equal((await call(DIRETOR, 'GET', caminho)).status, 200);
     assert.ok(n <= teto, `${caminho} usou ${n} consultas (teto ${teto})`);

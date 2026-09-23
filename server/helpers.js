@@ -217,7 +217,7 @@ export async function cartoesReuniao(db, semana, hoje) {
   const todosIds = itens.flatMap((p) => arvores.get(p.secao.id) ?? [p.secao.id]);
   const centroDe = new Map(itens.flatMap((p) => (arvores.get(p.secao.id) ?? [p.secao.id]).map((id) => [id, p.secao.id])));
   const raizes = itens.map((p) => p.secao.id);
-  const [acoesRaw, pedidosRaw, atRaw] = todosIds.length ? await Promise.all([
+  const [acoesRaw, pedidosRaw, atRaw, impedimentosRaw] = todosIds.length ? await Promise.all([
     db.prepare(
       `select a.id, a.secao_id, a.titulo, a.prazo, a.status, a.prioridade, a.encerrada,
               coalesce((select sum(minutos) from tempo where acao_id = a.id), 0) tempo_total,
@@ -236,7 +236,15 @@ export async function cartoesReuniao(db, semana, hoje) {
       `select a.* from atualizacoes a where a.secao_id in (${marks(raizes)}) and a.semana = ?
          and a.versao = (select max(b.versao) from atualizacoes b where b.secao_id = a.secao_id and b.semana = a.semana)`,
     ).all(...raizes, semana),
-  ]) : [[], [], []];
+    // Impedimentos abertos em ações em curso, só de ações visíveis ao Diretor: o quadro da reunião mostra o estado de agora.
+    db.prepare(
+      `select i.id, i.acao_id, i.descricao, i.critico, i.apoio, i.criado_em, a.titulo acao_titulo, a.secao_id, s.sigla secao_sigla
+       from impedimentos i join acoes a on a.id = i.acao_id join secoes s on s.id = a.secao_id
+       where i.resolvido_em is null and a.status != 'concluida' and a.arquivada = 0 and a.encerrada = 0
+         and (a.interna = 0 or a.compartilhada = 1) and a.secao_id in (${marks(todosIds)})
+       order by i.critico desc, i.criado_em, i.id`,
+    ).all(...todosIds),
+  ]) : [[], [], [], []];
   const porCentro = (linhas) => {
     const m = new Map();
     for (const l of linhas) {
@@ -248,11 +256,13 @@ export async function cartoesReuniao(db, semana, hoje) {
   };
   const acoesPor = porCentro(acoesRaw);
   const pedidosPor = porCentro(pedidosRaw);
+  const impedimentosPor = porCentro(impedimentosRaw);
   const atPor = new Map(atRaw.map((r) => [r.secao_id, atualizacaoDe(r)]));
   return itens.map((p) => ({
     ...p,
     atualizacao: atPor.get(p.secao.id) ?? null,
     acoes: (acoesPor.get(p.secao.id) ?? []).map(({ secao_id, ...a }) => ({ ...a, atrasada: a.status !== 'concluida' && a.prazo < hoje })),
     pedidos: (pedidosPor.get(p.secao.id) ?? []).map(({ secao_id, ...x }) => x),
+    impedimentos: (impedimentosPor.get(p.secao.id) ?? []).map(({ secao_id, ...i }) => ({ ...i, critico: !!i.critico })),
   }));
 }

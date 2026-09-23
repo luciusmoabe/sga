@@ -155,3 +155,44 @@ test('o formato antigo (listas de texto) continua aceito', async (t) => {
   assert.equal(r.data.feito.snapshot, undefined);
   assert.equal((await call(CHEFE_CPE, 'GET', `/atualizacao?semana=${SEMANA}`)).data.desatualizada, null, 'sem cópia, não há como comparar');
 });
+
+test('cartões da reunião, pauta e ata trazem os impedimentos abertos sem expor os internos', async (t) => {
+  const { call, nova } = await montar(t);
+  const publica = await nova(1, 'V-publica', { prazo: '2026-09-30' });
+  const interna = await nova(7, 'V-interna', { prazo: '2026-09-30', interna: 1 });
+  await call(CHEFE_CPE, 'POST', `/acoes/${publica}/impedimentos`, { descricao: 'Contrato parado', apoio: 'Destravar na Procuradoria', critico: true });
+  await call(CHEFE_CPE, 'POST', `/acoes/${publica}/impedimentos`, { descricao: 'Falta de sala' });
+  await call(CHEFE_CPE, 'POST', `/acoes/${interna}/impedimentos`, { descricao: 'Segredo do time', apoio: 'Apoio interno', critico: true });
+
+  const reuniao = (await call(DIRETOR, 'POST', '/reunioes/iniciar', {})).data.reuniao;
+  const cartoes = (await call(DIRETOR, 'GET', `/reunioes/${reuniao.id}/cartoes`)).data.cartoes;
+  const cpe = cartoes.find((c) => c.secao.id === 1);
+  assert.deepEqual(cpe.impedimentos.map((i) => [i.acao_titulo, i.descricao, i.critico]),
+    [['V-publica', 'Contrato parado', true], ['V-publica', 'Falta de sala', false]], 'críticos primeiro, sem o interno');
+  assert.equal(cpe.impedimentos[0].apoio, 'Destravar na Procuradoria');
+  assert.ok(cartoes.every((c) => Array.isArray(c.impedimentos)));
+
+  const pauta = (await call(DIRETOR, 'GET', `/pauta?semana=${SEMANA}`)).data.cartoes.find((c) => c.secao.id === 1);
+  assert.equal(pauta.impedimentos.length, 2);
+  assert.ok(!JSON.stringify(cartoes).includes('Segredo do time') && !JSON.stringify(pauta).includes('Apoio interno'));
+
+  // Impedimento resolvido sai do quadro
+  const aberto = (await call(CHEFE_CPE, 'GET', `/acoes/${publica}`)).data.impedimentos.find((i) => i.descricao === 'Falta de sala');
+  await call(CHEFE_CPE, 'POST', `/acoes/${publica}/impedimentos/${aberto.id}/resolver`, {});
+  const depois = (await call(DIRETOR, 'GET', `/reunioes/${reuniao.id}/cartoes`)).data.cartoes.find((c) => c.secao.id === 1);
+  assert.deepEqual(depois.impedimentos.map((i) => i.descricao), ['Contrato parado']);
+
+  // A ata registra os críticos em aberto, só os visíveis ao Diretor
+  const ata = (await call(DIRETOR, 'POST', `/reunioes/${reuniao.id}/encerrar`, {})).data.ata_texto;
+  assert.match(ata, /Impedimentos críticos em aberto:/);
+  assert.match(ata, /\[CPE\] "V-publica": Contrato parado \(apoio solicitado: Destravar na Procuradoria\)/);
+  assert.ok(!ata.includes('Segredo do time') && !ata.includes('Falta de sala'));
+});
+
+test('a ata não cria a seção de impedimentos críticos quando não há nenhum', async (t) => {
+  const { db, call } = await montar(t);
+  await db.exec('delete from impedimentos');
+  const reuniao = (await call(DIRETOR, 'POST', '/reunioes/iniciar', {})).data.reuniao;
+  const ata = (await call(DIRETOR, 'POST', `/reunioes/${reuniao.id}/encerrar`, {})).data.ata_texto;
+  assert.ok(!ata.includes('Impedimentos críticos em aberto'));
+});
