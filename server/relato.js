@@ -3,22 +3,21 @@
 // para que o histórico e a reunião não mudem depois. Ações internas entram só como contagem na cópia.
 import { subarvore } from './db.js';
 import { dataNoFuso, instante } from '../public/js/datas.js';
-import { addDays, hojeISO, parseISO } from './logic.js';
+import { addDays, hojeISO } from './logic.js';
 import { marks } from './helpers.js';
 
-/** Segunda-feira da semana (segunda a domingo) que contém a data. */
-export const segundaDe = (data) => addDays(data, -((parseISO(data).getUTCDay() + 6) % 7));
-
 /** Janelas do relato para a reunião de `semana` (data ISO do dia da reunião), vistas em `hoje`.
- *  Concluídas: da segunda-feira da semana anterior até a véspera da reunião.
+ *  Concluídas: de 7 dias antes até a véspera da reunião.
+ *  Programadas: do dia da reunião até 7 dias depois.
  *  Atrasadas: prazo anterior a hoje (a mesma regra do semáforo), ainda não concluídas.
- *  Programadas: prazo de hoje até o domingo da semana da reunião. */
+ *  Vencem antes da reunião: em aberto, com prazo de hoje até a véspera da reunião (só na tela do chefe;
+ *  se não forem concluídas, chegam atrasadas). Sem isso, essas ações não teriam bloco nenhum. */
 export function janelasDoRelato(semana, hoje = hojeISO()) {
-  const segunda = segundaDe(semana);
   return {
-    concluidas: { de: addDays(segunda, -7), ate: addDays(semana, -1) },
-    programadas: { de: hoje, ate: addDays(segunda, 6) },
+    concluidas: { de: addDays(semana, -7), ate: addDays(semana, -1) },
+    programadas: { de: hoje > semana ? hoje : semana, ate: addDays(semana, 7) },
     atrasadas: { antes: hoje },
+    vencemAntes: { de: hoje, ate: addDays(semana, -1) },
   };
 }
 
@@ -61,6 +60,7 @@ export async function montarRelato(db, secaoId, semana, hoje = hojeISO()) {
     janelas,
     concluidas: concluidas.map(acaoOut),
     atrasadas: abertas.filter((a) => a.prazo < janelas.atrasadas.antes).map(acaoOut),
+    vencemAntes: abertas.filter((a) => a.prazo >= janelas.vencemAntes.de && a.prazo <= janelas.vencemAntes.ate).map(acaoOut),
     programadas: abertas.filter((a) => a.prazo >= janelas.programadas.de && a.prazo <= janelas.programadas.ate).map(acaoOut),
     impedimentos: impedimentos.map((i) => ({
       id: i.id, acao_id: i.acao_id, acao_titulo: i.acao_titulo, acao_status: i.acao_status,

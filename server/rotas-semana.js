@@ -70,7 +70,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
       if (db.isPg) await q1('select id from secoes where id = ? for update', secaoId);
       const relato = await montarRelato(db, secaoId, semana, hoje());
       const snapshot = paraSnapshot(relato, observacoes);
-      const total = ['concluidas', 'atrasadas', 'programadas', 'impedimentos'].reduce((n, k) => n + relato[k].length, 0);
+      const total = ['concluidas', 'atrasadas', 'vencemAntes', 'programadas', 'impedimentos'].reduce((n, k) => n + relato[k].length, 0);
       if (!total && !observacoes) {
         throw falha(400, 'Não há ações nem impedimentos para relatar nesta semana. Se houve algo fora das ações, escreva nas observações.');
       }

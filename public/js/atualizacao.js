@@ -58,6 +58,7 @@ export async function atualizacao(raiz, { refresh }) {
       <div class="erro-form oculto" role="alert"></div>
       ${bloco('O que foi feito', `Ações concluídas de ${br(j.concluidas.de)} a ${br(j.concluidas.ate)}`, rel.concluidas.map((a) => linhaAcao(a, { concluida: true })), 'Nenhuma ação concluída neste período.')}
       ${bloco('Atrasadas', `Prazo vencido antes de hoje (${br(j.atrasadas.antes)}) e ainda não concluídas. Deixam a seção em vermelho.`, rel.atrasadas.map((a) => linhaAcao(a)), 'Nenhuma ação atrasada.')}
+      ${rel.vencemAntes.length ? bloco('Vencem antes da reunião', `Prazo de ${br(j.vencemAntes.de)} a ${br(j.vencemAntes.ate)} e ainda em aberto. Se não forem concluídas até lá, chegam atrasadas à reunião.`, rel.vencemAntes.map((a) => linhaAcao(a)), '') : ''}
       ${bloco('O que será feito nesta semana', `Ações com prazo de ${br(j.programadas.de)} a ${br(j.programadas.ate)}`, rel.programadas.map((a) => linhaAcao(a)), 'Nenhuma ação com prazo neste período.')}
       ${bloco('O que trava', 'Impedimentos ainda abertos nas suas ações. Para registrar um novo, use o botão da ação.', rel.impedimentos.map(linhaImpedimento), 'Nenhum impedimento aberto.')}
       <div class="cartao"><h2>Observações</h2><div class="campo"><label for="obs" class="suave pequeno">Algo que não está nas ações (opcional)</label>
@@ -73,7 +74,7 @@ export async function atualizacao(raiz, { refresh }) {
   const erro = (e) => toast(e.message, 'erro');
   // A tela é redesenhada depois de registrar ou resolver: o texto das observações já está no rascunho.
   on(raiz, 'click', '[data-abrir]', (el) => { gravarRascunho(); abrirAcao(el.dataset.abrir, refresh).catch(erro); });
-  const acaoPorId = (id) => [...rel.concluidas, ...rel.atrasadas, ...rel.programadas].find((a) => a.id === Number(id));
+  const acaoPorId = (id) => [...rel.concluidas, ...rel.atrasadas, ...rel.vencemAntes, ...rel.programadas].find((a) => a.id === Number(id));
   on(raiz, 'click', '[data-imp-novo]', (el) => {
     const a = acaoPorId(el.dataset.impNovo);
     if (!a) return;
