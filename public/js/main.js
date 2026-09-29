@@ -5,6 +5,7 @@ import { $, esc, on, trilho, toast } from './ui.js';
 import { acoes, centro, direcionar, painel, pauta, prazos } from './telas-diretor.js';
 import { historico, inicio, minhasAcoes } from './telas-chefe.js';
 import { atualizacao } from './atualizacao.js';
+import { agenda } from './agenda.js';
 import { combinados } from './combinados.js';
 import { estrutura } from './estrutura.js';
 import { atas, reuniaoDetalhe, reunioes } from './atas.js';
@@ -28,6 +29,7 @@ const ROTAS = {
   // Sem id: tela comum de início (nada é criado ao abrir a rota). Com id: Modo Reunião em tela cheia.
   reuniao: { f: (r, p) => (p.id ? viewReuniao(r, p) : inicioReuniao(r, p)), perfis: GESTAO, tv: (p) => !!p.id, titulo: 'Modo Reunião' },
   inicio: { f: inicio, perfis: ['chefe'], trilho: true, titulo: 'Início' },
+  agenda: { f: agenda, perfis: ['chefe'], trilho: true, titulo: 'Agenda' },
   atualizacao: { f: atualizacao, perfis: ['chefe'], trilho: true, titulo: 'Minha atualização' },
   'minhas-acoes': { f: minhasAcoes, perfis: ['chefe'], trilho: true, titulo: 'Minhas ações' },
   historico: { f: historico, perfis: ['chefe'], titulo: 'Histórico' },
@@ -51,6 +53,7 @@ const MENU_GESTAO = [
 const MENU_CHEFE = [
   ['#Minha Seção'],
   ['inicio', 'Início'],
+  ['agenda', 'Agenda'],
   ['atualizacao', 'Minha atualização'],
   ['minhas-acoes', 'Minhas ações'],
   ['historico', 'Histórico'],

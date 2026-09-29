@@ -983,3 +983,19 @@ body.carregando::before {
 .relato-item .linha { flex: 0 0 auto; flex-wrap: wrap; }
 .impedimento { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 6px 0; display: grid; gap: 4px; background: var(--card); }
 .impedimento.resolvido { opacity: .78; background: var(--pale); }
+
+/* Agenda do chefe: dias empilhados (padrão de agenda de telefone), não uma grade de semana. */
+.agenda-dias { display: grid; gap: 12px; }
+.agenda-dia { padding: 14px 16px; }
+.agenda-dia.agenda-hoje { border-color: var(--ink-2); box-shadow: 0 0 0 1px var(--ink-2) inset; }
+.agenda-dia-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.agenda-atrasadas h2 { margin: 0 0 10px; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+.agenda-lista { display: grid; gap: 6px; }
+.agenda-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  width: 100%; text-align: left; background: var(--pale); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; font: inherit; color: inherit; cursor: pointer;
+}
+.agenda-item:hover { border-color: var(--line-str); }
+.agenda-item-titulo { font-weight: 600; }
+.agenda-item-selos { display: flex; gap: 6px; flex-wrap: wrap; }
