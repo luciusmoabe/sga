@@ -94,6 +94,7 @@ export async function minhasAcoes(raiz) {
             <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade].toLowerCase()}</span>
             ${a.pedido_pendente ? '<span class="pilula">Pedido de prazo enviado</span>' : ''}
             ${a.impedimento_critico ? '<span class="pilula atraso">Impedimento crítico</span>' : a.impedimentos_abertos ? '<span class="pilula st-bloqueada">Impedimento aberto</span>' : ''}
+            ${a.checklist_total ? `<span class="pilula" title="Checklist">☑ ${a.checklist_feitos}/${a.checklist_total}</span>` : ''}
             ${a.status === 'concluida' && !a.arquivada ? '<span class="pilula st-concluida">Aguardando aceite</span>' : ''}
             ${a.arquivada ? '<span class="pilula enc">Arquivada</span>' : ''}
           </div>

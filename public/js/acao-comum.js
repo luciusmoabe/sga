@@ -1,6 +1,6 @@
 // Detalhe de uma ação, compartilhado por Diretor, Apoio e Chefe.
 import { del, get, patch, post } from './api.js';
-import { ehAdmin, ehDiretor } from './estado.js';
+import { ehAdmin, ehDiretor, est } from './estado.js';
 import { abrirForm, br, dataHora, esc, fmtMin, on, pilulaStatus, PRIO, toast } from './ui.js';
 
 // ---------- Impedimentos (formulários usados também pela atualização semanal e por Minhas ações) ----------
@@ -54,6 +54,15 @@ const impedimentoHTML = (i) => `<div class="impedimento ${i.aberto ? '' : 'resol
   ${!i.aberto ? `<div class="suave pequeno">Resolvido em ${dataHora(i.resolvido_em)}${i.resolvido_por_nome ? ` por ${esc(i.resolvido_por_nome)}` : ''}${i.resolucao ? `: ${esc(i.resolucao)}` : ''}</div>` : ''}
 </div>`;
 
+// ---------- Checklist (apoio visual; quem registra tempo e muda status também mexe aqui) ----------
+/** Mesma regra de quem gerencia tempo e status: o chefe da seção (se enxerga a ação, é da sua árvore) e o Administrador. */
+const gereChecklist = () => est.user?.perfil === 'chefe' || ehAdmin();
+const checklistItemHTML = (it) => `<div class="item previsto" data-checklist-id="${it.id}">
+  <label><input type="checkbox" data-marcar-check="${it.id}" ${it.concluido ? 'checked' : ''} ${gereChecklist() ? '' : 'disabled'}>
+    <span style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</span></label>
+  ${gereChecklist() ? `<button type="button" class="btn btn-fantasma btn-mini" data-excluir-check="${it.id}" aria-label="Excluir item">Excluir</button>` : ''}
+</div>`;
+
 export async function abrirAcao(id, aoMudar) {
   const a = await get(`/acoes/${id}`);
   const diretor = ehDiretor();
@@ -95,6 +104,9 @@ export async function abrirAcao(id, aoMudar) {
       `<li class="num">${br(t.data)} · ${fmtMin(t.minutos)} · ${esc(t.usuario_nome || '')}</li>`).join('')}</ul>` : ''}
     ${a.pedidos.length ? `<h3 style="margin:10px 0 6px">Pedidos de novo prazo</h3>${a.pedidos.map((p) => `<div class="comentario pequeno">
       ${br(p.prazo_atual)} → <b>${br(p.novo_prazo)}</b> · ${esc(p.status)} <br><span class="suave">${esc(p.justificativa)}</span></div>`).join('')}` : ''}
+    <h3 style="margin:12px 0 6px">Checklist${a.checklist.length ? ` <span class="suave pequeno">(${a.checklist_feitos}/${a.checklist_total})</span>` : ''}</h3>
+    ${a.checklist.length ? `<div class="itens">${a.checklist.map(checklistItemHTML).join('')}</div>` : '<p class="suave pequeno">Nenhum item no checklist.</p>'}
+    ${gereChecklist() && !a.encerrada ? `<div class="add-linha"><input id="novo-check" placeholder="Novo item do checklist" maxlength="200" aria-label="Novo item do checklist"><button type="button" class="btn btn-sec" data-add-check>Adicionar</button></div>` : ''}
     <h3 style="margin:12px 0 6px">Impedimentos</h3>
     ${a.impedimentos.length ? a.impedimentos.map(impedimentoHTML).join('') : '<p class="suave pequeno">Nenhum impedimento registrado.</p>'}
     ${aceitaImpedimento(a) ? '<button type="button" class="btn btn-sec btn-mini" data-novo-imp>Registrar impedimento</button>' : ''}
@@ -131,6 +143,30 @@ export async function abrirAcao(id, aoMudar) {
     aoAbrir: (dlg) => {
       // Depois de registrar ou resolver, reabre o detalhe já com o histórico novo.
       const recarregar = async () => { dlg.close(); aoMudar?.(); await abrirAcao(a.id, aoMudar); };
+      on(dlg, 'click', '[data-add-check]', async () => {
+        const campo = dlg.querySelector('#novo-check');
+        const t = campo.value.trim();
+        if (!t) return;
+        try {
+          await post(`/acoes/${a.id}/checklist`, { texto: t });
+          await recarregar();
+        } catch (e) { toast(e.message, 'erro'); }
+      });
+      on(dlg, 'keydown', '#novo-check', (el, ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); dlg.querySelector('[data-add-check]').click(); }
+      });
+      on(dlg, 'change', '[data-marcar-check]', async (el) => {
+        try {
+          await patch(`/acoes/${a.id}/checklist/${el.dataset.marcarCheck}`, { concluido: el.checked });
+          await recarregar();
+        } catch (e) { toast(e.message, 'erro'); el.checked = !el.checked; }
+      });
+      on(dlg, 'click', '[data-excluir-check]', async (el) => {
+        try {
+          await del(`/acoes/${a.id}/checklist/${el.dataset.excluirCheck}`);
+          await recarregar();
+        } catch (e) { toast(e.message, 'erro'); }
+      });
       on(dlg, 'click', '[data-novo-imp]', () => abrirNovoImpedimento(a, recarregar));
       on(dlg, 'click', '[data-resolver-imp]', (el) => {
         const imp = a.impedimentos.find((i) => i.id === Number(el.dataset.resolverImp));

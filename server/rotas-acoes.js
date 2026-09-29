@@ -22,7 +22,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       coalesce((select sum(minutos) from tempo where acao_id = a.id), 0) as tempo_total,
       exists(select 1 from pedidos_prazo p where p.acao_id = a.id and p.status = 'pendente') as pedido_pendente,
       (select count(*) from impedimentos i where i.acao_id = a.id and i.resolvido_em is null) as impedimentos_abertos,
-      exists(select 1 from impedimentos i where i.acao_id = a.id and i.resolvido_em is null and i.critico = 1) as impedimento_critico
+      exists(select 1 from impedimentos i where i.acao_id = a.id and i.resolvido_em is null and i.critico = 1) as impedimento_critico,
+      (select count(*) from acao_checklist c where c.acao_id = a.id) as checklist_total,
+      (select count(*) from acao_checklist c where c.acao_id = a.id and c.concluido = 1) as checklist_feitos
     from acoes a
     join secoes s on s.id = a.secao_id
     left join usuarios ua on ua.id = a.criado_por
@@ -38,6 +40,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     pedido_pendente: !!a.pedido_pendente,
     impedimentos_abertos: Number(a.impedimentos_abertos || 0),
     impedimento_critico: !!a.impedimento_critico,
+    checklist_total: Number(a.checklist_total || 0),
+    checklist_feitos: Number(a.checklist_feitos || 0),
     atrasada: a.status !== 'concluida' && !a.encerrada && !a.arquivada && a.prazo < hoje(),
     demandada_diretor: !!a.diretriz_id || a.demandado_por_perfil === 'diretor',
     demandado_em: a.demandado_em || a.criada_em,
@@ -45,6 +49,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     reuniao_semana: a.reuniao_semana,
   });
   const impedimentoOut = (i) => ({ ...i, critico: !!i.critico, aberto: !i.resolvido_em });
+  const checklistOut = (c) => ({ ...c, concluido: !!c.concluido });
   const acaoVisivel = async (user, id) => {
     const v = await visiveisAcoes(user);
     const a = await q1(`${SELECT_ACAO} where a.id = ? and ${v.where}`, id, ...v.params);
@@ -186,6 +191,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         await run('delete from tempo where acao_id = ?', a.id);
         await run('delete from acao_comentarios where acao_id = ?', a.id);
         await run('delete from impedimentos where acao_id = ?', a.id);
+        await run('delete from acao_checklist where acao_id = ?', a.id);
         await run('delete from pedidos_prazo where acao_id = ?', a.id);
         await run('delete from acoes where id = ?', a.id);
         return { ok: true, id: a.id };
@@ -231,6 +237,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       impedimentos: (await q(`select i.*, uc.nome as criado_por_nome, ur.nome as resolvido_por_nome from impedimentos i
         left join usuarios uc on uc.id = i.criado_por left join usuarios ur on ur.id = i.resolvido_por
         where i.acao_id = ? order by i.id desc`, a.id)).map(impedimentoOut),
+      checklist: (await q('select * from acao_checklist where acao_id = ? order by ordem, id', a.id)).map(checklistOut),
     };
   }));
 
@@ -377,6 +384,56 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         acao: acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id)),
       };
     });
+  }));
+
+  // ---------- Checklist da ação ----------
+  // Apoio visual ao chefe: não muda o status nem afeta a regra de concluir (que continua exigindo tempo
+  // registrado). Diferente de impedimentos, itens podem ser editados e excluídos livremente.
+  app.post('/api/acoes/:id/checklist', h(async (req, res) => {
+    const id = Number(req.params.id);
+    const t = texto(req.body?.texto, 200);
+    if (!t) throw falha(400, 'Escreva o item do checklist.');
+    const a = await acaoVisivel(req.user, id);
+    await chefeGere(req.user, a);
+    if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
+    const ordem = (await q1('select coalesce(max(ordem), 0) + 1 o from acao_checklist where acao_id = ?', a.id)).o;
+    const iid = (await run('insert into acao_checklist (acao_id, texto, ordem, criado_em, criado_por) values (?,?,?,?,?)',
+      a.id, t, ordem, agoraISO(), req.user.id)).lastInsertRowid;
+    res.status(201);
+    return checklistOut(await q1('select * from acao_checklist where id = ?', iid));
+  }));
+
+  app.patch('/api/acoes/:id/checklist/:iid', h(async (req) => {
+    const id = Number(req.params.id);
+    const iid = Number(req.params.iid);
+    const a = await acaoVisivel(req.user, id);
+    await chefeGere(req.user, a);
+    if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
+    const item = await q1('select * from acao_checklist where id = ? and acao_id = ?', iid, a.id);
+    if (!item) throw falha(404, 'Item não encontrado.');
+    const b = req.body || {};
+    if ('texto' in b) {
+      const t = texto(b.texto, 200);
+      if (!t) throw falha(400, 'O item não pode ficar vazio.');
+      await run('update acao_checklist set texto = ? where id = ?', t, iid);
+    }
+    if ('concluido' in b) {
+      const c = !!b.concluido;
+      await run('update acao_checklist set concluido = ?, concluido_em = ?, concluido_por = ? where id = ?',
+        c ? 1 : 0, c ? agoraISO() : null, c ? req.user.id : null, iid);
+    }
+    return checklistOut(await q1('select * from acao_checklist where id = ?', iid));
+  }));
+
+  app.delete('/api/acoes/:id/checklist/:iid', h(async (req) => {
+    const id = Number(req.params.id);
+    const iid = Number(req.params.iid);
+    const a = await acaoVisivel(req.user, id);
+    await chefeGere(req.user, a);
+    if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
+    const r = await run('delete from acao_checklist where id = ? and acao_id = ?', iid, a.id);
+    if (!r.changes) throw falha(404, 'Item não encontrado.');
+    return { ok: true };
   }));
 
   app.post('/api/acoes/:id/encerrar', permit('diretor', 'administrador'), h(async (req) => {
