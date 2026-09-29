@@ -110,7 +110,8 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
   }));
 
   const historicoDe = async (secaoId, limite = 12) =>
-    (await q(`select a.* from atualizacoes a where a.secao_id = ?
+    (await q(`select a.*, u.nome as usuario_nome from atualizacoes a left join usuarios u on u.id = a.usuario_id
+       where a.secao_id = ?
        and a.versao = (select max(b.versao) from atualizacoes b where b.secao_id = a.secao_id and b.semana = a.semana)
        order by a.semana desc limit ?`, secaoId, limite)).map(atualizacaoDe);
   app.get('/api/historico', permit('chefe', 'administrador'), h(async (req) => (

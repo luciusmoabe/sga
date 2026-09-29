@@ -129,7 +129,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
   app.post('/api/usuarios/acesso', permit('diretor', 'administrador'), h(async(req,res)=>{
     if(auth.mode!=='supabase') throw falha(400,'Login requer Supabase Auth.');
     const permitidos = req.user.perfil === 'administrador' ? ['diretor', 'apoio', 'chefe'] : ['chefe', 'apoio'];
-    const u=await cadastrarChefe(db,auth,adminAuth || administradorAuth(auth),req.body || {},req.body?.perfil,{ permitidos });
+    const u=await cadastrarChefe(db,auth,adminAuth || administradorAuth(auth),req.body || {},req.body?.perfil,{ permitidos, suplente: !!req.body?.suplente });
     res.status(201); return u;
   }));
   app.patch('/api/usuarios/:id/login', permit('diretor', 'administrador'), h(async(req)=>{
@@ -161,7 +161,10 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     return {ok:true};
   }));
   app.get('/api/usuarios', permit('diretor', 'apoio', 'administrador'), h(async () =>
-    await q(`select u.*, s.nome as secao_nome, (select count(*) from auth_contas c where c.usuario_id=u.id) as tem_login from usuarios u left join secoes s on s.id = u.secao_id order by u.ativo desc, u.perfil, u.nome`)));
+    (await q(`select u.*, s.nome as secao_nome, s.chefe_id as secao_chefe_id, (select count(*) from auth_contas c where c.usuario_id=u.id) as tem_login
+       from usuarios u left join secoes s on s.id = u.secao_id order by u.ativo desc, u.perfil, u.nome`))
+      // Suplente: Chefe com seção atribuída que não é o titular (secoes.chefe_id) daquela seção.
+      .map(({ secao_chefe_id, ...u }) => ({ ...u, suplente: u.perfil === 'chefe' && !!u.secao_id && secao_chefe_id !== u.id }))));
   app.post('/api/usuarios', permit('diretor', 'administrador'), h(async (req, res) => {
     const b = req.body || {};
     const nome = texto(b.nome, 120);

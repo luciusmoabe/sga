@@ -66,7 +66,7 @@ export async function estrutura(raiz, { refresh }) {
   };
   const linhaUsuario = u => `<tr>
     <td><strong>${esc(u.nome)}</strong><span class="estrutura-email">${esc(u.email || 'E-mail não informado')}</span></td>
-    <td>${PERFIL[u.perfil]}</td><td>${esc(u.secao_nome || 'Sem seção atribuída')}</td>
+    <td>${PERFIL[u.perfil]}${u.suplente ? ' <span class="estrutura-selo" title="Chefe adicional da seção, para responder na ausência do titular">Suplente</span>' : ''}</td><td>${esc(u.secao_nome || 'Sem seção atribuída')}</td>
     <td><span class="estrutura-status ${u.ativo ? 'ativo' : ''}">${u.ativo ? 'Ativo' : 'Inativo'}</span><span class="estrutura-email">${u.tem_login ? 'Login vinculado' : 'Sem login'}</span></td>
     <td><div class="estrutura-acoes"><button class="btn btn-sec btn-mini" data-editar-u="${u.id}" aria-label="Editar ${esc(u.nome)}">Editar</button>
     ${opcoes(u.nome, `${u.tem_login && (ehAdmin() || !protegidoParaMim(u)) ? `<button data-login-u="${u.id}">Alterar e-mail ou senha</button>` : u.tem_login ? '' : '<span class="estrutura-menu-nota">Cadastro sem acesso ao app</span>'}${u.perfil === 'administrador' ? '<span class="estrutura-menu-nota">Administrador: só o servidor altera perfil e acesso</span>' : u.perfil === 'diretor' && !ehAdmin() ? '<span class="estrutura-menu-nota">Perfil Diretor protegido: peça ao Administrador</span>' : `<button data-u="${u.id}" data-ativo="${u.ativo ? 0 : 1}">${u.ativo ? 'Desativar' : 'Reativar'} usuário</button>${u.perfil === 'diretor' ? '' : `<button class="estrutura-perigo" data-excluir-u="${u.id}">Excluir usuário</button>`}`}`)}</div></td></tr>`;
@@ -254,16 +254,22 @@ export async function estrutura(raiz, { refresh }) {
           corpo: `<div class="campo"><label for="ca-nome">Nome</label><input id="ca-nome" name="nome" maxlength="120" required></div>
             <div class="campo"><label for="ca-email">E-mail de login</label><input id="ca-email" name="email" type="email" maxlength="160" autocomplete="off" required></div>
             <div class="campo"><label for="ca-senha">Senha inicial</label><input id="ca-senha" name="senha" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><div class="dica">De 12 a 128 caracteres. É provisória: a pessoa será obrigada a criar a própria senha no primeiro acesso. Entregue-a diretamente a ela.</div></div>
-            <div class="campo"><label for="ca-secao">Seção</label><select id="ca-secao" name="secao_id" required><option value="">Escolha uma seção</option>${secoes.filter(s => s.ativa).map(s => `<option value="${s.id}">${esc(s.nome)}${s.sigla ? ` (${esc(s.sigla)})` : ''}${s.chefe_id ? ` — chefe atual: ${esc(s.chefe_nome || 'atribuído')}` : ''}</option>`).join('')}</select><div class="dica">Todas as seções ativas estão disponíveis. Se já houver chefe, será solicitada confirmação para substituí-lo.</div></div>
-            <div class="campo"><label for="ca-perfil">Perfil</label><select id="ca-perfil" name="perfil">${ehAdmin() ? '<option value="diretor">Diretor</option>' : ''}<option value="chefe">Chefe de seção (vê a sua seção e as subordinadas)</option><option value="apoio">Apoio do Diretor (sem seção)</option></select></div><p>Confira o e-mail: a conta será criada com acesso imediato, sem envio de convite.</p>`,
+            <div class="campo"><label for="ca-secao">Seção</label><select id="ca-secao" name="secao_id" required><option value="">Escolha uma seção</option>${secoes.filter(s => s.ativa).map(s => `<option value="${s.id}">${esc(s.nome)}${s.sigla ? ` (${esc(s.sigla)})` : ''}${s.chefe_id ? ` — chefe atual: ${esc(s.chefe_nome || 'atribuído')}` : ''}</option>`).join('')}</select><div class="dica">Todas as seções ativas estão disponíveis. Se já houver chefe, escolha substituí-lo ou cadastrar como suplente.</div></div>
+            <div class="campo"><label for="ca-perfil">Perfil</label><select id="ca-perfil" name="perfil">${ehAdmin() ? '<option value="diretor">Diretor</option>' : ''}<option value="chefe">Chefe de seção (vê a sua seção e as subordinadas)</option><option value="apoio">Apoio do Diretor (sem seção)</option></select></div>
+            <div class="escolha"><label><input type="checkbox" id="ca-suplente" name="suplente" value="1"> Cadastrar como suplente (mantém o chefe atual; os dois passam a poder responder pela seção)</label></div>
+            <p>Confira o e-mail: a conta será criada com acesso imediato, sem envio de convite.</p>`,
           aoEnviar: async (d, form) => {
             const selecionada = secoes.find(s => s.id === Number(d.secao_id));
             if (d.perfil === 'chefe' && selecionada?.chefe_id) {
-              const ok = await confirmar({ titulo: 'Substituir chefe da seção', texto: `O novo usuário assumirá ${esc(selecionada.nome)} no lugar de ${esc(selecionada.chefe_nome || 'seu chefe atual')}. O chefe anterior perderá a atribuição à seção; o histórico será preservado.`, rotulo: 'Confirmar substituição' });
-              if (!ok) throw new Error('Substituição cancelada. Escolha outra seção ou confirme para continuar.');
-              d.substituir_chefe_id = selecionada.chefe_id;
+              if (!d.suplente) {
+                const ok = await confirmar({ titulo: 'Substituir chefe da seção', texto: `O novo usuário assumirá ${esc(selecionada.nome)} no lugar de ${esc(selecionada.chefe_nome || 'seu chefe atual')}. O chefe anterior perderá a atribuição à seção; o histórico será preservado.`, rotulo: 'Confirmar substituição' });
+                if (!ok) throw new Error('Substituição cancelada. Escolha outra seção, marque "suplente" ou confirme para continuar.');
+                d.substituir_chefe_id = selecionada.chefe_id;
+              }
+            } else {
+              d.suplente = '';
             }
-            try { await post('/usuarios/acesso', d); salvo('Usuário criado com acesso.'); }
+            try { await post('/usuarios/acesso', d); salvo(d.suplente ? 'Suplente cadastrado.' : 'Usuário criado com acesso.'); }
             finally { form.querySelector('[name="senha"]').value = ''; d.senha = ''; }
           },
         });

@@ -48,7 +48,8 @@ export function atualizacaoDe(row) {
 
 export const ultimaAtualizacao = async (db, secaoId, semana) => {
   const row = await db
-    .prepare('select * from atualizacoes where secao_id = ? and semana = ? order by versao desc limit 1')
+    .prepare(`select a.*, u.nome as usuario_nome from atualizacoes a left join usuarios u on u.id = a.usuario_id
+      where a.secao_id = ? and a.semana = ? order by a.versao desc limit 1`)
     .get(secaoId, semana);
   return atualizacaoDe(row);
 };
@@ -233,7 +234,8 @@ export async function cartoesReuniao(db, semana, hoje) {
          and a.secao_id in (${marks(todosIds)}) order by p.criado_em`,
     ).all(...todosIds),
     db.prepare(
-      `select a.* from atualizacoes a where a.secao_id in (${marks(raizes)}) and a.semana = ?
+      `select a.*, u.nome as usuario_nome from atualizacoes a left join usuarios u on u.id = a.usuario_id
+       where a.secao_id in (${marks(raizes)}) and a.semana = ?
          and a.versao = (select max(b.versao) from atualizacoes b where b.secao_id = a.secao_id and b.semana = a.semana)`,
     ).all(...raizes, semana),
     // Impedimentos abertos em ações em curso, só de ações visíveis ao Diretor: o quadro da reunião mostra o estado de agora.

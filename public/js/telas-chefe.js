@@ -25,7 +25,7 @@ export async function inicio(raiz, { refresh }) {
     <div class="cabeca"><div><h1>${esc(est.boot.secao?.nome || 'Minha seção')}</h1><div class="sub">Olá, ${esc(est.user.nome.split(' ')[0])}. Aqui está o que precisa da sua atenção.</div></div></div>
     <div class="cartao"><div class="linha entre"><div>
       <h2>Sua atualização desta semana</h2>
-      ${up.atual ? `<p class="suave" style="margin:2px 0 0">Enviada em ${dataHora(up.atual.enviada_em)} (versão ${up.atual.versao}). Se algo mudou, envie uma correção.</p>`
+      ${up.atual ? `<p class="suave" style="margin:2px 0 0">Enviada em ${dataHora(up.atual.enviada_em)}${up.atual.usuario_nome && up.atual.usuario_nome !== est.user.nome ? ` por ${esc(up.atual.usuario_nome)}` : ''} (versão ${up.atual.versao}). Se algo mudou, envie uma correção.</p>`
         : `<p style="margin:2px 0 0">Pendente. Atualizações abertas até ${diaSemana(addDias(semana, -1))}, <b>${br(addDias(semana, -1))}</b>, às ${HORA_FECHAMENTO}h.</p>`}</div>
       <a class="btn btn-primario" href="#/atualizacao">${up.atual ? 'Enviar correção' : 'Registrar atualização'}</a></div></div>
     <div class="espaco"></div>

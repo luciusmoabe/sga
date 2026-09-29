@@ -52,7 +52,7 @@ export async function atualizacao(raiz, { refresh }) {
     <div class="cabeca"><div><h1>Minha atualização</h1><div class="sub">Para a reunião de ${diaSemana(semana)}, ${br(semana)} · prazo regular ${diaSemana(addDias(semana, -1))}, ${br(addDias(semana, -1))}, às ${HORA_FECHAMENTO}h</div></div></div>
     ${d.desatualizada ? '<div class="info" role="status"><b>O relato mudou desde o último envio</b> (ação concluída, prazo novo ou impedimento). Envie de novo para a reunião ver a versão atual.</div>' : ''}
     ${at && !at.feito.snapshot ? '<div class="info">Esta atualização foi enviada no formato antigo (texto livre). Ao enviar de novo, ela passa a ser montada a partir das suas ações.</div>' : ''}
-    ${at && at.feito.snapshot && !d.desatualizada ? `<div class="info">Você já enviou esta atualização (versão ${at.versao}). Ao enviar de novo, a nova versão substitui a anterior e o histórico é mantido.</div>` : ''}
+    ${at && at.feito.snapshot && !d.desatualizada ? `<div class="info">${at.usuario_nome && at.usuario_nome !== est.user.nome ? `${esc(at.usuario_nome)} já enviou` : 'Você já enviou'} esta atualização (versão ${at.versao}). Ao enviar de novo, a nova versão substitui a anterior e o histórico é mantido.</div>` : ''}
     <div class="info">O relato é montado a partir das suas ações. Para mudar algo, atualize a ação (status, prazo ou impedimento) e volte aqui.</div>
     <form id="form-at" novalidate>
       <div class="erro-form oculto" role="alert"></div>

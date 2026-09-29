@@ -912,6 +912,7 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 .estrutura-responsavel { flex: 0 1 170px; display: grid; gap: 4px; font-size: .88rem; }
 .estrutura-legenda { color: var(--muted); font-size: .75rem; }
 .estrutura-status { display: inline-block; background: var(--pale); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: .76rem; white-space: nowrap; }
+.estrutura-selo { display: inline-block; background: var(--pale); color: var(--ink-2); border: 1px solid var(--line-str); border-radius: 6px; padding: 1px 7px; font-size: .74rem; margin-left: 4px; }
 .estrutura-status.ativo { color: var(--ink-2); background: var(--green-bg); }
 .estrutura-inativa .estrutura-identidade strong { color: var(--muted); }
 .estrutura-acoes { display: flex; align-items: flex-start; justify-content: flex-end; gap: 8px; }

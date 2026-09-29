@@ -27,7 +27,7 @@ export function relatoHTML(at) {
     <div><h3>Apoio necessário</h3>${r.apoios.length ? `<ul>${r.apoios.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : '<p class="suave pequeno">Nada informado.</p>'}</div>
     ${r.observacoes ? `<div><h3>Observações</h3><p>${esc(r.observacoes)}</p></div>` : ''}
   </div>${resumoInternas(r.internas) ? `<p class="suave pequeno">${esc(resumoInternas(r.internas))}</p>` : ''}
-  <p class="suave pequeno">Enviada em ${dataHora(at.enviada_em)} · versão ${at.versao}</p>`;
+  <p class="suave pequeno">Enviada em ${dataHora(at.enviada_em)}${at.usuario_nome ? ` por ${esc(at.usuario_nome)}` : ''} · versão ${at.versao}</p>`;
 }
 
 function navSemana(rota, semana) {
