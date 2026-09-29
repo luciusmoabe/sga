@@ -29,7 +29,8 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   app.use(express.json({ limit: '200kb' }));
   // Fontes vendorizadas nunca mudam sob o mesmo nome: cache longo é seguro. Demais estáticos (JS, CSS,
   // ícones) não têm nome com hash de conteúdo — evite cache longo neles, para não servir versão antiga
-  // depois de um deploy.
+  // depois de um deploy. Só vale para uso local (npm start): na Vercel os estáticos vão direto pelo
+  // @vercel/static, sem passar por aqui — o cabeçalho equivalente está em vercel.json (headers). Veja VERCEL.md.
   app.use('/fontes', express.static(path.join(raiz, 'public/fontes'), { maxAge: '30d', immutable: true }));
   app.use(express.static(path.join(raiz, 'public')));
 

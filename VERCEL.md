@@ -4,6 +4,8 @@ O `vercel.json` publica `public/**` como arquivos estáticos e empacota `server/
 
 A publicação explícita de estáticos é necessária porque, com `builds`, a Vercel inclui somente as saídas dos builders. Referência: [configuração oficial](https://vercel.com/docs/project-configuration/vercel-json#builds).
 
+Como os estáticos vão direto pelo `@vercel/static`, sem passar pelo Express, cabeçalhos de cache para eles (`Cache-Control` em `server/app.js`) não valem na Vercel — só localmente (`npm start`). Na Vercel, use o `headers` do próprio `vercel.json`.
+
 ## Configurar o projeto
 
 Use a raiz deste repositório como Root Directory. Mantenha os builders do `vercel.json`, sem substituir o Output Directory por `public` (isso removeria a API). Selecione Node.js 22.x ou 24.x. Configure as variáveis no ambiente correspondente (Production ou Preview) e faça novo deployment após alterá-las.
