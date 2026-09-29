@@ -29,7 +29,7 @@ const ROTAS = {
   // Sem id: tela comum de início (nada é criado ao abrir a rota). Com id: Modo Reunião em tela cheia.
   reuniao: { f: (r, p) => (p.id ? viewReuniao(r, p) : inicioReuniao(r, p)), perfis: GESTAO, tv: (p) => !!p.id, titulo: 'Modo Reunião' },
   inicio: { f: inicio, perfis: ['chefe'], trilho: true, titulo: 'Início' },
-  agenda: { f: agenda, perfis: ['chefe'], trilho: true, titulo: 'Agenda' },
+  agenda: { f: agenda, perfis: TODOS, trilho: true, titulo: 'Agenda' },
   atualizacao: { f: atualizacao, perfis: ['chefe'], trilho: true, titulo: 'Minha atualização' },
   'minhas-acoes': { f: minhasAcoes, perfis: ['chefe'], trilho: true, titulo: 'Minhas ações' },
   historico: { f: historico, perfis: ['chefe'], titulo: 'Histórico' },
@@ -39,6 +39,7 @@ const ROTAS = {
 const MENU_GESTAO = [
   ['#Acompanhamento'],
   ['painel', 'Painel da semana'],
+  ['agenda', 'Agenda'],
   ['reuniao', 'Iniciar reunião', 'destaque'],
   ['#Ações'],
   ['direcionar', 'Direcionar ação'],

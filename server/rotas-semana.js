@@ -117,6 +117,15 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
   app.get('/api/historico', permit('chefe', 'administrador'), h(async (req) => (
     req.user.perfil === 'administrador' || req.user.secao_id ? await historicoDe(await secaoDaAtualizacao(req)) : [])));
 
+  // Exclui uma versão do relato semanal. Contraria de propósito a regra de que o histórico é mantido
+  // (cada envio normalmente vira uma versão nova, nunca apagada); existe para corrigir um relato de
+  // teste ou enviado por engano. Sem cascata: nenhuma outra tabela referencia atualizacoes.
+  app.delete('/api/atualizacoes/:id', permit('administrador'), h(async (req) => {
+    const r = await run('delete from atualizacoes where id = ?', Number(req.params.id));
+    if (!r.changes) throw falha(404, 'Atualização não encontrada.');
+    return { ok: true };
+  }));
+
   // ---------- Painel do Diretor ----------
   app.get('/api/painel', permit('diretor', 'apoio', 'administrador'), h(async (req) => {
     const semana = await semanaDe(req);

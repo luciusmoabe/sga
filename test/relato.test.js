@@ -218,3 +218,34 @@ test('o prazo entre hoje e a reunião não é atrasado nem programado: vence ant
   assert.ok(rel.programadas.some((a) => a.titulo === 'T-prazo-02'));
   assert.ok(!rel.programadas.some((a) => a.titulo === 'T-prazo-25'));
 });
+
+test('só o Administrador exclui uma versão do relato; qualquer versão do histórico pode ser excluída', async (t) => {
+  const { db, call } = await montar(t);
+  // A demonstração já tem uma versão para esta seção/semana; começa do zero para o teste ser exato.
+  await db.exec(`delete from atualizacoes where secao_id = 1 and semana = '${SEMANA}'`);
+  await call(CHEFE_CPE, 'PUT', '/atualizacao', { semana: SEMANA, observacoes: 'Versão 1' });
+  const v1id = (await db.prepare(`select id, versao from atualizacoes where secao_id = 1 and semana = ?
+    order by versao desc limit 1`).get(SEMANA));
+  await call(CHEFE_CPE, 'PUT', '/atualizacao', { semana: SEMANA, observacoes: 'Versão 2' });
+  const v2id = (await db.prepare(`select id, versao from atualizacoes where secao_id = 1 and semana = ?
+    order by versao desc limit 1`).get(SEMANA));
+  const v1 = v1id.id, v2 = v2id.id;
+  assert.equal(v2id.versao, v1id.versao + 1);
+
+  assert.equal((await call(DIRETOR, 'DELETE', `/atualizacoes/${v2}`)).status, 403, 'Diretor não exclui');
+  assert.equal((await call(CHEFE_CPE, 'DELETE', `/atualizacoes/${v2}`)).status, 403, 'Chefe não exclui');
+
+  // Exclui a versão mais recente: a anterior passa a valer (o versionamento já resolve isso sozinho).
+  assert.equal((await call(ADMIN, 'DELETE', `/atualizacoes/${v2}`)).status, 200);
+  const atual = (await call(CHEFE_CPE, 'GET', `/atualizacao?semana=${SEMANA}`)).data.atual;
+  assert.equal(atual.versao, v1id.versao);
+  assert.equal(atual.feito.snapshot.observacoes, 'Versão 1');
+
+  // Exclui a única versão restante: a seção volta a "pendente".
+  assert.equal((await call(ADMIN, 'DELETE', `/atualizacoes/${v1}`)).status, 200);
+  assert.equal((await call(CHEFE_CPE, 'GET', `/atualizacao?semana=${SEMANA}`)).data.atual, null);
+  assert.equal((await call(ADMIN, 'DELETE', `/atualizacoes/${v1}`)).status, 404, 'já foi excluída');
+
+  // Nenhuma outra tabela é afetada: ações, tempo e impedimentos continuam intactos.
+  assert.ok((await db.prepare('select count(*) n from acoes where secao_id = 1').get()).n > 0);
+});

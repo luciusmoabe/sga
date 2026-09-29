@@ -1,7 +1,10 @@
-// Agenda semanal do chefe: as próprias ações organizadas por dia de prazo, de terça a segunda (o mesmo
-// ciclo de negócio usado no Painel e no relato semanal). Não é uma tela nova de dados: tudo já vem de
-// GET /acoes; aqui só se reorganiza por data em vez de por lista. Pensada para celular: dias empilhados
-// verticalmente (o padrão de agenda dos calendários de telefone), não uma grade horizontal de 7 colunas.
+// Agenda semanal: ações organizadas por dia de prazo, de terça a segunda (o mesmo ciclo de negócio usado
+// no Painel e no relato semanal). Não é uma tela nova de dados: tudo já vem de GET /acoes, que já filtra
+// pelo que cada perfil pode ver (o Chefe só a própria árvore; Diretor e Apoio, tudo que não é interno;
+// Administrador, tudo). Aqui só se reorganiza por data em vez de por lista. Pensada para celular: dias
+// empilhados verticalmente (o padrão de agenda dos calendários de telefone), não uma grade de 7 colunas.
+// Para o Chefe é a própria agenda; para Diretor, Apoio e Administrador, a agenda de todas as seções —
+// por isso a seção aparece em destaque (selo), não como texto secundário.
 import { get } from './api.js';
 import { est } from './estado.js';
 import { $, addDias, br, esc, on, parseISO, pilulaStatus, plural, sem, toast, vazio } from './ui.js';
@@ -11,7 +14,7 @@ const DIAS_COMPLETO = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira
 const nomeDiaCompleto = (d) => DIAS_COMPLETO[parseISO(d).getUTCDay()];
 
 const linhaAcao = (a) => `<button type="button" class="agenda-item" data-abrir="${a.id}">
-  <span class="agenda-item-titulo">${esc(a.titulo)} <span class="suave pequeno">${esc(a.secao_sigla)}</span></span>
+  <span class="agenda-item-titulo"><span class="pilula" title="Seção responsável">${esc(a.secao_sigla)}</span> ${esc(a.titulo)}</span>
   <span class="agenda-item-selos">${pilulaStatus(a)}</span>
 </button>`;
 
@@ -27,7 +30,8 @@ function corDoDia(dia, acoesDoDia, hoje) {
 }
 
 export async function agenda(raiz, { q, refresh }) {
-  if (!est.user.secao_id) {
+  const gestao = est.user.perfil !== 'chefe'; // Diretor, Apoio e Administrador veem a agenda de todas as seções
+  if (!gestao && !est.user.secao_id) {
     raiz.innerHTML = `<div class="cabeca"><h1>Agenda</h1></div><div class="cartao">${vazio(
       'Você ainda não está vinculado a uma seção', 'Peça ao Diretor para atribuí-lo a uma seção na tela Estrutura.')}</div>`;
     return;
@@ -45,7 +49,7 @@ export async function agenda(raiz, { q, refresh }) {
 
   raiz.innerHTML = `
     <div class="cabeca">
-      <div><h1>Agenda</h1><div class="sub">Suas ações por prazo, de terça a segunda</div></div>
+      <div><h1>Agenda</h1><div class="sub">${gestao ? 'Ações de todas as seções por prazo, de terça a segunda' : 'Suas ações por prazo, de terça a segunda'}</div></div>
       <div class="acoes-topo">
         <a class="btn btn-sec" href="#/agenda?semana=${addDias(semana, -7)}" aria-label="Semana anterior">←</a>
         <a class="btn btn-sec" href="#/agenda?semana=${est.boot.semana}">Semana atual</a>

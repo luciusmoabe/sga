@@ -1,8 +1,8 @@
 // Telas do Diretor e do Apoio: painel, Centro, direcionar ação, ações, prazos e pauta impressa.
-import { get, post } from './api.js';
-import { ehDiretor, est, hoje } from './estado.js';
+import { del, get, post } from './api.js';
+import { ehAdmin, ehDiretor, est, hoje } from './estado.js';
 import {
-  $, addDias, br, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, porNecessidade, PRIO, sem, STATUS, toast, vazio,
+  $, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, porNecessidade, PRIO, sem, STATUS, toast, vazio,
 } from './ui.js';
 import { abrirAcao } from './acao-comum.js';
 import { itensDoRelato, resumoInternas } from './relato-vista.js';
@@ -11,8 +11,10 @@ const NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 
 const nomeDiaReuniao = () => NOMES_DIA[est.boot?.reuniao_dia ?? 2];
 const horaReuniao = () => est.boot?.reuniao_hora || '10:00';
 
-/** Relato de uma atualização semanal (feito, próximo, impedimentos, apoio). */
-export function relatoHTML(at) {
+/** Relato de uma atualização semanal (feito, próximo, impedimentos, apoio).
+ *  `permitirExcluir`: só o Administrador vê o botão — exclusão de versão do relato é exceção
+ *  deliberada à regra de que o histórico é mantido (server/rotas-semana.js explica o porquê). */
+export function relatoHTML(at, { permitirExcluir = false } = {}) {
   if (!at) return '<p class="suave">Nenhuma atualização enviada para esta semana.</p>';
   const r = itensDoRelato(at);
   const lista = (arr, vazioTxt = 'Nada informado.') => (arr.length
@@ -27,7 +29,8 @@ export function relatoHTML(at) {
     <div><h3>Apoio necessário</h3>${r.apoios.length ? `<ul>${r.apoios.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : '<p class="suave pequeno">Nada informado.</p>'}</div>
     ${r.observacoes ? `<div><h3>Observações</h3><p>${esc(r.observacoes)}</p></div>` : ''}
   </div>${resumoInternas(r.internas) ? `<p class="suave pequeno">${esc(resumoInternas(r.internas))}</p>` : ''}
-  <p class="suave pequeno">Enviada em ${dataHora(at.enviada_em)}${at.usuario_nome ? ` por ${esc(at.usuario_nome)}` : ''} · versão ${at.versao}</p>`;
+  <p class="suave pequeno">Enviada em ${dataHora(at.enviada_em)}${at.usuario_nome ? ` por ${esc(at.usuario_nome)}` : ''} · versão ${at.versao}
+    ${permitirExcluir ? `<button type="button" class="btn btn-perigo btn-mini" data-excluir-relato="${at.id}" style="margin-left:10px">Excluir esta versão</button>` : ''}</p>`;
 }
 
 function navSemana(rota, semana) {
@@ -92,7 +95,7 @@ export async function centro(raiz, { id, q, refresh }) {
         <div class="sub">${esc(it.secao.sigla || '')} · ${esc(it.secao.chefe_nome || 'sem chefe atribuído')} · reunião de ${nomeDiaReuniao()}, ${br(semana)}</div></div>
       <div class="acoes-topo">${sem(it.cor)}</div>
     </div>
-    <div class="cartao"><h2>Relato da semana</h2>${relatoHTML(atual)}</div>
+    <div class="cartao"><h2>Relato da semana</h2>${relatoHTML(atual, { permitirExcluir: ehAdmin() })}</div>
     <div class="cartao"><div class="linha entre"><h2>Ações abertas e recentes</h2>
       <span class="suave num">Tempo total registrado: <b>${fmtMin(d.tempo_total)}</b></span></div>
       ${d.acoes.length ? `<div class="tabela-rolagem"><table><thead><tr><th>Ação</th><th>Prazo</th><th>Situação</th><th>Tempo</th></tr></thead><tbody>
@@ -101,10 +104,23 @@ export async function centro(raiz, { id, q, refresh }) {
         : vazio('Nenhuma ação em aberto', 'As ações direcionadas a este Centro aparecerão aqui.')}
       <p class="suave pequeno" style="margin-top:10px">${d.acoes_internas_visiveis ? 'Como Administrador, você vê também as ações internas das subseções.' : 'Ações internas das subseções não aparecem aqui: o Diretor vê só o resumo, salvo se o chefe compartilhar.'}</p></div>
     <div class="cartao"><h2>Semanas anteriores</h2>${anteriores.length ? anteriores.map((h) => `<details style="margin-bottom:8px"><summary><b>Reunião de ${br(h.semana)}</b>
-      <span class="suave pequeno"> · enviada em ${dataHora(h.enviada_em)}</span></summary><div style="padding-top:10px">${relatoHTML(h)}</div></details>`).join('')
+      <span class="suave pequeno"> · enviada em ${dataHora(h.enviada_em)}</span></summary><div style="padding-top:10px">${relatoHTML(h, { permitirExcluir: ehAdmin() })}</div></details>`).join('')
       : '<p class="suave">Ainda não há histórico.</p>'}</div>`;
   const abrir = (el) => abrirAcao(el.dataset.acao, refresh).catch((e) => toast(e.message, 'erro'));
   on(raiz, 'click', 'tr[data-acao]', abrir);
+  on(raiz, 'click', '[data-excluir-relato]', async (el) => {
+    const ok = await confirmar({
+      titulo: 'Excluir esta versão do relato',
+      texto: 'Isso apaga permanentemente esta versão do relato semanal. Se houver uma versão anterior, ela passa a valer; senão, a seção volta a aparecer como pendente. Ações, tempo e impedimentos da seção não são afetados.',
+      rotulo: 'Excluir versão', perigo: true,
+    });
+    if (!ok) return;
+    try {
+      await del(`/atualizacoes/${el.dataset.excluirRelato}`);
+      toast('Versão do relato excluída.');
+      refresh();
+    } catch (e) { toast(e.message, 'erro'); }
+  });
   on(raiz, 'keydown', 'tr[data-acao]', (el, ev) => { if (ev.key === 'Enter') abrir(el); });
 }
 
