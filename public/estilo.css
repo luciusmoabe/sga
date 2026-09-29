@@ -118,15 +118,7 @@ button { cursor: pointer; border: 0; }
 
 /* Marca */
 .marca { padding: 4px 8px 14px; }
-.marca strong {
-  font-family: var(--head);
-  font-size: 1.7rem;
-  font-weight: 800;
-  letter-spacing: -0.05em;
-  color: var(--green);
-  display: block;
-  line-height: 1;
-}
+.marca-logo { display: block; width: 100%; max-width: 176px; height: auto; }
 
 /* Menu de navegação */
 .menu { display: flex; flex-direction: column; gap: 2px; flex: 1; }
@@ -660,6 +652,7 @@ dialog::backdrop { background: rgba(20,40,30,.55); backdrop-filter: blur(3px); }
   box-shadow: 0 12px 40px rgba(40,61,53,.08);
 }
 .entrada-caixa h1 { font-size: 2rem; color: var(--ink); }
+.entrada-logo { display: block; width: 100%; max-width: 280px; height: auto; }
 .entrada-caixa .lema { color: var(--muted); margin: 6px 0 24px; font-size: 0.95rem; }
 .perfis {
   display: grid;
@@ -861,6 +854,8 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
+  .marca { padding: 0; }
+  .marca-logo { max-width: 120px; }
   .menu { flex-direction: row; overflow-x: auto; flex-basis: 100%; order: 3; }
   .menu a { white-space: nowrap; padding: 8px 10px; }
   .menu .grupo { display: none; }

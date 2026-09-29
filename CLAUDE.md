@@ -22,6 +22,7 @@ Idioma do produto, dos textos da interface, dos commits e dos comentários: port
 - `public/`: SPA em JavaScript puro (módulos ES, sem build), rota por hash em `js/main.js`. Cada tela é uma função `(raiz, {id, q, refresh})` que preenche um elemento. Dialogs com `<dialog>` via `abrirForm` em `js/ui.js`. Delegação de eventos com `on(raiz, tipo, seletor, fn)`.
   - Ao buscar elementos numa tela, use sempre `$('#id', raiz)`: a tela é montada num elemento ainda solto do documento, então `document.querySelector` não o encontra.
   - `estilo.css` traz o sistema visual (paleta petróleo, títulos em serifa, semáforo com forma + texto), o modo TV (`body.tv`, classes `.tv-*`) e regras de impressão.
+  - `imagens/logo-agilis.png` (barra lateral e telas de entrada) e os ícones (`favicon-32`, `apple-touch-icon`, `icon-192`, `icon-512`, `icon-maskable-512`) são gerados a partir de `logo_agilis.png`/`icone_agilis.png` na raiz (arte-fonte, fora de `public/`, não versionada). Instalável como aplicativo: `manifest.webmanifest` e `sw.js` (service worker deliberadamente sem cache — o sistema tem sessão e regras de negócio sensíveis a versão; ele só existe para satisfazer o critério de instalação). O botão "Instalar aplicativo" na barra lateral (`public/js/main.js`) só aparece quando o navegador dispara `beforeinstallprompt`.
 
 ## Regras de negócio (fonte: plano do projeto; não altere sem combinar com o Diretor)
 

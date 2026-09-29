@@ -91,7 +91,7 @@ async function telaEntrada({ expirada = false } = {}) {
   document.body.classList.remove('tv');
   if (!expirada) retorno = null;
   if (await modoAuth() === 'supabase') {
-    app.innerHTML = `<div class="entrada"><div class="entrada-caixa"><h1>Agilis</h1>
+    app.innerHTML = `<div class="entrada"><div class="entrada-caixa"><h1><img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo"></h1>
       <p class="lema">Entre com seu e-mail e senha.</p>
       ${expirada ? '<div class="info" role="status">Sua sessão expirou. Entre novamente para continuar de onde parou; rascunhos não enviados foram mantidos.</div>' : ''}
       <form id="login-senha">
@@ -130,7 +130,7 @@ async function telaEntrada({ expirada = false } = {}) {
   const us = await fetch('/api/usuarios-demo').then((r) => r.json());
   const card = (u) => `<button class="perfil" data-u="${u.id}"><b>${esc(u.nome)}</b><span>${u.perfil === 'chefe' ? esc(u.secao_nome || 'Sem seção atribuída') : PERFIL[u.perfil]}</span></button>`;
   app.innerHTML = `<div class="entrada"><div class="entrada-caixa">
-    <h1>Agilis</h1><p class="lema">Acompanhamento semanal dos Centros do Departamento de Planejamento, Orçamento e Gestão.</p>
+    <h1><img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo"></h1><p class="lema">Acompanhamento semanal dos Centros do Departamento de Planejamento, Orçamento e Gestão.</p>
     <div class="info">Protótipo com dados fictícios. Escolha um perfil para explorar; não há senha nesta versão.</div>
     <div class="grupo-titulo">Diretor e Apoio</div><div class="perfis">${us.filter((u) => u.perfil !== 'chefe').map(card).join('')}</div>
     <div class="grupo-titulo">Chefes de seção</div><div class="perfis">${us.filter((u) => u.perfil === 'chefe').map(card).join('')}</div></div></div>`;
@@ -144,16 +144,45 @@ on(app, 'click', '[data-u]', async (el) => {
   await render();
 });
 
+// ---------- Instalar como aplicativo ----------
+// O navegador dispara este evento quando o Agilis cumpre os requisitos de instalação (manifesto + service
+// worker). Guardamos o evento para oferecer o botão só quando a instalação for realmente possível.
+const rodandoComoApp = () => window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
+let promptInstalar = null;
+const atualizarBotaoInstalar = () => {
+  const botao = $('#instalar-app');
+  botao?.classList.toggle('oculto', !promptInstalar || rodandoComoApp());
+};
+window.addEventListener('beforeinstallprompt', (ev) => {
+  ev.preventDefault();
+  promptInstalar = ev;
+  atualizarBotaoInstalar();
+});
+window.addEventListener('appinstalled', () => {
+  promptInstalar = null;
+  atualizarBotaoInstalar();
+  toast('Agilis instalado. Você já pode abri-lo como um aplicativo.');
+});
+on(app, 'click', '#instalar-app', async () => {
+  if (!promptInstalar) return;
+  promptInstalar.prompt();
+  await promptInstalar.userChoice;
+  promptInstalar = null;
+  atualizarBotaoInstalar();
+});
+
 function casca() {
   const u = est.user;
   const menu = (u.perfil === 'chefe' ? MENU_CHEFE : u.perfil === 'administrador' ? MENU_ADMIN : MENU_GESTAO).filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
   app.innerHTML = `<div class="app"><aside class="lateral">
-    <div class="marca"><strong>Agilis</strong></div>
+    <div class="marca"><img src="/imagens/logo-agilis.png" alt="Agilis" class="marca-logo"></div>
     <nav class="menu" aria-label="Principal">${menu.map((m) => m[0].startsWith('#')
       ? `<div class="grupo"><b>${esc(m[0].slice(1))}</b></div>`
       : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}">${esc(m[1])}${m[2] === 'selo' ? '<span class="selo oculto" id="selo-prazos"></span>' : ''}</a>`).join('')}</nav>
-    <div class="usuario"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}<br><span class="usuario-acoes">${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span></div></aside>
+    <div class="usuario"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}<br><span class="usuario-acoes">${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
+      <button class="btn btn-fantasma btn-mini oculto" id="instalar-app" style="margin-top:6px">Instalar aplicativo</button></div></aside>
     <main class="principal"><div id="trilho"></div><div id="conteudo"></div></main></div>`;
+  atualizarBotaoInstalar();
   $('#alterar-senha')?.addEventListener('click', () => abrirTrocaSenha());
   $('#sair').addEventListener('click', async () => {
     try { await sair(); est.user = null; est.boot = null; location.hash = '#/'; render(); }
@@ -228,3 +257,4 @@ async function renderizar() {
 
 window.addEventListener('hashchange', () => render());
 render();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => { /* segue sem instalação; a navegação comum continua funcionando */ });
