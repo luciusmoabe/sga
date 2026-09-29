@@ -118,7 +118,7 @@ button { cursor: pointer; border: 0; }
 
 /* Marca */
 .marca { padding: 4px 8px 14px; }
-.marca-logo { display: block; width: 100%; max-width: 176px; height: auto; }
+.marca-logo { display: block; width: 100%; max-width: 140px; height: auto; }
 
 /* Menu de navegação */
 .menu { display: flex; flex-direction: column; gap: 2px; flex: 1; }
@@ -864,7 +864,7 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
     border-bottom: 1px solid var(--line);
   }
   .marca { padding: 0; }
-  .marca-logo { max-width: 120px; }
+  .marca-logo { max-width: 96px; }
   .menu { flex-direction: row; overflow-x: auto; flex-basis: 100%; order: 3; }
   .menu a { white-space: nowrap; padding: 8px 10px; }
   .menu .grupo { display: none; }
