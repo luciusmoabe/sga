@@ -13,8 +13,11 @@ import { abrirAcao } from './acao-comum.js';
 const DIAS_COMPLETO = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 const nomeDiaCompleto = (d) => DIAS_COMPLETO[parseISO(d).getUTCDay()];
 
-const linhaAcao = (a) => `<button type="button" class="agenda-item" data-abrir="${a.id}">
-  <span class="agenda-item-titulo"><span class="pilula" title="Seção responsável">${esc(a.secao_sigla)}</span> ${esc(a.titulo)}</span>
+// `comPrazo`: mostra a data do prazo junto do título. Nos cartões de dia a data já está no cabeçalho da
+// seção (repeti-la seria ruído); no bloco "Atrasadas", que reúne dias diferentes, ela é a informação que falta.
+const linhaAcao = (a, { comPrazo = false } = {}) => `<button type="button" class="agenda-item" data-abrir="${a.id}">
+  <span class="agenda-item-titulo"><span class="pilula" title="Seção responsável">${esc(a.secao_sigla)}</span> ${esc(a.titulo)}
+    ${comPrazo ? `<span class="suave pequeno">deveria terminar em ${br(a.prazo)}</span>` : ''}</span>
   <span class="agenda-item-selos">${pilulaStatus(a)}</span>
 </button>`;
 
@@ -58,7 +61,7 @@ export async function agenda(raiz, { q, refresh }) {
     </div>
     ${atrasadas.length ? `<div class="cartao agenda-atrasadas">
       <h2>${sem('vermelho')} ${plural(atrasadas.length, 'ação atrasada', 'ações atrasadas')}</h2>
-      <div class="agenda-lista">${atrasadas.map(linhaAcao).join('')}</div>
+      <div class="agenda-lista">${atrasadas.map((a) => linhaAcao(a, { comPrazo: true })).join('')}</div>
     </div>` : ''}
     <div class="agenda-dias">
       ${dias.map((d) => {
