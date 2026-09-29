@@ -56,15 +56,17 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     if (!a) throw falha(404, 'Ação não encontrada.');
     return a;
   };
-  const podeExcluirAcao = async (user, a) => {
+  // `a` sempre chega aqui vindo de acaoVisivel(user, ...) no mesmo pedido: para o perfil Chefe, a
+  // visibilidade já exige a.secao_id em subarvore(user.secao_id) — a mesma condição que a gestão exige.
+  // Repetir essa consulta (uma ida a mais ao banco) não muda o resultado; por isso não se repete aqui.
+  const podeExcluirAcao = (user, a) => {
     if (user.perfil === 'administrador') return true;
     if (['diretor','apoio'].includes(user.perfil)) return a.criado_por === user.id || ['diretor','apoio'].includes(a.autor_perfil);
-    return user.perfil === 'chefe' && !a.diretriz_id && !!user.secao_id
-      && (await subarvore(db,user.secao_id)).includes(a.secao_id);
+    return user.perfil === 'chefe' && !a.diretriz_id && !!user.secao_id;
   };
-  const chefeGere = async (user, acao) => {
+  const chefeGere = (user, acao) => {
     if (user.perfil === 'administrador') return; // o Administrador age em qualquer seção
-    if (user.perfil !== 'chefe' || !user.secao_id || !(await subarvore(db, user.secao_id)).includes(acao.secao_id)) {
+    if (user.perfil !== 'chefe' || !user.secao_id) {
       throw falha(403, 'Somente o chefe da seção responsável pode alterar esta ação.');
     }
   };
@@ -228,16 +230,25 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
 
   app.get('/api/acoes/:id', h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
+    // Cinco consultas independentes: em série custariam uma ida ao banco cada (o maior custo desta tela
+    // é a rede, não o SQL). pode_excluir não consulta nada (ver podeExcluirAcao).
+    const [comentarios, lancamentos, pedidos, impedimentos, checklist] = await Promise.all([
+      q(`select c.*, u.nome as usuario_nome from acao_comentarios c left join usuarios u on u.id = c.usuario_id where c.acao_id = ? order by c.id`, a.id),
+      q(`select t.*, u.nome as usuario_nome from tempo t left join usuarios u on u.id = t.usuario_id where t.acao_id = ? order by t.data desc, t.id desc`, a.id),
+      q('select * from pedidos_prazo where acao_id = ? order by id desc', a.id),
+      q(`select i.*, uc.nome as criado_por_nome, ur.nome as resolvido_por_nome from impedimentos i
+        left join usuarios uc on uc.id = i.criado_por left join usuarios ur on ur.id = i.resolvido_por
+        where i.acao_id = ? order by i.id desc`, a.id),
+      q('select * from acao_checklist where acao_id = ? order by ordem, id', a.id),
+    ]);
     return {
       ...acaoOut(a),
-      pode_excluir: await podeExcluirAcao(req.user,a),
-      comentarios: await q(`select c.*, u.nome as usuario_nome from acao_comentarios c left join usuarios u on u.id = c.usuario_id where c.acao_id = ? order by c.id`, a.id),
-      lancamentos: await q(`select t.*, u.nome as usuario_nome from tempo t left join usuarios u on u.id = t.usuario_id where t.acao_id = ? order by t.data desc, t.id desc`, a.id),
-      pedidos: await q('select * from pedidos_prazo where acao_id = ? order by id desc', a.id),
-      impedimentos: (await q(`select i.*, uc.nome as criado_por_nome, ur.nome as resolvido_por_nome from impedimentos i
-        left join usuarios uc on uc.id = i.criado_por left join usuarios ur on ur.id = i.resolvido_por
-        where i.acao_id = ? order by i.id desc`, a.id)).map(impedimentoOut),
-      checklist: (await q('select * from acao_checklist where acao_id = ? order by ordem, id', a.id)).map(checklistOut),
+      pode_excluir: podeExcluirAcao(req.user, a),
+      comentarios,
+      lancamentos,
+      pedidos,
+      impedimentos: impedimentos.map(impedimentoOut),
+      checklist: checklist.map(checklistOut),
     };
   }));
 
