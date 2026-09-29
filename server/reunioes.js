@@ -197,6 +197,17 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       return { ok: true };
     });
   }));
+  app.patch('/api/reunioes/:id/decisoes/:decisaoId', gestao, h(async (req) => {
+    return comReuniao(req.params.id, async (r) => {
+      emAndamento(r);
+      const t = texto(req.body?.texto, 600);
+      if (!t) throw falha(400, 'Escreva a decisão.');
+      const d = await q1('select id from decisoes where id = ? and reuniao_id = ?', Number(req.params.decisaoId), r.id);
+      if (!d) throw falha(404, 'Decisão não encontrada.');
+      await run('update decisoes set texto = ? where id = ?', t, d.id);
+      return { ok: true };
+    });
+  }));
   app.delete('/api/reunioes/:id/decisoes/:decisaoId', gestao, h(async (req) => {
     return comReuniao(req.params.id, async (r) => {
       emAndamento(r);

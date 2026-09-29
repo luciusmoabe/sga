@@ -1,10 +1,11 @@
 // Modo Reunião: tela cheia para a TV da sala, conduzida pelo Diretor ou pelo Apoio.
 // Abre com os Combinados, mostra as seções por ordem de necessidade e registra decisões e ações ao vivo.
 // Ficam ocultos na projeção, por padrão: tempo em minutos e ações internas de subseções.
-import { get, post } from './api.js';
+import { del, get, patch, post } from './api.js';
 import { itensDoRelato, resumoInternas } from './relato-vista.js';
 import { est, hoje } from './estado.js';
 import { $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, parseISO, plural, sem, STATUS, toast } from './ui.js';
+import { abrirAcao } from './acao-comum.js';
 
 /**
  * Tela de início (fora do modo TV). Abrir esta rota não cria nada: a reunião só nasce no botão,
@@ -141,10 +142,13 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
             <span style="color:#e6d9a0">${esc(p.justificativa)}</span>
             <span class="linha"><button class="btn btn-ok" data-a="decidir" data-p="${p.id}" data-v="1">Aprovar</button><button class="btn btn-perigo" data-a="decidir" data-p="${p.id}" data-v="0">Recusar</button></span></div>`).join('')}
           <div class="tv-caixa"><h3>Ações da seção</h3></div>
-          ${c.acoes.length ? c.acoes.map((a) => `<div class="tv-acao ${a.atrasada ? 'atrasada' : ''}"><span class="linha1"><b>${esc(a.titulo)}</b><span>${STATUS[a.status]}</span></span>
-            <small>Prazo ${br(a.prazo)}${a.atrasada ? ' · atrasada' : ''}${S.tempo ? '' : ''}</small>${S.tempo ? `<span class="tv-tempo">Tempo: ${fmtMin(a.tempo_total)}</span>` : ''}</div>`).join('')
+          ${c.acoes.length ? c.acoes.map((a) => `<button type="button" class="tv-acao ${a.atrasada ? 'atrasada' : ''}" data-abrir-acao="${a.id}"><span class="linha1"><b>${esc(a.titulo)}</b><span>${STATUS[a.status]}</span></span>
+            <small>Prazo ${br(a.prazo)}${a.atrasada ? ' · atrasada' : ''}${S.tempo ? '' : ''}</small>${S.tempo ? `<span class="tv-tempo">Tempo: ${fmtMin(a.tempo_total)}</span>` : ''}</button>`).join('')
             : '<p class="nada">Nenhuma ação aberta.</p>'}
-          ${decs.length ? `<div class="tv-caixa"><h3>Decisões desta seção</h3></div><div class="tv-decisoes">${decs.map((d) => `<div>${esc(d.texto)}</div>`).join('')}</div>` : ''}
+          ${decs.length ? `<div class="tv-caixa"><h3>Decisões desta seção</h3></div><div class="tv-decisoes">${decs.map((d) => `<div class="tv-decisao">
+            <span>${esc(d.texto)}</span>
+            <span class="tv-decisao-acoes"><button type="button" class="btn btn-fantasma btn-mini" data-editar-dec="${d.id}">Editar</button><button type="button" class="btn btn-fantasma btn-mini" data-excluir-dec="${d.id}">Excluir</button></span>
+          </div>`).join('')}</div>` : ''}
         </div>
       </div></div>
       <footer class="tv-rodape"><div class="linha"><button class="btn btn-sec" data-a="ant" ${S.idx === 0 ? 'disabled' : ''}>← Anterior</button>
@@ -194,6 +198,34 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
       aoEnviar: async (d) => { await post(`/reunioes/${S.id}/decisoes`, { texto: d.texto, secao_id: c?.secao.id ?? null }); toast('Decisão registrada.'); await recarregar(); desenhar(); },
     });
   };
+  const formDecisaoEditar = (d) => {
+    abrirForm({
+      titulo: 'Editar decisão',
+      corpo: `<div class="campo"><label for="dc-t">O que foi decidido</label><textarea id="dc-t" name="texto" maxlength="600">${esc(d.texto)}</textarea></div>`,
+      rotulo: 'Salvar',
+      aoEnviar: async (v) => { await patch(`/reunioes/${S.id}/decisoes/${d.id}`, { texto: v.texto }); toast('Decisão atualizada.'); await recarregar(); desenhar(); },
+    });
+  };
+
+  // Ações e decisões da seção são editadas ao vivo, sem sair da reunião: a ação reaproveita o mesmo
+  // diálogo usado no resto do app (comentar, mudar prioridade, arquivar, excluir, impedimentos, checklist).
+  on(raiz, 'click', '[data-abrir-acao]', (el) => {
+    abrirAcao(Number(el.dataset.abrirAcao), async () => { await recarregar(); desenhar(); }).catch(erro);
+  });
+  on(raiz, 'click', '[data-editar-dec]', (el) => {
+    const d = S.reuniao.decisoes.find((x) => x.id === Number(el.dataset.editarDec));
+    if (d) formDecisaoEditar(d);
+  });
+  on(raiz, 'click', '[data-excluir-dec]', async (el) => {
+    const ok = await confirmar({ titulo: 'Excluir decisão', texto: 'Isso apaga permanentemente esta decisão registrada na reunião.', rotulo: 'Excluir decisão', perigo: true });
+    if (!ok) return;
+    try {
+      await del(`/reunioes/${S.id}/decisoes/${el.dataset.excluirDec}`);
+      toast('Decisão excluída.');
+      await recarregar();
+      desenhar();
+    } catch (e) { erro(e); }
+  });
 
   on(raiz, 'click', '[data-a]', async (el) => {
     const a = el.dataset.a;

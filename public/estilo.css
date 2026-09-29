@@ -801,7 +801,11 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 .tv-caixa .pend  { color: #f0b93c; }
 .tv-caixa.critico { border-color: #ff7a6b; }
 .tv-acoes { display: grid; gap: 0.5rem; align-content: start; overflow-y: auto; max-height: 100%; }
-.tv-acao { display: grid; gap: 0.15rem; padding: 0.55rem 0.8rem; border-radius: 9px; border-left: 0.35rem solid transparent; background: #0d2e1d; font-size: 1rem; }
+.tv-acao {
+  display: grid; gap: 0.15rem; padding: 0.55rem 0.8rem; border-radius: 9px; border: 0; border-left: 0.35rem solid transparent;
+  background: #0d2e1d; color: inherit; font: inherit; text-align: left; width: 100%; cursor: pointer; transition: background 0.12s;
+}
+.tv-acao:hover, .tv-acao:focus-visible { background: #163d28; }
 .tv-acao .linha1 { display: flex; justify-content: space-between; gap: 0.6rem; }
 .tv-acao .linha1 > span { white-space: nowrap; }
 .tv-acao small { color: #8ac0a6; font-size: 0.95rem; }
@@ -810,6 +814,11 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 .tv-tempo { color: #f0b93c; font-size: 0.95rem; font-weight: 700; }
 .tv-decisoes { display: grid; gap: 0.3rem; font-size: 1rem; }
 .tv-decisoes div { background: #0d2e1d; border-radius: 8px; padding: 0.35rem 0.7rem; }
+.tv-decisao { display: flex; justify-content: space-between; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
+.tv-decisao-acoes { display: flex; gap: 0.3rem; flex: none; }
+/* `.tv-app .btn` (mais específico que `.btn-mini`) deixaria estes botões do tamanho normal da tela;
+   aqui precisam ser realmente pequenos para não competir com o texto da decisão. */
+.tv-app .tv-decisao-acoes .btn { padding: 3px 10px; font-size: 0.8rem; border-radius: 6px; }
 .tv-dica { color: #8fbfa6; font-size: 0.95rem; }
 .tv dialog { background: #112e1f; color: #dff0e8; }
 .tv dialog input, .tv dialog textarea, .tv dialog select { background: #0c2a1e; color: #fff; border-color: #3a6e52; }

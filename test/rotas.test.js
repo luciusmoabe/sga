@@ -31,6 +31,7 @@ const ESPERADAS = [
   'GET /api/usuarios-demo',
   'PATCH /api/acoes/:id',
   'PATCH /api/combinados/:id',
+  'PATCH /api/reunioes/:id/decisoes/:decisaoId',
   'PATCH /api/secoes/:id',
   'PATCH /api/usuarios/:id',
   'PATCH /api/usuarios/:id/login',

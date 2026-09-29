@@ -230,6 +230,12 @@ test('reunião: decisões, nova ação ao vivo, prazo por delegação do Apoio e
   assert.equal((await call(APOIO, 'POST', `/reunioes/${reuniaoId}/decisoes`, { texto: '' })).status, 400);
   assert.equal((await call(APOIO, 'POST', `/reunioes/${reuniaoId}/decisoes`, { secao_id: 2, texto: 'Priorizar o remanejamento.' })).status, 201);
   assert.equal((await call(DIRETOR, 'POST', `/reunioes/${reuniaoId}/decisoes`, { texto: 'Enviar ofício aos parceiros.' })).status, 201);
+  // Decisão pode ser corrigida ao vivo, durante a reunião: só quem gere reuniões, e só até encerrar.
+  const alvo = (await call(DIRETOR, 'GET', `/reunioes/${reuniaoId}`)).data.decisoes.find((d) => d.texto === 'Enviar ofício aos parceiros.');
+  assert.equal((await call(CHEFE.CPE, 'PATCH', `/reunioes/${reuniaoId}/decisoes/${alvo.id}`, { texto: 'Outro texto.' })).status, 403);
+  assert.equal((await call(DIRETOR, 'PATCH', `/reunioes/${reuniaoId}/decisoes/${alvo.id}`, { texto: '' })).status, 400);
+  assert.equal((await call(DIRETOR, 'PATCH', `/reunioes/${reuniaoId}/decisoes/999999`, { texto: 'Outro texto.' })).status, 404);
+  assert.equal((await call(DIRETOR, 'PATCH', `/reunioes/${reuniaoId}/decisoes/${alvo.id}`, { texto: 'Enviar ofício revisado aos parceiros.' })).status, 200);
   const nova = await call(APOIO, 'POST', `/reunioes/${reuniaoId}/acoes`, { titulo: 'Entregar o relatório de riscos', destino: 'especificos', secoes: [2], prazo: '2026-09-30', prioridade: 'alta' });
   assert.equal(nova.status, 201);
   const pedido = await call(DIRETOR, 'POST', '/pedidos-prazo/999/decidir', {});
@@ -242,10 +248,13 @@ test('reunião: decisões, nova ação ao vivo, prazo por delegação do Apoio e
   const enc = await call(APOIO, 'POST', `/reunioes/${reuniaoId}/encerrar`);
   assert.equal(enc.data.status, 'rascunho');
   assert.match(enc.data.ata_texto, /Priorizar o remanejamento/);
+  assert.match(enc.data.ata_texto, /Enviar ofício revisado aos parceiros/, 'a ata reflete o texto editado, não o original');
+  assert.doesNotMatch(enc.data.ata_texto, /Enviar ofício aos parceiros\.\n/);
   assert.match(enc.data.ata_texto, /\[COF\] Entregar o relatório de riscos — prazo 30\/09\/2026 — prioridade alta/);
   assert.match(enc.data.ata_texto, /recusado/);
   assert.match(enc.data.ata_texto, /Uma pessoa fala por vez/);
   assert.equal((await call(APOIO, 'POST', `/reunioes/${reuniaoId}/decisoes`, { texto: 'tarde demais' })).status, 409);
+  assert.equal((await call(APOIO, 'PATCH', `/reunioes/${reuniaoId}/decisoes/${alvo.id}`, { texto: 'tarde demais' })).status, 409);
 });
 
 test('ata: revisão, envio e visibilidade para os chefes', async () => {
