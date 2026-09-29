@@ -62,6 +62,16 @@ const checklistItemHTML = (it) => `<div class="item previsto" data-checklist-id=
     <span style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</span></label>
   ${gereChecklist() ? `<button type="button" class="btn btn-fantasma btn-mini" data-excluir-check="${it.id}" aria-label="Excluir item">Excluir</button>` : ''}
 </div>`;
+/** Badges do topo e bloco do checklist: extraídos para poder atualizar só essas partes do diálogo
+ *  (marcar/adicionar/excluir item não fecha e reabre a tela toda). */
+const badgesHTML = (a) => `${pilulaStatus(a)}
+  ${a.demandada_diretor ? '<span class="pilula diretor">Demandada pelo Diretor</span>' : ''}
+  <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade]}</span>
+  <span class="suave pequeno">${esc(a.secao_sigla)} · ${esc(a.secao_nome)}</span>`;
+const checklistBlocoHTML = (a) => `
+  <h3 style="margin:12px 0 6px">Checklist${a.checklist.length ? ` <span class="suave pequeno">(${a.checklist_feitos}/${a.checklist_total})</span>` : ''}</h3>
+  ${a.checklist.length ? `<div class="itens">${a.checklist.map(checklistItemHTML).join('')}</div>` : '<p class="suave pequeno">Nenhum item no checklist.</p>'}
+  ${gereChecklist() && !a.encerrada ? `<div class="add-linha"><input id="novo-check" placeholder="Novo item do checklist" maxlength="200" aria-label="Novo item do checklist"><button type="button" class="btn btn-sec" data-add-check>Adicionar</button></div>` : ''}`;
 
 export async function abrirAcao(id, aoMudar) {
   const a = await get(`/acoes/${id}`);
@@ -84,12 +94,7 @@ export async function abrirAcao(id, aoMudar) {
         </div>
       </div>` : '')}
     <p>${a.detalhe ? esc(a.detalhe) : '<span class="suave">Sem detalhamento.</span>'}</p>
-    <div class="linha" style="margin-bottom:10px;align-items:center;flex-wrap:wrap;gap:8px">
-      ${pilulaStatus(a)}
-      ${a.demandada_diretor ? '<span class="pilula diretor">Demandada pelo Diretor</span>' : ''}
-      <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade]}</span>
-      <span class="suave pequeno">${esc(a.secao_sigla)} · ${esc(a.secao_nome)}</span>
-    </div>
+    <div class="linha" id="acao-badges" style="margin-bottom:10px;align-items:center;flex-wrap:wrap;gap:8px">${badgesHTML(a)}</div>
     ${`    <div class="linha" style="margin-bottom:10px;align-items:center">
       <label for="sel-prio" class="suave pequeno" style="margin:0"><b>Alterar prioridade:</b></label>
       <select id="sel-prio" data-mudar-prio style="width:auto;padding:3px 8px;font-size:0.84rem;margin-left:6px">
@@ -104,9 +109,7 @@ export async function abrirAcao(id, aoMudar) {
       `<li class="num">${br(t.data)} · ${fmtMin(t.minutos)} · ${esc(t.usuario_nome || '')}</li>`).join('')}</ul>` : ''}
     ${a.pedidos.length ? `<h3 style="margin:10px 0 6px">Pedidos de novo prazo</h3>${a.pedidos.map((p) => `<div class="comentario pequeno">
       ${br(p.prazo_atual)} → <b>${br(p.novo_prazo)}</b> · ${esc(p.status)} <br><span class="suave">${esc(p.justificativa)}</span></div>`).join('')}` : ''}
-    <h3 style="margin:12px 0 6px">Checklist${a.checklist.length ? ` <span class="suave pequeno">(${a.checklist_feitos}/${a.checklist_total})</span>` : ''}</h3>
-    ${a.checklist.length ? `<div class="itens">${a.checklist.map(checklistItemHTML).join('')}</div>` : '<p class="suave pequeno">Nenhum item no checklist.</p>'}
-    ${gereChecklist() && !a.encerrada ? `<div class="add-linha"><input id="novo-check" placeholder="Novo item do checklist" maxlength="200" aria-label="Novo item do checklist"><button type="button" class="btn btn-sec" data-add-check>Adicionar</button></div>` : ''}
+    <div id="acao-checklist-bloco">${checklistBlocoHTML(a)}</div>
     <h3 style="margin:12px 0 6px">Impedimentos</h3>
     ${a.impedimentos.length ? a.impedimentos.map(impedimentoHTML).join('') : '<p class="suave pequeno">Nenhum impedimento registrado.</p>'}
     ${aceitaImpedimento(a) ? '<button type="button" class="btn btn-sec btn-mini" data-novo-imp>Registrar impedimento</button>' : ''}
@@ -143,28 +146,47 @@ export async function abrirAcao(id, aoMudar) {
     aoAbrir: (dlg) => {
       // Depois de registrar ou resolver, reabre o detalhe já com o histórico novo.
       const recarregar = async () => { dlg.close(); aoMudar?.(); await abrirAcao(a.id, aoMudar); };
+      // Atualiza só o topo (contador embutido no selo de status) e o bloco do checklist: marcar, adicionar
+      // ou excluir um item não fecha e reabre a tela toda (o resto do diálogo — comentários, impedimentos,
+      // rolagem — continua exatamente onde estava).
+      const atualizarChecklist = () => {
+        dlg.querySelector('#acao-badges').innerHTML = badgesHTML(a);
+        dlg.querySelector('#acao-checklist-bloco').innerHTML = checklistBlocoHTML(a);
+        aoMudar?.(); // atualiza a lista de quem chamou (ex.: selo na tela de Minhas ações) em segundo plano
+      };
       on(dlg, 'click', '[data-add-check]', async () => {
         const campo = dlg.querySelector('#novo-check');
         const t = campo.value.trim();
         if (!t) return;
         try {
-          await post(`/acoes/${a.id}/checklist`, { texto: t });
-          await recarregar();
+          const item = await post(`/acoes/${a.id}/checklist`, { texto: t });
+          a.checklist.push(item);
+          a.checklist_total++;
+          atualizarChecklist();
+          dlg.querySelector('#novo-check')?.focus();
         } catch (e) { toast(e.message, 'erro'); }
       });
       on(dlg, 'keydown', '#novo-check', (el, ev) => {
         if (ev.key === 'Enter') { ev.preventDefault(); dlg.querySelector('[data-add-check]').click(); }
       });
       on(dlg, 'change', '[data-marcar-check]', async (el) => {
+        const id = Number(el.dataset.marcarCheck);
         try {
-          await patch(`/acoes/${a.id}/checklist/${el.dataset.marcarCheck}`, { concluido: el.checked });
-          await recarregar();
+          const item = await patch(`/acoes/${a.id}/checklist/${id}`, { concluido: el.checked });
+          const i = a.checklist.findIndex((x) => x.id === id);
+          if (i >= 0) a.checklist[i] = item;
+          a.checklist_feitos += el.checked ? 1 : -1;
+          atualizarChecklist();
         } catch (e) { toast(e.message, 'erro'); el.checked = !el.checked; }
       });
       on(dlg, 'click', '[data-excluir-check]', async (el) => {
+        const id = Number(el.dataset.excluirCheck);
         try {
-          await del(`/acoes/${a.id}/checklist/${el.dataset.excluirCheck}`);
-          await recarregar();
+          await del(`/acoes/${a.id}/checklist/${id}`);
+          const i = a.checklist.findIndex((x) => x.id === id);
+          if (i >= 0) { if (a.checklist[i].concluido) a.checklist_feitos--; a.checklist.splice(i, 1); }
+          a.checklist_total--;
+          atualizarChecklist();
         } catch (e) { toast(e.message, 'erro'); }
       });
       on(dlg, 'click', '[data-novo-imp]', () => abrirNovoImpedimento(a, recarregar));
