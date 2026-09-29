@@ -136,6 +136,8 @@ button { cursor: pointer; border: 0; }
   transition: background 0.12s, color 0.12s;
 }
 .menu a:hover { background: var(--green-bg); color: var(--ink-2); }
+.menu-rotulo { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.menu-rotulo svg { flex: none; }
 .menu a[aria-current="page"] {
   background: var(--green-bg);
   color: var(--green);
