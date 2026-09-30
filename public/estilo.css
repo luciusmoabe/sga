@@ -654,7 +654,7 @@ dialog::backdrop { background: rgba(20,40,30,.55); backdrop-filter: blur(3px); }
   box-shadow: 0 12px 40px rgba(40,61,53,.08);
 }
 .entrada-caixa.estreita { width: min(440px, 100%); }
-.entrada-logo { display: block; width: 100%; max-width: 220px; height: auto; }
+.entrada-logo { display: block; width: 100%; max-width: 170px; height: auto; }
 .entrada-tag {
   text-transform: uppercase;
   letter-spacing: 0.14em;
