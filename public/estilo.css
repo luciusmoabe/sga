@@ -643,7 +643,7 @@ dialog::backdrop { background: rgba(20,40,30,.55); backdrop-filter: blur(3px); }
   display: grid;
   place-items: center;
   padding: 24px;
-  background: radial-gradient(ellipse at top, #d8ead1, transparent 60%), var(--bg);
+  background: var(--bg);
 }
 .entrada-caixa {
   background: var(--card);
@@ -653,9 +653,18 @@ dialog::backdrop { background: rgba(20,40,30,.55); backdrop-filter: blur(3px); }
   width: min(900px, 100%);
   box-shadow: 0 12px 40px rgba(40,61,53,.08);
 }
-.entrada-caixa h1 { font-size: 2rem; color: var(--ink); }
-.entrada-logo { display: block; width: 100%; max-width: 280px; height: auto; }
-.entrada-caixa .lema { color: var(--muted); margin: 6px 0 24px; font-size: 0.95rem; }
+.entrada-caixa.estreita { width: min(440px, 100%); }
+.entrada-logo { display: block; width: 100%; max-width: 220px; height: auto; }
+.entrada-tag {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--green);
+  margin: 22px 0 8px;
+}
+.entrada-caixa h1 { font-size: clamp(1.5rem, 4vw, 2rem); line-height: 1.15; color: var(--ink); }
+.entrada-caixa .lema { color: var(--muted); margin: 8px 0 24px; font-size: 0.95rem; }
 .perfis {
   display: grid;
   gap: 10px;
@@ -877,11 +886,12 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 }
 
 /* Entrada por e-mail e senha */
-#login-senha { display: grid; gap: .75rem; margin-top: 1.5rem; }
-#login-senha input { width: 100%; min-width: 0; box-sizing: border-box; }
-#login-erro, #troca-erro { margin: 0; color: #a4262c; }
+#login-senha { margin-top: 1.5rem; }
+#login-senha input { width: 100%; min-width: 0; box-sizing: border-box; padding: 12px 14px; border-radius: 10px; }
+#login-erro, #troca-erro { margin: 0 0 .75rem; color: #a4262c; }
 #login-erro:empty, #troca-erro:empty { display: none; }
-.login-ajuda { margin-top: 1rem; font-size: .9rem; }
+.btn-entrar { width: 100%; justify-content: center; padding: 13px 18px; border-radius: 10px; font-size: 1rem; }
+.login-ajuda { margin-top: 1.2rem; font-size: .85rem; color: var(--muted); text-align: center; }
 
 /* Administração / Estrutura */
 .estrutura-pagina { max-width: 1320px; margin-inline: auto; }

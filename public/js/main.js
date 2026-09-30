@@ -114,16 +114,19 @@ async function telaEntrada({ expirada = false } = {}) {
   document.body.classList.remove('tv');
   if (!expirada) retorno = null;
   if (await modoAuth() === 'supabase') {
-    app.innerHTML = `<div class="entrada"><div class="entrada-caixa"><h1><img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo"></h1>
+    app.innerHTML = `<div class="entrada"><div class="entrada-caixa estreita">
+      <img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo">
+      <p class="entrada-tag">Acompanhamento semanal</p>
+      <h1>Bem-vindo ao Agilis</h1>
       <p class="lema">Entre com seu e-mail e senha.</p>
       ${expirada ? '<div class="info" role="status">Sua sessão expirou. Entre novamente para continuar de onde parou; rascunhos não enviados foram mantidos.</div>' : ''}
       <form id="login-senha">
-        <label for="login-email">E-mail</label>
-        <input id="login-email" name="email" type="email" autocomplete="username" maxlength="254" required>
-        <label for="login-password">Senha</label>
-        <input id="login-password" name="senha" type="password" autocomplete="current-password" maxlength="1024" required>
+        <div class="campo"><label for="login-email">E-mail</label>
+        <input id="login-email" name="email" type="email" autocomplete="username" maxlength="254" required></div>
+        <div class="campo"><label for="login-password">Senha</label>
+        <input id="login-password" name="senha" type="password" autocomplete="current-password" maxlength="1024" required></div>
         <p id="login-erro" role="alert" aria-live="polite"></p>
-        <button class="btn btn-primario" type="submit">Entrar</button>
+        <button class="btn btn-primario btn-entrar" type="submit">Entrar <span aria-hidden="true">→</span></button>
       </form><p class="login-ajuda">Para solicitar acesso ou redefinir sua senha, contate o administrador do Agilis.</p>
       </div></div>`;
     const form = $('#login-senha');
@@ -153,7 +156,10 @@ async function telaEntrada({ expirada = false } = {}) {
   const us = await fetch('/api/usuarios-demo').then((r) => r.json());
   const card = (u) => `<button class="perfil" data-u="${u.id}"><b>${esc(u.nome)}</b><span>${u.perfil === 'chefe' ? esc(u.secao_nome || 'Sem seção atribuída') : PERFIL[u.perfil]}</span></button>`;
   app.innerHTML = `<div class="entrada"><div class="entrada-caixa">
-    <h1><img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo"></h1><p class="lema">Acompanhamento semanal dos Centros do Departamento de Planejamento, Orçamento e Gestão.</p>
+    <img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo">
+    <p class="entrada-tag">Protótipo de demonstração</p>
+    <h1>Bem-vindo ao Agilis</h1>
+    <p class="lema">Acompanhamento semanal dos Centros do Departamento de Planejamento, Orçamento e Gestão.</p>
     <div class="info">Protótipo com dados fictícios. Escolha um perfil para explorar; não há senha nesta versão.</div>
     <div class="grupo-titulo">Diretor e Apoio</div><div class="perfis">${us.filter((u) => u.perfil !== 'chefe').map(card).join('')}</div>
     <div class="grupo-titulo">Chefes de seção</div><div class="perfis">${us.filter((u) => u.perfil === 'chefe').map(card).join('')}</div></div></div>`;
