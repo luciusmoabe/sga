@@ -2,38 +2,19 @@
 import { del, get, post, put } from './api.js';
 import { est, podeOperar } from './estado.js';
 import { br, confirmar, dataHora, diaSemana, esc, on, plural, toast, vazio } from './ui.js';
+import { baixarPdfAta } from './pdf-ata.js';
+import { blocosDaAta } from './ata-marcacao.js';
 
 const ST = { em_andamento: 'Em andamento', rascunho: 'Ata em rascunho', enviada: 'Ata enviada' };
 const cls = { em_andamento: 'st-em_andamento', rascunho: 'st-bloqueada', enviada: 'st-concluida' };
 
-// ---------- Formatação simples da ata (negrito, itálico, listas) ----------
-// `ata_texto` continua sendo salvo como texto puro (sem HTML), com uma marcação leve inspirada em
-// markdown; só a leitura (`renderizarAta`) transforma em HTML, sempre escapando o texto primeiro, então
-// não há risco de alguém injetar tags pelo campo. Compatível com atas antigas: sem marcação, vira parágrafo.
+// A leitura sempre escapa o texto antes de aplicar qualquer marcação, então não há risco de alguém
+// injetar tags pelo campo. Ver `ata-marcacao.js` para a análise compartilhada com o PDF.
 function renderizarAta(texto) {
-  const linhas = String(texto ?? '').split('\n');
-  const blocos = [];
-  let lista = null; // { tipo: 'ul' | 'ol', itens: [] }
-  const fecharLista = () => { if (lista) { blocos.push(lista); lista = null; } };
-  for (const linha of linhas) {
-    const marcador = /^[-*]\s+(.*)$/.exec(linha);
-    const numerado = /^\d+[.)]\s+(.*)$/.exec(linha);
-    if (marcador) {
-      if (lista?.tipo !== 'ul') { fecharLista(); lista = { tipo: 'ul', itens: [] }; }
-      lista.itens.push(marcador[1]);
-    } else if (numerado) {
-      if (lista?.tipo !== 'ol') { fecharLista(); lista = { tipo: 'ol', itens: [] }; }
-      lista.itens.push(numerado[1]);
-    } else {
-      fecharLista();
-      blocos.push({ tipo: 'p', texto: linha });
-    }
-  }
-  fecharLista();
   const linhaHTML = (t) => esc(t)
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
-  return blocos.map((b) => (b.tipo === 'p'
+  return blocosDaAta(texto).map((b) => (b.tipo === 'p'
     ? (b.texto.trim() ? `<p>${linhaHTML(b.texto)}</p>` : '<p>&nbsp;</p>')
     : `<${b.tipo}>${b.itens.map((i) => `<li>${linhaHTML(i)}</li>`).join('')}</${b.tipo}>`)).join('');
 }
@@ -126,7 +107,15 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
         <div class="linha nao-imprimir" style="margin-top:10px"><button class="btn btn-primario" id="salvar">Salvar alterações</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
       : r.status === 'enviada' ? `<div class="ata">${renderizarAta(r.ata_texto)}</div><p class="suave pequeno">Enviada em ${dataHora(r.enviada_em)}.</p>`
       : '<p class="suave">A ata será montada quando a reunião for encerrada.</p>'}</div>`;
-  raiz.querySelector('#pdf-ata')?.addEventListener('click', () => window.print());
+  raiz.querySelector('#pdf-ata')?.addEventListener('click', async (ev) => {
+    const botao = ev.currentTarget;
+    botao.disabled = true;
+    try {
+      // Reflete o que está no campo agora (inclusive alterações ainda não salvas), como a pré-visualização já faz.
+      await baixarPdfAta(raiz.querySelector('#ata')?.value ?? r.ata_texto, { dataReuniao: r.data });
+    } catch (e) { toast(e.message, 'erro'); }
+    finally { botao.disabled = false; }
+  });
   if (!['rascunho', 'enviada'].includes(r.status) || !podeOperar()) return;
   const erro = (e) => toast(e.message, 'erro');
   const texto = () => raiz.querySelector('#ata').value;
@@ -153,7 +142,13 @@ export async function atas(raiz, { id }) {
     raiz.innerHTML = `<div class="cabeca"><div><a href="#/atas" class="pequeno nao-imprimir">← Atas</a><h1>Ata de ${br(r.data)}</h1></div>
       <div class="acoes-topo"><button type="button" class="btn btn-sec" id="pdf-ata">Baixar PDF</button></div></div>
       <div class="ata">${renderizarAta(r.ata_texto)}</div>`;
-    raiz.querySelector('#pdf-ata').addEventListener('click', () => window.print());
+    raiz.querySelector('#pdf-ata').addEventListener('click', async (ev) => {
+      const botao = ev.currentTarget;
+      botao.disabled = true;
+      try { await baixarPdfAta(r.ata_texto, { dataReuniao: r.data }); }
+      catch (e) { toast(e.message, 'erro'); }
+      finally { botao.disabled = false; }
+    });
     return;
   }
   const lista = await get('/reunioes');
