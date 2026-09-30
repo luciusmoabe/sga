@@ -6,6 +6,73 @@ import { br, confirmar, dataHora, diaSemana, esc, on, plural, toast, vazio } fro
 const ST = { em_andamento: 'Em andamento', rascunho: 'Ata em rascunho', enviada: 'Ata enviada' };
 const cls = { em_andamento: 'st-em_andamento', rascunho: 'st-bloqueada', enviada: 'st-concluida' };
 
+// ---------- Formatação simples da ata (negrito, itálico, listas) ----------
+// `ata_texto` continua sendo salvo como texto puro (sem HTML), com uma marcação leve inspirada em
+// markdown; só a leitura (`renderizarAta`) transforma em HTML, sempre escapando o texto primeiro, então
+// não há risco de alguém injetar tags pelo campo. Compatível com atas antigas: sem marcação, vira parágrafo.
+function renderizarAta(texto) {
+  const linhas = String(texto ?? '').split('\n');
+  const blocos = [];
+  let lista = null; // { tipo: 'ul' | 'ol', itens: [] }
+  const fecharLista = () => { if (lista) { blocos.push(lista); lista = null; } };
+  for (const linha of linhas) {
+    const marcador = /^[-*]\s+(.*)$/.exec(linha);
+    const numerado = /^\d+[.)]\s+(.*)$/.exec(linha);
+    if (marcador) {
+      if (lista?.tipo !== 'ul') { fecharLista(); lista = { tipo: 'ul', itens: [] }; }
+      lista.itens.push(marcador[1]);
+    } else if (numerado) {
+      if (lista?.tipo !== 'ol') { fecharLista(); lista = { tipo: 'ol', itens: [] }; }
+      lista.itens.push(numerado[1]);
+    } else {
+      fecharLista();
+      blocos.push({ tipo: 'p', texto: linha });
+    }
+  }
+  fecharLista();
+  const linhaHTML = (t) => esc(t)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+  return blocos.map((b) => (b.tipo === 'p'
+    ? (b.texto.trim() ? `<p>${linhaHTML(b.texto)}</p>` : '<p>&nbsp;</p>')
+    : `<${b.tipo}>${b.itens.map((i) => `<li>${linhaHTML(i)}</li>`).join('')}</${b.tipo}>`)).join('');
+}
+// Envolve a seleção do textarea com um marcador (negrito **, itálico *); sem seleção, insere um texto de exemplo já selecionado.
+function envolverSelecao(area, marcador) {
+  const { selectionStart: s, selectionEnd: e, value } = area;
+  const meio = value.slice(s, e) || 'texto';
+  area.value = value.slice(0, s) + marcador + meio + marcador + value.slice(e);
+  area.focus();
+  area.setSelectionRange(s + marcador.length, s + marcador.length + meio.length);
+}
+// Alterna um prefixo de lista ("- " ou "1. ") em cada linha tocada pela seleção.
+function alternarPrefixoLinhas(area, prefixo) {
+  const { selectionStart: s, selectionEnd: e, value } = area;
+  const inicio = value.lastIndexOf('\n', s - 1) + 1;
+  const fim = value.indexOf('\n', e) === -1 ? value.length : value.indexOf('\n', e);
+  const trecho = value.slice(inicio, fim)
+    .split('\n').map((l) => (l.startsWith(prefixo) ? l.slice(prefixo.length) : prefixo + l)).join('\n');
+  area.value = value.slice(0, inicio) + trecho + value.slice(fim);
+  area.focus();
+  area.setSelectionRange(inicio, inicio + trecho.length);
+}
+const barraFormatacao = () => `<div class="ata-barra" role="toolbar" aria-label="Formatação do texto">
+  <button type="button" class="btn btn-sec btn-mini" data-fmt="negrito" title="Negrito"><b>N</b></button>
+  <button type="button" class="btn btn-sec btn-mini" data-fmt="italico" title="Itálico"><i>I</i></button>
+  <button type="button" class="btn btn-sec btn-mini" data-fmt="lista" title="Lista com marcadores">• Lista</button>
+  <button type="button" class="btn btn-sec btn-mini" data-fmt="numerada" title="Lista numerada">1. Lista</button>
+</div>`;
+function ligarBarraFormatacao(raiz) {
+  const area = raiz.querySelector('#ata');
+  on(raiz, 'click', '[data-fmt]', (el) => {
+    const tipo = el.dataset.fmt;
+    if (tipo === 'negrito') envolverSelecao(area, '**');
+    else if (tipo === 'italico') envolverSelecao(area, '*');
+    else if (tipo === 'lista') alternarPrefixoLinhas(area, '- ');
+    else if (tipo === 'numerada') alternarPrefixoLinhas(area, '1. ');
+  });
+}
+
 export async function reunioes(raiz) {
   const lista = await get('/reunioes');
   raiz.innerHTML = `
@@ -35,19 +102,22 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
     </div>
     <div class="espaco"></div>
     <div class="cartao"><h2>Ata</h2>
-      ${r.status === 'rascunho' && !podeOperar() ? `<div class="info">Ata em rascunho: o Diretor ou o Apoio ainda vai revisá-la e enviá-la aos chefes.</div><div class="ata">${esc(r.ata_texto || '')}</div>`
+      ${r.status === 'rascunho' && !podeOperar() ? `<div class="info">Ata em rascunho: o Diretor ou o Apoio ainda vai revisá-la e enviá-la aos chefes.</div><div class="ata">${renderizarAta(r.ata_texto)}</div>`
       : r.status === 'rascunho' ? `<div class="info">A ata foi montada a partir do que foi registrado na reunião. Revise, ajuste se precisar e envie aos chefes. Nesta versão do protótipo, "enviar" libera a leitura na tela Atas; não há e-mail.</div>
-        <textarea class="ata-edicao" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
+        ${barraFormatacao()}<textarea class="ata-edicao" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
+        <p class="suave pequeno" style="margin:6px 0 0">Formatação simples: **negrito**, *itálico*, linha começando com "- " vira lista.</p>
         <div class="linha" style="margin-top:10px"><button class="btn btn-sec" id="salvar">Salvar rascunho</button><button class="btn btn-primario" id="enviar">Enviar aos chefes</button>
         <button class="btn btn-fantasma" id="reabrir">Reabrir a reunião</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
       : r.status === 'enviada' && podeOperar() ? `<p class="suave pequeno">Enviada aos chefes em ${dataHora(r.enviada_em)}. As correções valem para todos assim que você salvar.</p>
-        <textarea class="ata-edicao" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
+        ${barraFormatacao()}<textarea class="ata-edicao" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
+        <p class="suave pequeno" style="margin:6px 0 0">Formatação simples: **negrito**, *itálico*, linha começando com "- " vira lista.</p>
         <div class="linha" style="margin-top:10px"><button class="btn btn-primario" id="salvar">Salvar alterações</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
-      : r.status === 'enviada' ? `<div class="ata">${esc(r.ata_texto)}</div><p class="suave pequeno">Enviada em ${dataHora(r.enviada_em)}.</p>`
+      : r.status === 'enviada' ? `<div class="ata">${renderizarAta(r.ata_texto)}</div><p class="suave pequeno">Enviada em ${dataHora(r.enviada_em)}.</p>`
       : '<p class="suave">A ata será montada quando a reunião for encerrada.</p>'}</div>`;
   if (!['rascunho', 'enviada'].includes(r.status) || !podeOperar()) return;
   const erro = (e) => toast(e.message, 'erro');
   const texto = () => raiz.querySelector('#ata').value;
+  ligarBarraFormatacao(raiz);
   raiz.querySelector('#salvar').addEventListener('click', async () => { try { await put(`/reunioes/${id}/ata`, { ata_texto: texto() }); toast(r.status === 'enviada' ? 'Alterações salvas.' : 'Rascunho salvo.'); } catch (e) { erro(e); } });
   raiz.querySelector('#excluir').addEventListener('click', async () => {
     if (!(await confirmar({ titulo: 'Excluir a ata', texto: 'A reunião, a ata e as decisões registradas serão apagadas e não poderão ser recuperadas. As ações criadas na reunião continuam existindo.', rotulo: 'Excluir ata', perigo: true }))) return;
@@ -68,7 +138,7 @@ export async function atas(raiz, { id }) {
   if (id) {
     const r = await get(`/reunioes/${id}`);
     raiz.innerHTML = `<div class="cabeca"><div><a href="#/atas" class="pequeno">← Atas</a><h1>Ata de ${br(r.data)}</h1></div></div>
-      <div class="ata">${esc(r.ata_texto)}</div>`;
+      <div class="ata">${renderizarAta(r.ata_texto)}</div>`;
     return;
   }
   const lista = await get('/reunioes');

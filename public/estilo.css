@@ -698,7 +698,6 @@ dialog::backdrop { background: rgba(20,40,30,.55); backdrop-filter: blur(3px); }
 
 /* ---------- Ata / texto ---------- */
 .ata {
-  white-space: pre-wrap;
   font-family: var(--sans);
   font-size: 0.93rem;
   line-height: 1.65;
@@ -707,6 +706,11 @@ dialog::backdrop { background: rgba(20,40,30,.55); backdrop-filter: blur(3px); }
   border-radius: 10px;
   padding: 18px 20px;
 }
+.ata p { margin: 0 0 10px; }
+.ata p:last-child { margin-bottom: 0; }
+.ata ul, .ata ol { margin: 0 0 10px; padding-left: 22px; }
+.ata li { margin-bottom: 4px; }
+.ata-barra { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 textarea.ata-edicao {
   min-height: 380px;
   font-family: var(--sans);
