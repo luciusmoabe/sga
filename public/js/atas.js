@@ -62,14 +62,21 @@ const barraFormatacao = () => `<div class="ata-barra" role="toolbar" aria-label=
   <button type="button" class="btn btn-sec btn-mini" data-fmt="lista" title="Lista com marcadores">• Lista</button>
   <button type="button" class="btn btn-sec btn-mini" data-fmt="numerada" title="Lista numerada">1. Lista</button>
 </div>`;
+// O Diretor, o Apoio e o Administrador só editam a ata (nunca é mostrada a eles somente a versão
+// renderizada); por isso a pré-visualização ao vivo, atualizada tanto ao digitar quanto ao usar a barra
+// (que muda o texto sem disparar o evento "input" do textarea, então precisa ser atualizada à parte).
 function ligarBarraFormatacao(raiz) {
   const area = raiz.querySelector('#ata');
+  const previa = raiz.querySelector('#ata-previa');
+  const atualizarPrevia = () => { previa.innerHTML = renderizarAta(area.value); };
+  area.addEventListener('input', atualizarPrevia);
   on(raiz, 'click', '[data-fmt]', (el) => {
     const tipo = el.dataset.fmt;
     if (tipo === 'negrito') envolverSelecao(area, '**');
     else if (tipo === 'italico') envolverSelecao(area, '*');
     else if (tipo === 'lista') alternarPrefixoLinhas(area, '- ');
     else if (tipo === 'numerada') alternarPrefixoLinhas(area, '1. ');
+    atualizarPrevia();
   });
 }
 
@@ -106,11 +113,15 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
       : r.status === 'rascunho' ? `<div class="info">A ata foi montada a partir do que foi registrado na reunião. Revise, ajuste se precisar e envie aos chefes. Nesta versão do protótipo, "enviar" libera a leitura na tela Atas; não há e-mail.</div>
         ${barraFormatacao()}<textarea class="ata-edicao" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
         <p class="suave pequeno" style="margin:6px 0 0">Formatação simples: **negrito**, *itálico*, linha começando com "- " vira lista.</p>
+        <h3 class="ata-previa-titulo">Como os chefes vão ver</h3>
+        <div class="ata" id="ata-previa">${renderizarAta(r.ata_texto)}</div>
         <div class="linha" style="margin-top:10px"><button class="btn btn-sec" id="salvar">Salvar rascunho</button><button class="btn btn-primario" id="enviar">Enviar aos chefes</button>
         <button class="btn btn-fantasma" id="reabrir">Reabrir a reunião</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
       : r.status === 'enviada' && podeOperar() ? `<p class="suave pequeno">Enviada aos chefes em ${dataHora(r.enviada_em)}. As correções valem para todos assim que você salvar.</p>
         ${barraFormatacao()}<textarea class="ata-edicao" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
         <p class="suave pequeno" style="margin:6px 0 0">Formatação simples: **negrito**, *itálico*, linha começando com "- " vira lista.</p>
+        <h3 class="ata-previa-titulo">Como os chefes veem</h3>
+        <div class="ata" id="ata-previa">${renderizarAta(r.ata_texto)}</div>
         <div class="linha" style="margin-top:10px"><button class="btn btn-primario" id="salvar">Salvar alterações</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
       : r.status === 'enviada' ? `<div class="ata">${renderizarAta(r.ata_texto)}</div><p class="suave pequeno">Enviada em ${dataHora(r.enviada_em)}.</p>`
       : '<p class="suave">A ata será montada quando a reunião for encerrada.</p>'}</div>`;
