@@ -226,12 +226,8 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
     const { dia, hora } = await cfgAoVivo();
     const d = parseISO(r.data);
     const linhas = [`ATA DA REUNIÃO SEMANAL — ${br(r.data)} (${DIAS[d.getUTCDay()]})`, ''];
-    const comb = json(r.combinados_snapshot, []);
-    if (comb.length) {
-      linhas.push('Combinados vigentes:');
-      comb.forEach((c, i) => linhas.push(`${i + 1}. ${c.texto}`));
-      linhas.push('');
-    }
+    // Os combinados vigentes já ficam guardados em `combinados_snapshot` e aparecem à parte na tela da
+    // reunião; não entram no texto da ata para não duplicar o que já está registrado ali.
     const dec = await q(`select d.texto, s.sigla from decisoes d left join secoes s on s.id = d.secao_id where d.reuniao_id = ? order by d.id`, r.id);
     linhas.push('Decisões:');
     if (dec.length) dec.forEach((x) => linhas.push(`- [${x.sigla || 'Geral'}] ${x.texto}`));

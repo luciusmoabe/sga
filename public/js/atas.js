@@ -56,7 +56,7 @@ function alternarPrefixoLinhas(area, prefixo) {
   area.focus();
   area.setSelectionRange(inicio, inicio + trecho.length);
 }
-const barraFormatacao = () => `<div class="ata-barra" role="toolbar" aria-label="Formatação do texto">
+const barraFormatacao = () => `<div class="ata-barra nao-imprimir" role="toolbar" aria-label="Formatação do texto">
   <button type="button" class="btn btn-sec btn-mini" data-fmt="negrito" title="Negrito"><b>N</b></button>
   <button type="button" class="btn btn-sec btn-mini" data-fmt="italico" title="Itálico"><i>I</i></button>
   <button type="button" class="btn btn-sec btn-mini" data-fmt="lista" title="Lista com marcadores">• Lista</button>
@@ -98,33 +98,35 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
   const r = await get(`/reunioes/${id}`);
   const lista = (arr, f) => (arr.length ? `<ul>${arr.map((x) => `<li>${f(x)}</li>`).join('')}</ul>` : '<p class="suave pequeno">Nenhum registro.</p>');
   raiz.innerHTML = `
-    <div class="cabeca"><div><a href="#/reunioes" class="pequeno">← Reuniões e atas</a><h1>Reunião de ${br(r.data)}</h1>
+    <div class="cabeca"><div><a href="#/reunioes" class="pequeno nao-imprimir">← Reuniões e atas</a><h1>Reunião de ${br(r.data)}</h1>
       <div class="sub"><span class="pilula ${cls[r.status]}">${ST[r.status]}</span> · iniciada em ${dataHora(r.iniciada_em)}${r.encerrada_em ? ` · encerrada em ${dataHora(r.encerrada_em)}` : ''}</div></div>
       ${r.status === 'em_andamento' && podeOperar() ? '<div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao/${r.id}">Voltar ao Modo Reunião</a></div>' : ''}</div>
-    <div class="dois" style="align-items:start">
+    <div class="dois nao-imprimir" style="align-items:start">
       <div class="cartao"><h2>Combinados vigentes</h2>${lista(r.combinados_snapshot, (c) => esc(c.texto))}</div>
       <div class="cartao"><h2>Decisões</h2>${lista(r.decisoes, (d) => `<b>${esc(d.secao_sigla || 'Geral')}</b> · ${esc(d.texto)}`)}</div>
       <div class="cartao"><h2>Novas ações</h2>${lista(r.novas_acoes, (g) => `${esc(g.titulo)} <span class="suave pequeno">· ${g.destino === 'todos' ? 'todos os Centros' : plural(g.total_acoes, 'seção', 'seções')} · prazo ${br(g.prazo)}</span>`)}</div>
       <div class="cartao"><h2>Pedidos de prazo decididos</h2>${lista(r.pedidos_decididos, (p) => `<b>${esc(p.secao_sigla)}</b> · ${esc(p.acao_titulo)}: ${br(p.novo_prazo)} ${p.status}`)}</div>
     </div>
-    <div class="espaco"></div>
-    <div class="cartao"><h2>Ata</h2>
-      ${r.status === 'rascunho' && !podeOperar() ? `<div class="info">Ata em rascunho: o Diretor ou o Apoio ainda vai revisá-la e enviá-la aos chefes.</div><div class="ata">${renderizarAta(r.ata_texto)}</div>`
-      : r.status === 'rascunho' ? `<div class="info">A ata foi montada a partir do que foi registrado na reunião. Revise, ajuste se precisar e envie aos chefes. Nesta versão do protótipo, "enviar" libera a leitura na tela Atas; não há e-mail.</div>
-        ${barraFormatacao()}<textarea class="ata-edicao" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
-        <p class="suave pequeno" style="margin:6px 0 0">Formatação simples: **negrito**, *itálico*, linha começando com "- " vira lista.</p>
-        <h3 class="ata-previa-titulo">Como os chefes vão ver</h3>
+    <div class="espaco nao-imprimir"></div>
+    <div class="cartao">
+      <div class="linha entre"><h2>Ata</h2>${['rascunho', 'enviada'].includes(r.status) ? '<button type="button" class="btn btn-sec nao-imprimir" id="pdf-ata">Baixar PDF</button>' : ''}</div>
+      ${r.status === 'rascunho' && !podeOperar() ? `<div class="info nao-imprimir">Ata em rascunho: o Diretor ou o Apoio ainda vai revisá-la e enviá-la aos chefes.</div><div class="ata">${renderizarAta(r.ata_texto)}</div>`
+      : r.status === 'rascunho' ? `<div class="info nao-imprimir">A ata foi montada a partir do que foi registrado na reunião. Revise, ajuste se precisar e envie aos chefes. Nesta versão do protótipo, "enviar" libera a leitura na tela Atas; não há e-mail.</div>
+        ${barraFormatacao()}<textarea class="ata-edicao nao-imprimir" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
+        <p class="suave pequeno nao-imprimir" style="margin:6px 0 0">Formatação simples: **negrito**, *itálico*, linha começando com "- " vira lista.</p>
+        <h3 class="ata-previa-titulo nao-imprimir">Como os chefes vão ver</h3>
         <div class="ata" id="ata-previa">${renderizarAta(r.ata_texto)}</div>
-        <div class="linha" style="margin-top:10px"><button class="btn btn-sec" id="salvar">Salvar rascunho</button><button class="btn btn-primario" id="enviar">Enviar aos chefes</button>
+        <div class="linha nao-imprimir" style="margin-top:10px"><button class="btn btn-sec" id="salvar">Salvar rascunho</button><button class="btn btn-primario" id="enviar">Enviar aos chefes</button>
         <button class="btn btn-fantasma" id="reabrir">Reabrir a reunião</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
-      : r.status === 'enviada' && podeOperar() ? `<p class="suave pequeno">Enviada aos chefes em ${dataHora(r.enviada_em)}. As correções valem para todos assim que você salvar.</p>
-        ${barraFormatacao()}<textarea class="ata-edicao" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
-        <p class="suave pequeno" style="margin:6px 0 0">Formatação simples: **negrito**, *itálico*, linha começando com "- " vira lista.</p>
-        <h3 class="ata-previa-titulo">Como os chefes veem</h3>
+      : r.status === 'enviada' && podeOperar() ? `<p class="suave pequeno nao-imprimir">Enviada aos chefes em ${dataHora(r.enviada_em)}. As correções valem para todos assim que você salvar.</p>
+        ${barraFormatacao()}<textarea class="ata-edicao nao-imprimir" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
+        <p class="suave pequeno nao-imprimir" style="margin:6px 0 0">Formatação simples: **negrito**, *itálico*, linha começando com "- " vira lista.</p>
+        <h3 class="ata-previa-titulo nao-imprimir">Como os chefes veem</h3>
         <div class="ata" id="ata-previa">${renderizarAta(r.ata_texto)}</div>
-        <div class="linha" style="margin-top:10px"><button class="btn btn-primario" id="salvar">Salvar alterações</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
+        <div class="linha nao-imprimir" style="margin-top:10px"><button class="btn btn-primario" id="salvar">Salvar alterações</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
       : r.status === 'enviada' ? `<div class="ata">${renderizarAta(r.ata_texto)}</div><p class="suave pequeno">Enviada em ${dataHora(r.enviada_em)}.</p>`
       : '<p class="suave">A ata será montada quando a reunião for encerrada.</p>'}</div>`;
+  raiz.querySelector('#pdf-ata')?.addEventListener('click', () => window.print());
   if (!['rascunho', 'enviada'].includes(r.status) || !podeOperar()) return;
   const erro = (e) => toast(e.message, 'erro');
   const texto = () => raiz.querySelector('#ata').value;
@@ -148,8 +150,10 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
 export async function atas(raiz, { id }) {
   if (id) {
     const r = await get(`/reunioes/${id}`);
-    raiz.innerHTML = `<div class="cabeca"><div><a href="#/atas" class="pequeno">← Atas</a><h1>Ata de ${br(r.data)}</h1></div></div>
+    raiz.innerHTML = `<div class="cabeca"><div><a href="#/atas" class="pequeno nao-imprimir">← Atas</a><h1>Ata de ${br(r.data)}</h1></div>
+      <div class="acoes-topo"><button type="button" class="btn btn-sec" id="pdf-ata">Baixar PDF</button></div></div>
       <div class="ata">${renderizarAta(r.ata_texto)}</div>`;
+    raiz.querySelector('#pdf-ata').addEventListener('click', () => window.print());
     return;
   }
   const lista = await get('/reunioes');

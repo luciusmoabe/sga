@@ -252,7 +252,7 @@ test('reunião: decisões, nova ação ao vivo, prazo por delegação do Apoio e
   assert.doesNotMatch(enc.data.ata_texto, /Enviar ofício aos parceiros\.\n/);
   assert.match(enc.data.ata_texto, /\[COF\] Entregar o relatório de riscos — prazo 30\/09\/2026 — prioridade alta/);
   assert.match(enc.data.ata_texto, /recusado/);
-  assert.match(enc.data.ata_texto, /Uma pessoa fala por vez/);
+  assert.doesNotMatch(enc.data.ata_texto, /Uma pessoa fala por vez/, 'combinados vigentes não entram no texto da ata: já aparecem à parte, em combinados_snapshot');
   assert.equal((await call(APOIO, 'POST', `/reunioes/${reuniaoId}/decisoes`, { texto: 'tarde demais' })).status, 409);
   assert.equal((await call(APOIO, 'PATCH', `/reunioes/${reuniaoId}/decisoes/${alvo.id}`, { texto: 'tarde demais' })).status, 409);
 });
