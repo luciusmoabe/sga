@@ -47,6 +47,7 @@ const ESPERADAS = [
   'PATCH /api/acoes/:id/checklist/:iid',
   'DELETE /api/acoes/:id/checklist/:iid',
   'POST /api/acoes/:id/pedido-prazo',
+  'POST /api/acoes/:id/redirecionar',
   'POST /api/acoes/:id/tempo',
   'POST /api/combinados',
   'POST /api/diretrizes',

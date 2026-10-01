@@ -1,6 +1,6 @@
 // Detalhe de uma ação, compartilhado por Diretor, Apoio e Chefe.
 import { del, get, patch, post } from './api.js';
-import { ehAdmin, ehDiretor, est } from './estado.js';
+import { ehAdmin, ehDiretor, est, podeOperar } from './estado.js';
 import { abrirForm, br, dataHora, esc, fmtMin, on, pilulaStatus, PRIO, toast } from './ui.js';
 
 // ---------- Impedimentos (formulários usados também pela atualização semanal e por Minhas ações) ----------
@@ -73,6 +73,32 @@ const checklistBlocoHTML = (a) => `
   ${a.checklist.length ? `<div class="itens">${a.checklist.map(checklistItemHTML).join('')}</div>` : '<p class="suave pequeno">Nenhum item no checklist.</p>'}
   ${gereChecklist() && !a.encerrada ? `<div class="add-linha"><input id="novo-check" placeholder="Novo item do checklist" maxlength="200" aria-label="Novo item do checklist"><button type="button" class="btn btn-sec" data-add-check>Adicionar</button></div>` : ''}`;
 
+// ---------- Redirecionar para outra seção ----------
+/** Ação em aberto pode mudar de seção: Diretor, Apoio e Administrador para qualquer seção ativa;
+ *  o chefe, dentro da própria árvore (o servidor confere; `/secoes` já devolve só a árvore dele). */
+const aceitaRedirecionar = (a) => !a.encerrada && !a.arquivada && a.status !== 'concluida'
+  && (podeOperar() || est.user?.perfil === 'chefe');
+
+async function abrirRedirecionar(a, aoConcluir) {
+  const secoes = (await get('/secoes')).filter((s) => s.ativa && s.id !== a.secao_id);
+  if (!secoes.length) { toast('Não há outra seção ativa para receber esta ação.', 'erro'); return; }
+  const opcoes = secoes.map((s) => `<option value="${s.id}">${'  '.repeat((s.nivel || 1) - 1)}${esc(s.sigla ? `${s.sigla} · ${s.nome}` : s.nome)}</option>`).join('');
+  abrirForm({
+    titulo: 'Redirecionar ação',
+    corpo: `<p class="suave pequeno">Ação: <b>${esc(a.titulo)}</b> · hoje com ${esc(a.secao_sigla || a.secao_nome)}</p>
+      <div class="campo"><label for="rd-secao">Nova seção responsável</label><select id="rd-secao" name="secao_id" required><option value="">Escolha a seção</option>${opcoes}</select></div>
+      <div class="campo"><label for="rd-motivo">Motivo (opcional)</label><textarea id="rd-motivo" name="motivo" maxlength="600" placeholder="Por que a ação muda de seção?"></textarea></div>
+      <p class="suave pequeno">A ação leva consigo o status, o prazo, o tempo registrado, o checklist, os impedimentos e os comentários.</p>`,
+    rotulo: 'Redirecionar ação',
+    aoEnviar: async (d) => {
+      if (!d.secao_id) throw new Error('Escolha a seção que vai receber a ação.');
+      const r = await post(`/acoes/${a.id}/redirecionar`, { secao_id: Number(d.secao_id), motivo: d.motivo });
+      toast(`Ação redirecionada para ${r.secao_sigla || r.secao_nome}.`);
+      await aoConcluir?.();
+    },
+  });
+}
+
 export async function abrirAcao(id, aoMudar) {
   const a = await get(`/acoes/${id}`);
   const diretor = ehDiretor();
@@ -119,6 +145,7 @@ export async function abrirAcao(id, aoMudar) {
     ${`<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>`}
     ${diretor && a.status === 'concluida' && !a.encerrada ? `<div class="linha"><button type="button" class="btn btn-ok" data-encerrar>Aceitar e encerrar</button>
       <button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>` : ''}
+    ${aceitaRedirecionar(a) ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-redirecionar>Redirecionar para outra seção</button>' : ''}
     ${!a.demandada_diretor || ehAdmin() ? `
       <div class="linha" style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line);align-items:center">
         ${a.arquivada
@@ -190,6 +217,8 @@ export async function abrirAcao(id, aoMudar) {
         } catch (e) { toast(e.message, 'erro'); }
       });
       on(dlg, 'click', '[data-novo-imp]', () => abrirNovoImpedimento(a, recarregar));
+      // Quem redireciona continua vendo a ação (o chefe só move dentro da própria árvore).
+      on(dlg, 'click', '[data-redirecionar]', () => abrirRedirecionar(a, recarregar).catch((e) => toast(e.message, 'erro')));
       on(dlg, 'click', '[data-resolver-imp]', (el) => {
         const imp = a.impedimentos.find((i) => i.id === Number(el.dataset.resolverImp));
         if (imp) abrirResolverImpedimento(a, imp, recarregar);

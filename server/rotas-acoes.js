@@ -447,6 +447,36 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     return { ok: true };
   }));
 
+  // ---------- Redirecionar a ação para outra seção ----------
+  // A ação muda de seção com todo o histórico (tempo, checklist, impedimentos, pedidos e comentários).
+  // Diretor, Apoio e Administrador escolhem qualquer seção ativa; o chefe, só seções da própria árvore.
+  app.post('/api/acoes/:id/redirecionar', permit('chefe', 'diretor', 'apoio', 'administrador'), h(async (req) => {
+    const id = Number(req.params.id);
+    const destinoId = Number(req.body?.secao_id);
+    const motivo = texto(req.body?.motivo, 600);
+    if (!destinoId) throw falha(400, 'Escolha a seção que vai receber a ação.');
+    return db.transaction(async () => {
+      if (db.isPg) await q1('select id from acoes where id = ? for update', id);
+      const a = await acaoVisivel(req.user, id);
+      if (req.user.perfil === 'chefe') await chefeGere(req.user, a);
+      if (a.encerrada || a.arquivada) throw falha(409, 'Ação arquivada ou encerrada não pode ser redirecionada.');
+      if (a.status === 'concluida') throw falha(409, 'Uma ação concluída não pode ser redirecionada.');
+      if (destinoId === a.secao_id) throw falha(400, 'A ação já está nesta seção. Escolha outra seção.');
+      const destino = await q1('select id, nome, sigla from secoes where id = ? and ativa = 1', destinoId);
+      if (!destino) throw falha(409, 'A seção escolhida não existe ou não está ativa.');
+      if (req.user.perfil === 'chefe' && !(await subarvore(db, req.user.secao_id)).includes(destino.id)) {
+        throw falha(403, 'O chefe só redireciona ações para a própria seção ou para as subseções dela.');
+      }
+      if (a.diretriz_id && await q1('select 1 from acoes where diretriz_id = ? and secao_id = ? and id != ?', a.diretriz_id, destino.id, a.id)) {
+        throw falha(409, 'A seção escolhida já recebeu esta mesma demanda do Diretor.');
+      }
+      await run('update acoes set secao_id = ? where id = ?', destino.id, a.id);
+      await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id,
+        `Ação redirecionada de ${a.secao_sigla || a.secao_nome} para ${destino.sigla || destino.nome}${motivo ? `. Motivo: ${motivo}` : '.'}`, agoraISO());
+      return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id));
+    });
+  }));
+
   app.post('/api/acoes/:id/encerrar', permit('diretor', 'administrador'), h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     if (a.status !== 'concluida') throw falha(409, 'Só é possível encerrar uma ação concluída.');
