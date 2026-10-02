@@ -234,7 +234,14 @@ const ABAS_MOVEL = {
   gestao: [['painel', 'Painel'], ['agenda', 'Agenda'], ['acoes', 'Ações'], ['prazos', 'Prazos']],
 };
 const ICONE_MAIS = '<svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.5" cy="10" r="1.2"/><circle cx="10" cy="10" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/></svg>';
-const iniciais = (nome) => nome.split(/\s+/).filter((p) => p.length > 2 || /^[A-ZÁÉÍÓÚ]/.test(p)).slice(-2).map((p) => p[0]).join('').toUpperCase() || nome[0];
+// Iniciais do primeiro e do último nome, sem parênteses, partículas nem posto/graduação
+// ("Ten Cel PM Lucius Moabe" → LM, "Diretor (demonstração)" → DD, "Ana Ribeiro" → AR).
+const NAO_NOME = new Set(['sd', 'cb', 'sgt', 'subten', 'st', 'ten', 'cap', 'maj', 'cel', 'gen', 'asp', 'al', 'pm', 'bm', 'dr', 'dra', 'sr', 'sra']);
+const iniciais = (nome) => {
+  const partes = nome.replace(/[^\p{L}\s]/gu, ' ').split(/\s+/).filter((p) => p.length > 2 && !NAO_NOME.has(p.toLowerCase()));
+  const escolhidas = partes.length > 1 ? [partes[0], partes.at(-1)] : partes;
+  return escolhidas.map((p) => p[0]).join('').toUpperCase() || nome.trim()[0]?.toUpperCase() || '?';
+};
 
 function cascaMovel(u, menu) {
   const abas = u.perfil === 'chefe' ? ABAS_MOVEL.chefe : ABAS_MOVEL.gestao;

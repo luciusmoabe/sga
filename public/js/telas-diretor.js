@@ -100,9 +100,9 @@ export async function centro(raiz, { id, q, refresh }) {
     <div class="cartao"><h2>Relato da semana</h2>${relatoHTML(atual, { permitirExcluir: ehAdmin() })}</div>
     <div class="cartao"><div class="linha entre"><h2>Ações abertas e recentes</h2>
       <span class="suave num">Tempo total registrado: <b>${fmtMin(d.tempo_total)}</b></span></div>
-      ${d.acoes.length ? `<div class="tabela-rolagem"><table><thead><tr><th>Ação</th><th>Prazo</th><th>Situação</th><th>Tempo</th></tr></thead><tbody>
+      ${d.acoes.length ? `<div class="tabela-rolagem"><table class="tabela-lista"><thead><tr><th>Ação</th><th>Prazo</th><th>Situação</th><th>Tempo</th></tr></thead><tbody>
       ${d.acoes.map((a) => `<tr class="clicavel" data-acao="${a.id}" tabindex="0"><td><b>${esc(a.titulo)}</b><br><span class="suave pequeno">${esc(a.secao_sigla)} · prioridade ${PRIO[a.prioridade].toLowerCase()}</span></td>
-        <td class="num">${br(a.prazo)}</td><td>${pilulaStatus(a)}</td><td class="num">${fmtMin(a.tempo_total)}</td></tr>`).join('')}</tbody></table></div>`
+        <td class="num" data-rotulo="Prazo">${br(a.prazo)}</td><td data-rotulo="Situação">${pilulaStatus(a)}</td><td class="num" data-rotulo="Tempo">${fmtMin(a.tempo_total)}</td></tr>`).join('')}</tbody></table></div>`
         : vazio('Nenhuma ação em aberto', 'As ações direcionadas a este Centro aparecerão aqui.')}
       <p class="suave pequeno" style="margin-top:10px">${d.acoes_internas_visiveis ? 'Como Administrador, você vê também as ações internas das subseções.' : 'Ações internas das subseções não aparecem aqui: o Diretor vê só o resumo, salvo se o chefe compartilhar.'}</p></div>
     <div class="cartao"><h2>Semanas anteriores</h2>${anteriores.length ? anteriores.map((h) => `<details style="margin-bottom:8px"><summary><b>Reunião de ${br(h.semana)}</b>
@@ -211,21 +211,29 @@ export async function direcionar(raiz, { refresh }) {
 export async function acoes(raiz, _p) {
   const secoes = (await get('/secoes')).filter((s) => !s.pai_id && s.ativa);
   raiz.innerHTML = `
-    <div class="cabeca"><div><h1>Ações</h1><div class="sub">Todas as ações direcionadas aos Centros. Clique numa linha para ver o detalhe.</div></div></div>
-    <div class="cartao"><div class="linha" style="margin-bottom:12px">
+    <div class="cabeca"><div><h1>Ações</h1><div class="sub">Todas as ações direcionadas às seções. Abra uma ação para ver o detalhe.</div></div></div>
+    <div class="cartao"><div class="linha filtros-acoes" style="margin-bottom:12px">
+      <div class="filtro-busca" style="flex:1;min-width:200px"><label for="f-q">Buscar</label><input id="f-q" type="search" placeholder="Título ou detalhe"></div>
+      <button type="button" class="btn btn-sec filtros-alternar" aria-expanded="false" aria-controls="filtros-extra">Filtros</button>
+      <div class="filtros-extra linha" id="filtros-extra" style="margin:0">
       <div style="min-width:170px"><label for="f-secao">Seção</label><select id="f-secao"><option value="">Todas</option>${secoes.map((s) => `<option value="${s.id}">${esc(s.sigla || s.nome)}</option>`).join('')}</select></div>
       <div style="min-width:170px"><label for="f-sit">Situação</label><select id="f-sit"><option value="abertas">Abertas</option><option value="atrasadas">Atrasadas</option><option value="concluidas">Concluídas (aguardando aceite)</option><option value="encerradas">Encerradas</option></select></div>
       <div style="min-width:170px"><label for="f-status">Status</label><select id="f-status"><option value="">Qualquer</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
-      <div style="flex:1;min-width:200px"><label for="f-q">Buscar</label><input id="f-q" type="search" placeholder="Título ou detalhe"></div></div>
+      </div></div>
       <div class="tabela-rolagem" id="lista-acoes"></div></div>`;
+  // No celular os filtros ficam recolhidos atrás do botão "Filtros"; no computador ficam sempre à vista.
+  on(raiz, 'click', '.filtros-alternar', (el) => {
+    const aberto = $('.filtros-acoes', raiz).classList.toggle('filtros-abertos');
+    el.setAttribute('aria-expanded', String(aberto));
+  });
   const carregar = async () => {
     const p = new URLSearchParams();
     for (const [k, id] of [['secao', 'f-secao'], ['situacao', 'f-sit'], ['status', 'f-status'], ['q', 'f-q']]) if ($(`#${id}`, raiz).value) p.set(k, $(`#${id}`, raiz).value);
     const lista = await get(`/acoes?${p}`);
-    $('#lista-acoes', raiz).innerHTML = lista.length ? `<table><thead><tr><th>Ação</th><th>Seção</th><th>Prazo</th><th>Situação</th><th>Tempo</th></tr></thead><tbody>
+    $('#lista-acoes', raiz).innerHTML = lista.length ? `<table class="tabela-lista"><thead><tr><th>Ação</th><th>Seção</th><th>Prazo</th><th>Situação</th><th>Tempo</th></tr></thead><tbody>
       ${lista.map((a) => `<tr class="clicavel" data-acao="${a.id}" tabindex="0"><td><b>${esc(a.titulo)}</b> ${a.demandada_diretor ? '<span class="pilula diretor">Diretriz</span> ' : ''}<span class="pilula prio-${a.prioridade}">${PRIO[a.prioridade]}</span></td>
-        <td>${esc(a.secao_sigla)}</td><td class="num">${br(a.prazo)}</td><td>${pilulaStatus(a)}${a.pedido_pendente ? ' <span class="pilula">Pediu novo prazo</span>' : ''}</td>
-        <td class="num">${fmtMin(a.tempo_total)}</td></tr>`).join('')}</tbody></table>` : vazio('Nenhuma ação encontrada', 'Ajuste os filtros ou direcione uma nova ação.');
+        <td data-rotulo="Seção">${esc(a.secao_sigla)}</td><td class="num" data-rotulo="Prazo">${br(a.prazo)}</td><td data-rotulo="Situação">${pilulaStatus(a)}${a.pedido_pendente ? ' <span class="pilula">Pediu novo prazo</span>' : ''}</td>
+        <td class="num" data-rotulo="Tempo">${fmtMin(a.tempo_total)}</td></tr>`).join('')}</tbody></table>` : vazio('Nenhuma ação encontrada', 'Ajuste os filtros ou direcione uma nova ação.');
   };
   for (const id of ['f-secao', 'f-sit', 'f-status']) $(`#${id}`, raiz).addEventListener('change', carregar);
   let t;

@@ -1172,3 +1172,34 @@ body.carregando::before {
 }
 @keyframes folha-sobe { from { transform: translateY(28px); opacity: .6; } }
 @media (prefers-reduced-motion: reduce) { dialog { animation: none; } }
+
+/* ---------- Celular, etapa 2: telas do Diretor, do Diretor Adjunto e do Apoio ---------- */
+.filtros-alternar { display: none; }
+.filtros-acoes .filtro-busca { order: 2; } /* no computador a busca continua depois dos filtros */
+@media (max-width: 760px) {
+  /* Tabelas de ações viram lista: título na primeira linha, os demais dados com rótulo embaixo. */
+  .tabela-rolagem:has(> .tabela-lista) { overflow: visible; }
+  table.tabela-lista thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  table.tabela-lista, table.tabela-lista tbody { display: block; width: 100%; }
+  table.tabela-lista tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  table.tabela-lista td { display: block; padding: 0; border: 0; min-width: 0; }
+  table.tabela-lista td:first-child { grid-column: 1 / -1; }
+  table.tabela-lista td[data-rotulo]::before { content: attr(data-rotulo); display: block; margin-bottom: 2px; font-size: .7rem; color: var(--muted); }
+  /* Situação (selos, às vezes vários) em linha própria, depois de seção, prazo e tempo. */
+  table.tabela-lista td[data-rotulo="Situação"] { grid-column: 1 / -1; order: 5; }
+  table.tabela-lista td[data-rotulo="Situação"]::before { display: none; }
+
+  /* Ações: a busca à vista; seção, situação e status atrás do botão "Filtros". */
+  .filtros-alternar { display: inline-flex; flex-shrink: 0; }
+  .filtros-acoes { align-items: flex-end; flex-wrap: wrap; }
+  .filtros-acoes .filtro-busca { order: 0; flex: 1 1 0 !important; min-width: 0 !important; }
+  .filtros-extra { display: none !important; flex-basis: 100%; }
+  .filtros-abertos .filtros-extra { display: grid !important; grid-template-columns: 1fr; gap: 10px; }
+  .filtros-extra > div { min-width: 0 !important; }
+  .filtros-extra select { width: 100%; }
+  .filtros-alternar[aria-expanded="true"] { background: var(--green-bg); color: var(--ink-2); border-color: var(--ink-2); }
+
+  /* Painel e Direcionar: botões principais na largura toda. */
+  .cartao.centro .btn { width: 100%; justify-content: center; }
+  #form-dir > .btn-primario { width: 100%; min-height: 50px; justify-content: center; }
+}
