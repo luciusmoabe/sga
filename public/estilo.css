@@ -40,31 +40,7 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-tema="claro"]) {
-    --bg:       #0f1a12;
-    --card:     #172019;
-    --sidebar:  #111a13;
-    --line:     #243328;
-    --line-str: #334d38;
-    --ink:      #d5ecdb;
-    --ink-2:    #6dbb8a;
-    --muted:    #7a9a80;
-    --green:    #6dbb8a;
-    --green-bg: #182d1e;
-    --pale:     #162319;
-    --azul-bg:  #182d1e;
-    --verde:       #5ec484;
-    --verde-bg:    #163324;
-    --amarelo:     #e6ac3a;
-    --amarelo-bg:  #362c0e;
-    --vermelho:    #ff7a6b;
-    --vermelho-bg: #3e1c18;
-    --sombra:      0 1px 3px rgba(0,0,0,.25);
-    --sombra-card: 0 1px 2px rgba(0,0,0,.2);
-    color-scheme: dark;
-  }
-}
+/* Tema sempre claro, por decisão do Departamento: o modo escuro do sistema não muda o Agilis. */
 
 /* ---------- Base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
