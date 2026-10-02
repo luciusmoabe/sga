@@ -3,7 +3,7 @@
 import { dataNoFuso, dataValida, instante, parseData, partesNoFuso, somarDias } from '../public/js/datas.js';
 import { HORA_FECHAMENTO } from '../public/js/regras.js';
 export { FUSO_NEGOCIO } from '../public/js/datas.js';
-export { HORA_FECHAMENTO, ORDEM_COR, PERFIS, PRIORIDADES, ROTULO_PERFIL, STATUS, TAM_SENHA, TRANSICOES } from '../public/js/regras.js'; // fonte única, compartilhada com a interface
+export { DIAS_SEM_MOVIMENTO, DIRETORIA_ADJUNTA, HORA_FECHAMENTO, ORDEM_COR, PERFIS, TIPOS_SECAO, PRIORIDADES, ROTULO_PERFIL, STATUS, TAM_SENHA, TRANSICOES } from '../public/js/regras.js'; // fonte única, compartilhada com a interface
 
 export const pad = (n) => String(n).padStart(2, '0');
 export const iso = dataNoFuso;

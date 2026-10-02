@@ -5,7 +5,8 @@ import { del, get, patch, post } from './api.js';
 import { itensDoRelato, resumoInternas } from './relato-vista.js';
 import { est, hoje } from './estado.js';
 import { $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, parseISO, plural, sem, STATUS, toast } from './ui.js';
-import { abrirAcao } from './acao-comum.js';
+import { abrirAcao, confirmarPrazoNasSecoes } from './acao-comum.js';
+import { DIAS_SEM_MOVIMENTO } from './regras.js';
 
 /**
  * Tela de início (fora do modo TV). Abrir esta rota não cria nada: a reunião só nasce no botão,
@@ -96,6 +97,7 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
     if (c.atrasadas) f.push(plural(c.atrasadas, 'ação atrasada', 'ações atrasadas'));
     if (c.vencendo) f.push(`${plural(c.vencendo, 'vence', 'vencem')} em até 2 dias`);
     if (c.pedidos_pendentes) f.push(plural(c.pedidos_pendentes, 'pedido de prazo', 'pedidos de prazo'));
+    if (c.paradas) f.push(`${plural(c.paradas, 'ação', 'ações')} sem atualização há ${DIAS_SEM_MOVIMENTO}+ dias`);
     if (S.tempo) f.push(`Tempo na semana: ${fmtMin(c.tempo_semana)}`);
     return f.length ? f.join(' · ') : 'Tudo em dia';
   };
@@ -181,6 +183,10 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
       aoAbrir: (dlg, form) => on(form, 'change', 'input[name=destino]', () => $('#na-alvos', dlg).classList.toggle('oculto', form.destino.value !== 'escolher')),
       aoEnviar: async (d, form) => {
         const alvos = d.destino === 'esta' ? [c.secao.id] : [...form.querySelectorAll('input[name=secao]:checked')].map((x) => Number(x.value));
+        // Antes de criar, mostra o que as seções alvo já têm planejado para o mesmo prazo.
+        if (!(await confirmarPrazoNasSecoes({ todos: d.destino === 'todos', secoes: alvos, prazo: d.prazo }))) {
+          throw new Error('Direcionamento não confirmado. Revise o prazo ou as seções e tente de novo.');
+        }
         const r = await post(`/reunioes/${S.id}/acoes`, { titulo: d.titulo, destino: d.destino === 'todos' ? 'todos' : 'especificos', secoes: alvos, prazo: d.prazo, prioridade: d.prioridade });
         S.novas.push({ titulo: d.titulo, n: r.acoes_criadas });
         toast(`Ação direcionada a ${plural(r.acoes_criadas, 'seção', 'seções')}.`);

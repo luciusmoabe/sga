@@ -105,20 +105,20 @@ test('desempenho: o bootstrap traz a contagem do selo e as telas pesadas usam po
     assert.equal(boot.pedidos_pendentes, pedidos.length, `selo de ${uid}`);
   }
   assert.equal((await call(CPE, 'GET', '/bootstrap')).data.pedidos_pendentes, 0, 'chefe não usa o selo');
-  // Com o banco distante, cada consulta em série custa uma ida pela rede: as telas pesadas têm teto.
+  // Com o banco distante, cada consulta em série custa uma ida pela rede: as telas pesadas têm teto. O detalhe da ação inclui o histórico de prazos, em paralelo com as demais consultas.
   let n = 0;
   const prepare = db.prepare.bind(db);
   db.prepare = (sql) => { n++; return prepare(sql); };
-  for (const [caminho, teto] of [['/painel', 9], ['/pauta', 13], ['/secoes/1/detalhe', 14], ['/bootstrap', 5], ['/acoes/1', 7]]) {
+  for (const [caminho, teto] of [['/painel', 9], ['/pauta', 13], ['/secoes/1/detalhe', 14], ['/bootstrap', 5], ['/acoes/1', 8]]) {
     n = 0;
     assert.equal((await call(DIRETOR, 'GET', caminho)).status, 200);
     assert.ok(n <= teto, `${caminho} usou ${n} consultas (teto ${teto})`);
   }
   // O Chefe paga a subárvore da própria visibilidade (uma a mais que o Diretor); acaoVisivel já a garante
-  // para quem gerencia a ação, então chefeGere e podeExcluirAcao não devem repeti-la.
+  // para quem gerencia a ação, então chefeGere e permissoes não devem repeti-la.
   n = 0;
   assert.equal((await call(CPE, 'GET', '/acoes/1')).status, 200);
-  assert.ok(n <= 8, `/acoes/1 (chefe) usou ${n} consultas (teto 8)`);
+  assert.ok(n <= 9, `/acoes/1 (chefe) usou ${n} consultas (teto 9)`);
 });
 
 test('Administrador gerencia estrutura e perfis; Diretor não altera Diretor nem Administrador', async (t) => {

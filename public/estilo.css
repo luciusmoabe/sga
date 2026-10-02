@@ -864,6 +864,24 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
   margin-bottom: 10px;
   break-inside: avoid;
 }
+/* ---------- Início do chefe: quadro "Precisa de atenção" ---------- */
+.inicio-grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 20px; align-items: start; }
+.atencao-quadro { background: var(--pale); border: 1px solid var(--line); border-radius: 16px; padding: 22px 22px 18px; position: sticky; top: 16px; }
+.atencao-sobre { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 650; color: var(--muted); margin: 0 0 6px; }
+.atencao-quadro h2 { font-family: var(--head); margin: 0 0 6px; }
+.atencao-lead { color: var(--muted); margin: 0 0 14px; line-height: 1.5; }
+.atencao-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.atencao-lista li { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.atencao-item-titulo { font-weight: 650; margin-bottom: 4px; overflow-wrap: anywhere; }
+.atencao-botoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.atencao-quadro .ruim { color: var(--vermelho); font-weight: 600; }
+.atencao-quadro .atencao { color: var(--amarelo); font-weight: 600; }
+.pilula.atencao-selo { background: var(--amarelo-bg); color: var(--amarelo); }
+@media (max-width: 900px) {
+  .inicio-grade { grid-template-columns: 1fr; }
+  .atencao-quadro { order: -1; position: static; }
+}
+
 @media print {
   .lateral, .cabeca .acoes-topo, .trilho, #toasts, .nao-imprimir { display: none !important; }
   .app { display: block; }

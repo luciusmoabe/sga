@@ -1,7 +1,8 @@
 // Detalhe de uma ação, compartilhado por Diretor, Apoio e Chefe.
 import { del, get, patch, post } from './api.js';
 import { ehAdmin, ehDiretor, est, podeOperar } from './estado.js';
-import { abrirForm, br, dataHora, esc, fmtMin, on, pilulaStatus, PRIO, toast } from './ui.js';
+import { abrirForm, br, confirmar, dataHora, esc, fmtMin, on, pilulaStatus, PRIO, toast } from './ui.js';
+import { DIRETORIA_ADJUNTA } from './regras.js';
 
 // ---------- Impedimentos (formulários usados também pela atualização semanal e por Minhas ações) ----------
 /** Ação em que ainda faz sentido registrar impedimento. */
@@ -66,12 +67,75 @@ const checklistItemHTML = (it) => `<div class="item previsto" data-checklist-id=
  *  (marcar/adicionar/excluir item não fecha e reabre a tela toda). */
 const badgesHTML = (a) => `${pilulaStatus(a)}
   ${a.demandada_diretor ? '<span class="pilula diretor">Demandada pelo Diretor</span>' : ''}
+  ${a.apresentada ? `<span class="pilula" title="Título e detalhamento não mudam mais; o prazo pode ser alterado">Apresentada em reunião (${br(a.apresentada_em)})</span>` : ''}
   <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade]}</span>
   <span class="suave pequeno">${esc(a.secao_sigla)} · ${esc(a.secao_nome)}</span>`;
 const checklistBlocoHTML = (a) => `
   <h3 style="margin:12px 0 6px">Checklist${a.checklist.length ? ` <span class="suave pequeno">(${a.checklist_feitos}/${a.checklist_total})</span>` : ''}</h3>
   ${a.checklist.length ? `<div class="itens">${a.checklist.map(checklistItemHTML).join('')}</div>` : '<p class="suave pequeno">Nenhum item no checklist.</p>'}
   ${gereChecklist() && !a.encerrada ? `<div class="add-linha"><input id="novo-check" placeholder="Novo item do checklist" maxlength="200" aria-label="Novo item do checklist"><button type="button" class="btn btn-sec" data-add-check>Adicionar</button></div>` : ''}`;
+
+// ---------- Ao direcionar: ações já planejadas para o mesmo prazo ----------
+/** Antes de direcionar, mostra as ações em aberto com o mesmo prazo nas seções alvo (e nas subseções delas),
+ *  para o Diretor ou o Diretor Adjunto decidir se direciona mesmo assim. Devolve true para seguir.
+ *  `secoes` são os ids escolhidos; com `todos`, valem os Centros e a Coordenação (sem a Diretoria Adjunta). */
+export async function confirmarPrazoNasSecoes({ todos, secoes, prazo }) {
+  if (!prazo) return true;
+  const [todasSecoes, acoes] = await Promise.all([get('/secoes'), get(`/acoes?situacao=abertas&prazo=${encodeURIComponent(prazo)}`)]);
+  if (!acoes.length) return true;
+  const alvos = todos ? todasSecoes.filter((s) => !s.pai_id && s.ativa && s.tipo !== DIRETORIA_ADJUNTA).map((s) => s.id) : secoes;
+  // Cada seção da árvore aponta para o alvo acima dela (o alvo aponta para si mesmo).
+  const alvoDe = new Map();
+  const marcar = (id, alvo) => { alvoDe.set(id, alvo); todasSecoes.filter((s) => s.pai_id === id).forEach((f) => marcar(f.id, alvo)); };
+  alvos.forEach((id) => marcar(id, id));
+  const porAlvo = new Map();
+  for (const a of acoes) {
+    const alvo = alvoDe.get(a.secao_id);
+    if (alvo === undefined) continue;
+    if (!porAlvo.has(alvo)) porAlvo.set(alvo, []);
+    porAlvo.get(alvo).push(a);
+  }
+  if (!porAlvo.size) return true;
+  const nome = (id) => { const s = todasSecoes.find((x) => x.id === id); return s?.sigla || s?.nome || ''; };
+  const total = [...porAlvo.values()].reduce((n, l) => n + l.length, 0);
+  const lista = [...porAlvo.entries()].map(([alvo, l]) => `<li><b>${esc(nome(alvo))}</b>: ${l.map((a) =>
+    `${esc(a.titulo)}${a.secao_id !== alvo ? ` <span class="suave">(${esc(a.secao_sigla)})</span>` : ''}`).join('; ')}</li>`).join('');
+  return confirmar({
+    titulo: 'Ações já planejadas para este prazo',
+    texto: `${total === 1 ? 'Já existe 1 ação em aberto' : `Já existem ${total} ações em aberto`} com prazo em <b>${br(prazo)}</b> nas seções escolhidas:</p>
+      <ul style="margin:6px 0 12px;padding-left:18px">${lista}</ul><p>Deseja direcionar mesmo assim?`,
+    rotulo: 'Direcionar mesmo assim',
+    cancelar: 'Voltar e revisar',
+  });
+}
+
+// ---------- Editar a ação (título, detalhamento, prazo) ----------
+/** Só quem criou a ação edita (o servidor confere e informa em `pode_editar` e `pode_mudar_prazo`): o chefe, as
+ *  que ele ou o suplente criou; o Diretor e o Diretor Adjunto, as que direcionaram. Ação já apresentada em reunião
+ *  só muda o prazo. Toda mudança de prazo guarda o anterior no histórico. */
+export function abrirEditarAcao(a, aoConcluir) {
+  const soPrazo = !a.pode_editar;
+  abrirForm({
+    titulo: soPrazo ? 'Alterar prazo' : 'Editar ação',
+    corpo: `${soPrazo ? `<p class="suave pequeno">Ação: <b>${esc(a.titulo)}</b></p>
+      <div class="info">Esta ação já foi apresentada em reunião: o título e o detalhamento não mudam mais. O prazo pode ser alterado, e o anterior fica guardado.</div>`
+      : `<div class="campo"><label for="ea-titulo">Título da ação</label><input id="ea-titulo" name="titulo" required maxlength="160" value="${esc(a.titulo)}"></div>
+      <div class="campo"><label for="ea-detalhe">Detalhamento (opcional)</label><textarea id="ea-detalhe" name="detalhe" maxlength="2000">${esc(a.detalhe || '')}</textarea></div>`}
+      <div class="campo"><label for="ea-prazo">Prazo</label><input id="ea-prazo" type="date" name="prazo" required value="${esc(a.prazo)}">
+        <div class="dica">${a.prazo !== a.prazo_original ? `Prazo original: ${br(a.prazo_original)}. ` : ''}A mudança de prazo fica registrada no histórico da ação.</div></div>`,
+    rotulo: soPrazo ? 'Alterar prazo' : 'Salvar alterações',
+    aoEnviar: async (d) => {
+      const mudancas = {};
+      if (!soPrazo && d.titulo.trim() !== a.titulo) mudancas.titulo = d.titulo;
+      if (!soPrazo && d.detalhe.trim() !== (a.detalhe || '')) mudancas.detalhe = d.detalhe;
+      if (d.prazo !== a.prazo) mudancas.prazo = d.prazo;
+      if (!Object.keys(mudancas).length) { toast('Nada foi alterado.'); return; }
+      await patch(`/acoes/${a.id}`, mudancas);
+      toast(soPrazo ? 'Prazo alterado.' : 'Ação atualizada.');
+      await aoConcluir?.();
+    },
+  });
+}
 
 // ---------- Redirecionar para outra seção ----------
 /** Ação em aberto pode mudar de seção: Diretor, Apoio e Administrador para qualquer seção ativa;
@@ -121,15 +185,17 @@ export async function abrirAcao(id, aoMudar) {
       </div>` : '')}
     <p>${a.detalhe ? esc(a.detalhe) : '<span class="suave">Sem detalhamento.</span>'}</p>
     <div class="linha" id="acao-badges" style="margin-bottom:10px;align-items:center;flex-wrap:wrap;gap:8px">${badgesHTML(a)}</div>
-    ${`    <div class="linha" style="margin-bottom:10px;align-items:center">
+    ${est.user?.perfil === 'chefe' || ehAdmin() || a.pode_editar ? `    <div class="linha" style="margin-bottom:10px;align-items:center">
       <label for="sel-prio" class="suave pequeno" style="margin:0"><b>Alterar prioridade:</b></label>
       <select id="sel-prio" data-mudar-prio style="width:auto;padding:3px 8px;font-size:0.84rem;margin-left:6px">
         <option value="alta" ${a.prioridade === 'alta' ? 'selected' : ''}>Alta</option>
         <option value="media" ${a.prioridade === 'media' ? 'selected' : ''}>Média</option>
         <option value="baixa" ${a.prioridade === 'baixa' ? 'selected' : ''}>Baixa</option>
       </select>
-    </div>`}
+    </div>` : ''}
     <p><b>Prazo:</b> <span class="num">${br(a.prazo)}</span>${prazoAlterado ? ` <span class="suave pequeno">(original: ${br(a.prazo_original)})</span>` : ''}</p>
+    ${a.prazos?.length ? `<details class="pequeno" style="margin:-4px 0 10px"><summary class="suave">Histórico de prazos (${a.prazos.length})</summary><ul class="suave" style="margin:6px 0 0;padding-left:18px">${a.prazos.map((h) =>
+      `<li class="num">${br(h.prazo_anterior)} → <b>${br(h.prazo_novo)}</b> · ${h.origem === 'pedido' ? 'pedido aprovado' : 'alterado'}${h.alterado_por_nome ? ` por ${esc(h.alterado_por_nome)}` : ''} em ${dataHora(h.alterado_em)}</li>`).join('')}</ul></details>` : ''}
     <p><b>Tempo gasto:</b> <span class="num">${fmtMin(a.tempo_total)}</span></p>
     ${a.lancamentos.length ? `<ul class="pequeno suave" style="margin:0 0 10px;padding-left:18px">${a.lancamentos.map((t) =>
       `<li class="num">${br(t.data)} · ${fmtMin(t.minutos)} · ${esc(t.usuario_nome || '')}</li>`).join('')}</ul>` : ''}
@@ -145,6 +211,8 @@ export async function abrirAcao(id, aoMudar) {
     ${`<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>`}
     ${diretor && a.status === 'concluida' && !a.encerrada ? `<div class="linha"><button type="button" class="btn btn-ok" data-encerrar>Aceitar e encerrar</button>
       <button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>` : ''}
+    ${a.pode_editar ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Editar ação</button>'
+      : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Alterar prazo</button>' : ''}
     ${aceitaRedirecionar(a) ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-redirecionar>Redirecionar para outra seção</button>' : ''}
     ${!a.demandada_diretor || ehAdmin() ? `
       <div class="linha" style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line);align-items:center">
@@ -217,6 +285,7 @@ export async function abrirAcao(id, aoMudar) {
         } catch (e) { toast(e.message, 'erro'); }
       });
       on(dlg, 'click', '[data-novo-imp]', () => abrirNovoImpedimento(a, recarregar));
+      on(dlg, 'click', '[data-editar-acao]', () => abrirEditarAcao(a, recarregar));
       // Quem redireciona continua vendo a ação (o chefe só move dentro da própria árvore).
       on(dlg, 'click', '[data-redirecionar]', () => abrirRedirecionar(a, recarregar).catch((e) => toast(e.message, 'erro')));
       on(dlg, 'click', '[data-resolver-imp]', (el) => {

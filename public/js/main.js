@@ -10,7 +10,7 @@ import { combinados } from './combinados.js';
 import { estrutura } from './estrutura.js';
 import { atas, reuniaoDetalhe, reunioes } from './atas.js';
 import { inicioReuniao, viewReuniao } from './reuniao.js';
-import { ROTULO_PERFIL } from './regras.js';
+import { DIRETORIA_ADJUNTA, ROTULO_PERFIL } from './regras.js';
 import { abrirTrocaSenha, telaTrocaSenha } from './senha.js';
 
 const GESTAO = ['diretor', 'apoio', 'administrador'];
@@ -28,10 +28,11 @@ const ROTAS = {
   reunioes: { f: (r, p) => (p.id ? reuniaoDetalhe(r, p) : reunioes(r, p)), perfis: LEITURA, titulo: 'Reuniões e atas' },
   // Sem id: tela comum de início (nada é criado ao abrir a rota). Com id: Modo Reunião em tela cheia.
   reuniao: { f: (r, p) => (p.id ? viewReuniao(r, p) : inicioReuniao(r, p)), perfis: GESTAO, tv: (p) => !!p.id, titulo: 'Modo Reunião' },
-  inicio: { f: inicio, perfis: ['chefe'], trilho: true, titulo: 'Início' },
+  inicio: { f: inicio, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Início' },
   agenda: { f: agenda, perfis: TODOS, trilho: true, titulo: 'Agenda' },
-  atualizacao: { f: atualizacao, perfis: ['chefe'], trilho: true, titulo: 'Minha atualização' },
-  'minhas-acoes': { f: minhasAcoes, perfis: ['chefe'], trilho: true, titulo: 'Minhas ações' },
+  // O Administrador da Diretoria Adjunta envia o relato da própria seção, como um chefe.
+  atualizacao: { f: atualizacao, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Minha atualização' },
+  'minhas-acoes': { f: minhasAcoes, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Minhas ações' },
   historico: { f: historico, perfis: ['chefe'], titulo: 'Histórico' },
   atas: { f: atas, perfis: ['chefe'], titulo: 'Atas' },
 };
@@ -202,13 +203,17 @@ on(app, 'click', '#instalar-app', async () => {
 
 function casca() {
   const u = est.user;
-  const menu = (u.perfil === 'chefe' ? MENU_CHEFE : u.perfil === 'administrador' ? MENU_ADMIN : MENU_GESTAO).filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
+  // Quem é da Diretoria Adjunta (Administrador vinculado a ela) cria e acompanha as ações da seção e envia o relato semanal.
+  const daDiretoriaAdjunta = u.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA;
+  const base = u.perfil === 'chefe' ? MENU_CHEFE : u.perfil === 'administrador' ? MENU_ADMIN : MENU_GESTAO;
+  const menu = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['atualizacao', 'Minha atualização']] : []), ...base]
+    .filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
   app.innerHTML = `<div class="app"><aside class="lateral">
     <div class="marca"><img src="/imagens/logo-agilis.png" alt="Agilis" class="marca-logo"></div>
     <nav class="menu" aria-label="Principal">${menu.map((m) => m[0].startsWith('#')
       ? `<div class="grupo"><b>${esc(m[0].slice(1))}</b></div>`
       : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}"><span class="menu-rotulo">${ICONES[m[0]] || ''}${esc(m[1])}</span>${m[2] === 'selo' ? '<span class="selo oculto" id="selo-prazos"></span>' : ''}</a>`).join('')}</nav>
-    <div class="usuario"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}<br><span class="usuario-acoes">${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
+    <div class="usuario"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}${est.boot?.secao?.tipo === DIRETORIA_ADJUNTA ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}<br><span class="usuario-acoes">${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
       <button class="btn btn-fantasma btn-mini oculto" id="instalar-app" style="margin-top:6px">Instalar aplicativo</button></div></aside>
     <main class="principal"><div id="trilho"></div><div id="conteudo"></div></main></div>`;
   atualizarBotaoInstalar();

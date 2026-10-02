@@ -34,13 +34,14 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
 
 
   // ---------- Atualização semanal do chefe ----------
-  // O chefe age na própria seção; o Administrador, em qualquer seção ativa, informada em secao_id.
+  // O chefe age na própria seção; o Administrador, em qualquer seção ativa, informada em secao_id. Sem secao_id,
+  // o Administrador da Diretoria Adjunta envia o relato da própria seção (tela "Minha atualização").
   const secaoDaAtualizacao = async (req) => {
     if (req.user.perfil !== 'administrador') {
       if (!req.user.secao_id) throw falha(409, 'Você ainda não está vinculado a uma seção. Peça ao Diretor para atribuí-lo.');
       return req.user.secao_id;
     }
-    const id = Number(req.query.secao_id ?? req.body?.secao_id);
+    const id = Number(req.query.secao_id ?? req.body?.secao_id ?? req.user.secao_id);
     if (!id || !(await q1('select id from secoes where id = ?', id))) throw falha(400, 'Informe a seção da atualização (secao_id).');
     return id;
   };

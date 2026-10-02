@@ -32,9 +32,12 @@ test('SQLite: versão 3 preserva dados, índices, views e triggers do esquema an
     end`);
   const tabelas = ['secoes', 'usuarios', 'acoes', 'tempo', 'decisoes', 'pedidos_prazo'];
   const antes = await Promise.all(tabelas.map(nome => db.prepare(`select * from ${nome} order by id`).all()));
-  assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
   const depois = await Promise.all(tabelas.map(nome => db.prepare(`select * from ${nome} order by id`).all()));
   for (const acao of depois[2]) delete acao.criado_por; // coluna adicionada pela migração 6
+  // A migração 13 marca as ações que estavam na reunião já realizada do banco legado; o resto fica igual.
+  assert.ok(depois[2].some((a) => a.apresentada_em));
+  for (const acao of [...antes[2], ...depois[2]]) delete acao.apresentada_em;
   assert.deepEqual(depois, antes);
   assert.ok(await db.prepare("select name from sqlite_master where name = 'idx_secao_nome'").get());
   await db.exec("update nomes_secoes set nome = 'Nome novo' where id = 1");
@@ -53,7 +56,7 @@ test('SQLite: chefe órfão impede migração sem alterar registros ou versão',
   assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 2);
   assert.equal((await db.prepare('pragma foreign_keys').get()).foreign_keys, 1);
   await db.exec('update secoes set chefe_id = 3 where id = 1');
-  assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
 });
 
 test('SQLite: erro após reconstrução desfaz o esquema e restaura fiscalização das FKs', async t => {
@@ -76,7 +79,7 @@ test('SQLite: erro após reconstrução desfaz o esquema e restaura fiscalizaç�
   assert.ok(!(await db.prepare('pragma foreign_key_list(secoes)').all()).some(c => c.from === 'chefe_id'));
   assert.equal((await db.prepare('pragma foreign_keys').get()).foreign_keys, 1);
   await assert.rejects(db.exec('update acoes set secao_id = 9999 where id = 1'), /FOREIGN KEY/);
-  assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
 });
 
 test('SQLite: verificação final impede commit de referências inválidas no modo de reconstrução', async t => {

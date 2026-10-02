@@ -1,6 +1,8 @@
 // Estrutura da organização: seções em árvore e cadastro de usuários e acessos.
 import { subarvore, nivel } from './db.js';
-import { LIMITE_NIVEIS } from './logic.js';
+import { DIRETORIA_ADJUNTA, LIMITE_NIVEIS, TIPOS_SECAO } from './logic.js';
+
+const SEM_CHEFE = 'A Diretoria Adjunta não tem chefe: quem faz parte dela é Administrador, cadastrado pelo servidor.';
 import { falha, h, permit, texto } from './helpers.js';
 import { editarHierarquia, excluirCadastro } from './crud-cadastros.js';
 import { administradorAuth, cadastrarChefe } from './cadastro-chefes.js';
@@ -15,7 +17,14 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     }
     const porId = new Map(rows.map((r) => [r.id, r]));
     const nv = (r) => (r.pai_id && porId.has(r.pai_id) ? nv(porId.get(r.pai_id)) + 1 : 1);
-    return rows.map((r) => ({ ...r, ativa: !!r.ativa, nivel: nv(r) }));
+    // A Diretoria Adjunta não tem chefe: a tela mostra os Administradores vinculados a ela.
+    const membros = rows.some((r) => r.tipo === DIRETORIA_ADJUNTA)
+      ? await q(`select id, nome, secao_id from usuarios where perfil = 'administrador' and ativo = 1 and secao_id is not null order by nome`)
+      : [];
+    return rows.map((r) => ({
+      ...r, ativa: !!r.ativa, na_reuniao: !!r.na_reuniao, nivel: nv(r),
+      ...(r.tipo === DIRETORIA_ADJUNTA ? { membros: membros.filter((m) => m.secao_id === r.id).map(({ id, nome }) => ({ id, nome })) } : {}),
+    }));
   };
   app.get('/api/secoes', h(async (req) => await listaSecoes(req.user)));
 
@@ -40,11 +49,16 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     const b = req.body || {};
     const nome = texto(b.nome, 120);
     if (!nome) throw falha(400, 'Informe o nome da seção.');
-    if (!['centro', 'coordenacao', 'subsecao'].includes(b.tipo)) throw falha(400, 'Escolha o tipo: Centro, Coordenação ou Subseção.');
+    if (!TIPOS_SECAO.includes(b.tipo)) throw falha(400, 'Escolha o tipo: Centro, Coordenação, Subseção ou Diretoria Adjunta.');
+    if (b.tipo === DIRETORIA_ADJUNTA) {
+      if (await q1('select id from secoes where tipo = ?', DIRETORIA_ADJUNTA)) throw falha(409, 'A Diretoria Adjunta já está cadastrada.');
+      if (b.chefe_id) throw falha(400, SEM_CHEFE);
+    }
     let pai = null;
     if (b.tipo === 'subsecao') {
       pai = await q1('select * from secoes where id = ? and ativa = 1', Number(b.pai_id));
       if (!pai) throw falha(400, 'Escolha a seção à qual a subseção ficará ligada.');
+      if (pai.tipo === DIRETORIA_ADJUNTA) throw falha(400, 'A Diretoria Adjunta não tem subseções.');
       if (await nivel(db, pai.id) + 1 > LIMITE_NIVEIS) throw falha(400, `A estrutura aceita até ${LIMITE_NIVEIS} níveis abaixo do Departamento.`);
     } else if (b.pai_id) {
       throw falha(400, 'Centros e Coordenação ficam no primeiro nível.');
@@ -55,8 +69,8 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
       : await q1('select coalesce(max(ordem), 0) + 1 o from secoes where pai_id is null');
     const ordem = ordemRow?.o ?? 1;
     const id = (await run(
-      'insert into secoes (nome, sigla, tipo, pai_id, ordem, criada_em) values (?,?,?,?,?,?)',
-      nome, texto(b.sigla, 12).toUpperCase() || null, b.tipo, pai?.id ?? null, ordem, agoraISO(),
+      'insert into secoes (nome, sigla, tipo, pai_id, ordem, na_reuniao, criada_em) values (?,?,?,?,?,?,?)',
+      nome, texto(b.sigla, 12).toUpperCase() || null, b.tipo, pai?.id ?? null, ordem, b.na_reuniao === false ? 0 : 1, agoraISO(),
     )).lastInsertRowid;
     if (chefe) await atribuirChefe(id, chefe);
     res.status(201);
@@ -79,7 +93,15 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
       await run('update secoes set nome = ? where id = ?', nome, id);
     }
     if ('sigla' in b) await run('update secoes set sigla = ? where id = ?', texto(b.sigla, 12).toUpperCase() || null, id);
-    if ('chefe_id' in b) await atribuirChefe(id, await validarChefe(b.chefe_id));
+    if ('na_reuniao' in b) {
+      if (typeof b.na_reuniao !== 'boolean') throw falha(400, 'Informe se a seção aparece na reunião (sim ou não).');
+      await run('update secoes set na_reuniao = ? where id = ?', b.na_reuniao ? 1 : 0, id);
+    }
+    if ('chefe_id' in b) {
+      const chefe = await validarChefe(b.chefe_id);
+      if (chefe && s.tipo === DIRETORIA_ADJUNTA) throw falha(400, SEM_CHEFE);
+      await atribuirChefe(id, chefe);
+    }
     if (b.mover === 'cima' || b.mover === 'baixo') {
       const irmas = s.pai_id == null
         ? await q('select id from secoes where pai_id is null order by ordem, id')
@@ -209,6 +231,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     if(perfil==='chefe' && ativo && secao) {
       const s=await q1('select * from secoes where id=?',secao);
       if(!s?.ativa) throw falha(400,'Escolha uma seção ativa.');
+      if(s.tipo===DIRETORIA_ADJUNTA) throw falha(400,SEM_CHEFE);
       if(s.chefe_id && s.chefe_id!==id) throw falha(409,'A seção já possui outro chefe. Use o botão Chefe para substituir.');
     }
     await run('update secoes set chefe_id=null where chefe_id=?',id);

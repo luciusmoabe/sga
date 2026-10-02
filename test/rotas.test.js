@@ -51,6 +51,7 @@ const ESPERADAS = [
   'POST /api/acoes/:id/tempo',
   'POST /api/combinados',
   'POST /api/diretrizes',
+  'POST /api/diretrizes/:id/secoes',
   'POST /api/pedidos-prazo/:id/decidir',
   'POST /api/reunioes/:id/acoes',
   'POST /api/reunioes/:id/decisoes',

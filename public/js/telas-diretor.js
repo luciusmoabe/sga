@@ -2,10 +2,11 @@
 import { del, get, post } from './api.js';
 import { ehAdmin, ehDiretor, est, hoje } from './estado.js';
 import {
-  $, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, porNecessidade, PRIO, sem, STATUS, toast, vazio,
+  $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, porNecessidade, PRIO, sem, STATUS, toast, vazio,
 } from './ui.js';
-import { abrirAcao } from './acao-comum.js';
+import { abrirAcao, confirmarPrazoNasSecoes } from './acao-comum.js';
 import { itensDoRelato, resumoInternas } from './relato-vista.js';
+import { DIAS_SEM_MOVIMENTO, DIRETORIA_ADJUNTA } from './regras.js';
 
 const NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const nomeDiaReuniao = () => NOMES_DIA[est.boot?.reuniao_dia ?? 2];
@@ -70,11 +71,12 @@ export async function painel(raiz, { q }) {
         i.vencendo ? `<span class="atencao">${plural(i.vencendo, 'ação vence', 'ações vencem')} em até 2 dias</span>` : '',
         i.atrasadas_internas ? `<span class="suave">Resumo: ${i.atrasadas_internas} atrasada(s) em subseções (detalhe é da seção)</span>` : '',
         i.pedidos_pendentes ? `<span class="atencao">${plural(i.pedidos_pendentes, 'pedido de novo prazo', 'pedidos de novo prazo')}</span>` : '',
+        i.paradas ? `<span class="atencao">${plural(i.paradas, 'ação', 'ações')} sem atualização há ${DIAS_SEM_MOVIMENTO}+ dias</span>` : '',
         `<span class="suave num">Tempo registrado na semana: ${fmtMin(i.tempo_semana)}</span>`,
       ].join('');
       return `<article class="cartao centro cor-${i.cor}">
         <div class="linha entre"><h3>${esc(i.secao.nome)}</h3>${sem(i.cor)}</div>
-        <div class="meta">${esc(i.secao.sigla || '')} · ${esc(i.secao.chefe_nome || 'sem chefe atribuído')}${i.subsecoes ? ` · ${plural(i.subsecoes, 'subseção', 'subseções')}` : ''}</div>
+        <div class="meta">${esc(i.secao.sigla || '')} · ${i.secao.tipo === DIRETORIA_ADJUNTA ? 'Diretoria Adjunta' : esc(i.secao.chefe_nome || 'sem chefe atribuído')}${i.secao.na_reuniao ? '' : ' · fora da reunião'}${i.subsecoes ? ` · ${plural(i.subsecoes, 'subseção', 'subseções')}` : ''}</div>
         <div class="fatos">${fatos}</div>
         <div><a class="btn btn-sec btn-mini" href="#/centro/${i.secao.id}?semana=${semana}">Ver relato e ações</a></div>
       </article>`;
@@ -127,7 +129,8 @@ export async function centro(raiz, { id, q, refresh }) {
 // ---------- Direcionar ação ----------
 export async function direcionar(raiz, { refresh }) {
   const [secoes, dirs] = await Promise.all([get('/secoes'), get('/diretrizes')]);
-  const centros = secoes.filter((s) => !s.pai_id && s.ativa);
+  // O Diretor Adjunto não direciona ações para a própria seção: as dela ele cria em "Minhas ações".
+  const centros = secoes.filter((s) => !s.pai_id && s.ativa && !(ehAdmin() && s.id === est.user.secao_id));
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>Direcionar ação</h1><div class="sub">Para todos os Centros, quando o assunto é comum, ou para seções específicas. Todo pedido tem prazo.</div></div></div>
     <div class="dois" style="align-items:start">
@@ -139,7 +142,7 @@ export async function direcionar(raiz, { refresh }) {
           <div class="escolha"><label><input type="radio" name="destino" value="todos" checked> Todos os Centros</label>
           <label><input type="radio" name="destino" value="especificos"> Escolher seções</label></div></div>
         <div class="campo oculto" id="alvos"><div class="escolha">${centros.map((c) => `<label><input type="checkbox" name="secao" value="${c.id}"> ${esc(c.sigla || c.nome)}</label>`).join('')}</div>
-          <div class="dica">Cada seção escolhida recebe a sua própria ação, com acompanhamento individual.</div></div>
+          <div class="dica">Cada seção escolhida recebe a sua própria ação, com acompanhamento individual. "Todos os Centros" não inclui a Diretoria Adjunta.</div></div>
         <div class="dois">
           <div class="campo"><label for="d-prazo">Prazo</label><input id="d-prazo" type="date" name="prazo" min="${hoje()}" value="${addDias(hoje(), 7)}" required></div>
           <div class="campo"><label for="d-prio">Prioridade</label><select id="d-prio" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div>
@@ -147,12 +150,40 @@ export async function direcionar(raiz, { refresh }) {
         <button class="btn btn-primario" type="submit">Direcionar ação</button>
       </form>
       <div class="cartao"><h2>Últimas ações direcionadas</h2>
-        ${dirs.length ? dirs.slice(0, 8).map((x) => `<div style="margin-bottom:14px"><div class="linha entre"><b>${esc(x.titulo)}</b><span class="pilula prio-${x.prioridade}">${PRIO[x.prioridade]}</span></div>
-          <div class="suave pequeno">${x.destino === 'todos' ? 'Todos os Centros' : plural(x.total, 'seção', 'seções')} · prazo ${br(x.prazo)} · criada por ${esc(x.criado_por_nome || '')}</div>
-          <div class="linha"><div class="progresso" style="flex:1"><i style="width:${x.total ? (x.concluidas / x.total) * 100 : 0}%"></i></div><span class="pequeno num">${x.concluidas}/${x.total} concluídas</span></div></div>`).join('')
+        ${dirs.length ? dirs.slice(0, 8).map((x) => `<div style="margin-bottom:14px"><div class="linha entre" style="flex-wrap:nowrap;align-items:flex-start;gap:12px"><b>${esc(x.titulo)}</b><span class="pilula prio-${x.prioridade}" style="flex-shrink:0">${PRIO[x.prioridade]}</span></div>
+          <div class="suave pequeno">${x.destino === 'todos' ? 'Todos os Centros' : x.secoes?.length ? `Para ${esc(x.secoes.map((c) => c.sigla || c.nome).join(', '))}` : 'Nenhuma seção (ações excluídas)'} · prazo ${br(x.prazo)} · criada por ${esc(x.criado_por_nome || '')}</div>
+          <div class="linha"><div class="progresso" style="flex:1"><i style="width:${x.total ? (x.concluidas / x.total) * 100 : 0}%"></i></div><span class="pequeno num">${x.concluidas}/${x.total} concluídas</span></div>
+          <button type="button" class="btn btn-fantasma btn-mini" data-acrescentar="${x.id}">Acrescentar seções</button></div>`).join('')
           : vazio('Nenhuma ação direcionada ainda', 'Use o formulário ao lado para criar a primeira.')}
       </div>
     </div>`;
+  // Acrescentar seções a um direcionamento já feito: as novas recebem a mesma ação, com o prazo escolhido aqui.
+  on(raiz, 'click', '[data-acrescentar]', (el) => {
+    const x = dirs.find((d) => d.id === Number(el.dataset.acrescentar));
+    const jaTem = new Set((x.secoes || []).map((c) => c.id));
+    const livres = centros.filter((c) => !jaTem.has(c.id));
+    if (!livres.length) { toast('Todas as seções disponíveis já receberam esta ação.', 'erro'); return; }
+    const vencido = x.prazo < hoje();
+    abrirForm({
+      titulo: 'Acrescentar seções',
+      corpo: `<p class="suave pequeno">Ação: <b>${esc(x.titulo)}</b>${x.secoes?.length ? ` · hoje com ${esc(x.secoes.map((c) => c.sigla || c.nome).join(', '))}` : ''}</p>
+        <div class="campo"><label>Seções a acrescentar</label><div class="escolha">${livres.map((c) => `<label><input type="checkbox" name="secao" value="${c.id}"> ${esc(c.sigla || c.nome)}</label>`).join('')}</div>
+          <div class="dica">Cada seção acrescentada recebe a mesma ação (título, detalhamento e prioridade). As que já a receberam não mudam.</div></div>
+        <div class="campo"><label for="ac-prazo">Prazo para as seções acrescentadas</label><input id="ac-prazo" type="date" name="prazo" min="${hoje()}" value="${vencido ? addDias(hoje(), 7) : x.prazo}" required>
+          ${vencido ? `<div class="dica">O prazo original (${br(x.prazo)}) já passou: escolha um novo.</div>` : ''}</div>`,
+      rotulo: 'Acrescentar seções',
+      aoEnviar: async (d, f) => {
+        const secoes = [...f.querySelectorAll('input[name=secao]:checked')].map((c) => Number(c.value));
+        if (!secoes.length) throw new Error('Escolha ao menos uma seção para acrescentar.');
+        if (!(await confirmarPrazoNasSecoes({ todos: false, secoes, prazo: d.prazo }))) {
+          throw new Error('Não confirmado. Revise o prazo ou as seções e tente de novo.');
+        }
+        const r = await post(`/diretrizes/${x.id}/secoes`, { secoes, prazo: d.prazo });
+        toast(`Ação acrescentada a ${plural(r.acoes_criadas, 'seção', 'seções')}.`);
+        refresh();
+      },
+    });
+  });
   const form = $('#form-dir', raiz);
   on(form, 'change', 'input[name=destino]', () => $('#alvos', raiz).classList.toggle('oculto', form.destino.value !== 'especificos'));
   form.addEventListener('submit', async (e) => {
@@ -164,6 +195,8 @@ export async function direcionar(raiz, { refresh }) {
       secoes: [...form.querySelectorAll('input[name=secao]:checked')].map((c) => Number(c.value)),
     };
     try {
+      // Antes de criar, mostra o que as seções alvo já têm planejado para o mesmo prazo.
+      if (!(await confirmarPrazoNasSecoes({ todos: corpo.destino === 'todos', secoes: corpo.secoes, prazo: corpo.prazo }))) return;
       const r = await post('/diretrizes', corpo);
       toast(`Ação direcionada a ${plural(r.acoes_criadas, 'seção', 'seções')}.`);
       refresh();

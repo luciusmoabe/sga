@@ -25,7 +25,8 @@ O modo padrão usa Supabase Auth (e-mail e senha) e exige configuração institu
 | `npm run seed` | Apaga o banco e recria os dados fictícios |
 | `npm run migrate -- --sqlite CAMINHO` | Aplica migrações ao arquivo SQLite indicado |
 | `npm run migrate -- --postgres` | Aplica migrações usando `SGC_MIGRATION_DATABASE_URL` explícita |
-| `npm run admin:criar -- --sqlite ARQUIVO "Nome" e-mail` | Cria o primeiro Administrador (senha provisória em `SGC_ADMIN_SENHA_INICIAL`; `--postgres` para PostgreSQL) |
+| `npm run admin:criar -- --sqlite ARQUIVO "Nome" e-mail` | Cria o primeiro Administrador (senha provisória em `SGC_ADMIN_SENHA_INICIAL`; `--postgres` para PostgreSQL; `SGC_ADMIN_SECAO` põe na Diretoria Adjunta) |
+| `npm run admin:secao -- --sqlite ARQUIVO e-mail ID|nenhuma` | Vincula um Administrador existente à Diretoria Adjunta, ou desvincula |
 | `npm run check:auth` | Verifica configuração Supabase sem exibir a chave; `-- --online` consulta as configurações públicas do projeto |
 | `npm test` | Roda os testes de regras, API e concorrência SQLite em memória, além do adaptador PostgreSQL com pool simulado |
 | `npm run test:postgres` | Cria PostgreSQL temporário e valida migrações, rollback e concorrência entre duas APIs; requer binários locais ([instruções](TESTES_POSTGRESQL.md)) |
@@ -48,7 +49,7 @@ Na tela de entrada não há senha: escolha um perfil.
 
 - **Diretor**: Painel da semana (semáforo por seção), Direcionar ação (para todos os Centros ou seções específicas, com prazo), Ações, Pedidos de novo prazo, Combinados, Reuniões e atas, Estrutura (criar seções e subseções, atribuir chefes) e o **Modo Reunião**.
 - **Apoio do Diretor**: o mesmo do Diretor, exceto Estrutura. Pode conduzir o Modo Reunião.
-- **Administrador**: consulta todos os dados (inclusive as ações internas das subseções) e gerencia contas, perfis e estrutura em "Contas e estrutura". Não direciona ações, não decide prazos nem conduz reunião; as telas de acompanhamento ficam somente para leitura. Em modo institucional, o primeiro Administrador é criado com `npm run admin:criar` (veja [AUTENTICACAO.md](AUTENTICACAO.md)).
+- **Administrador**: acesso total: consulta todos os dados (inclusive as ações internas das subseções), faz tudo o que o Diretor, o Apoio e o Chefe fazem (direciona ações, decide prazos, conduz reunião, aceita e devolve ações, em qualquer seção) e gerencia contas, perfis e estrutura em "Contas e estrutura". É também o perfil de quem faz parte da Diretoria Adjunta, que substitui o Diretor nas ausências. Em modo institucional, o primeiro Administrador é criado com `npm run admin:criar` (veja [AUTENTICACAO.md](AUTENTICACAO.md)).
 - **Chefe de seção**: Início, Minha atualização (feito, próximo, impedimentos, apoio), Minhas ações (status e tempo gasto em minutos), Histórico, Combinados e Atas. Vê a própria seção e as subordinadas.
 
 ### Modo Reunião (para a TV)

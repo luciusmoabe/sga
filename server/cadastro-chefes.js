@@ -1,6 +1,6 @@
 import { GUID } from './auth.js';
 import { falha } from './helpers.js';
-import { TAM_SENHA } from './logic.js';
+import { DIRETORIA_ADJUNTA, TAM_SENHA } from './logic.js';
 
 export function administradorAuth(config, { env = process.env, fetchImpl = fetch } = {}) {
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -35,7 +35,8 @@ export function administradorAuth(config, { env = process.env, fetchImpl = fetch
 // a pessoa é obrigada a trocá-la no primeiro acesso.
 // `suplente` cadastra um segundo Chefe para a mesma seção, com os mesmos poderes do titular (mesmo secao_id),
 // para responder na ausência dele: não mexe em secoes.chefe_id, então não há substituição nem confirmação.
-export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe', { permitidos = ['chefe', 'apoio'], suplente = false } = {}) {
+// `secaoAdministrador` só vem do comando do servidor: vincula o novo Administrador à Diretoria Adjunta.
+export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe', { permitidos = ['chefe', 'apoio'], suplente = false, secaoAdministrador = null } = {}) {
   if (!permitidos.includes(perfil)) {
     throw falha(400, permitidos.includes('diretor') ? 'Escolha Diretor, Apoio do Diretor ou Chefe de seção.' : 'Escolha Chefe ou Apoio.');
   }
@@ -43,7 +44,7 @@ export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe',
   const nome = typeof dados.nome === 'string' ? dados.nome.trim() : '';
   const email = typeof dados.email === 'string' ? dados.email.trim().toLowerCase() : '';
   const senha = dados.senha;
-  const secaoId = perfil === 'chefe' ? Number(dados.secao_id) : null;
+  const secaoId = perfil === 'chefe' ? Number(dados.secao_id) : (perfil === 'administrador' ? secaoAdministrador : null);
   if (!nome || nome.length > 120) throw falha(400, 'Informe um nome com até 120 caracteres.');
   if (email.length > 160 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw falha(400, 'Informe um e-mail válido.');
   if (typeof senha !== 'string' || senha.length < TAM_SENHA.min || senha.length > TAM_SENHA.max) throw falha(400, `A senha inicial deve ter entre ${TAM_SENHA.min} e ${TAM_SENHA.max} caracteres.`);
@@ -52,10 +53,12 @@ export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe',
   if (anterior !== null && (!Number.isSafeInteger(anterior) || anterior < 1)) throw falha(400, 'Confirmação de substituição inválida.');
   const validar = async () => {
     if (perfil === 'chefe') {
-    const s = await db.prepare('select id, ativa, chefe_id from secoes where id = ?').get(secaoId);
+    const s = await db.prepare('select id, ativa, chefe_id, tipo from secoes where id = ?').get(secaoId);
     if (!s?.ativa) throw falha(400, 'Escolha uma seção ativa.');
+    if (s.tipo === DIRETORIA_ADJUNTA) throw falha(400, 'A Diretoria Adjunta não tem chefe: quem faz parte dela é Administrador, cadastrado pelo servidor.');
     if (!suplente && (s.chefe_id ?? null) !== anterior) throw falha(409, 'A chefia da seção mudou ou precisa de confirmação. Atualize a página e confirme a substituição.');
     }
+    if (perfil === 'administrador' && secaoId !== null) await validarSecaoAdministrador(db, secaoId);
     if (await db.prepare('select id from usuarios where lower(email) = ?').get(email)) throw falha(409, 'E-mail já cadastrado no Agilis.');
   };
   await validar();
@@ -80,4 +83,10 @@ export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe',
     catch { throw falha(503, 'Cadastro local não concluído. Uma conta sem acesso ao Agilis permaneceu no Supabase; solicite a revisão administrativa antes de repetir.'); }
     throw err;
   }
+}
+
+/** Administrador só se vincula a uma seção se ela for a Diretoria Adjunta, ativa. */
+export async function validarSecaoAdministrador(db, secaoId) {
+  const s = await db.prepare('select ativa, tipo from secoes where id = ?').get(secaoId);
+  if (!s?.ativa || s.tipo !== DIRETORIA_ADJUNTA) throw falha(400, 'O Administrador só pode ser vinculado à Diretoria Adjunta, ativa.');
 }

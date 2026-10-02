@@ -1,6 +1,6 @@
 // Rotas de diretrizes, ações e pedidos de novo prazo.
 import { subarvore } from './db.js';
-import { PRIORIDADES, STATUS, TRANSICOES, ehISO } from './logic.js';
+import { DIAS_SEM_MOVIMENTO, PRIORIDADES, STATUS, TRANSICOES, addDays, br, ehISO } from './logic.js';
 import { falha, h, marks, permit, texto } from './helpers.js';
 
 export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
@@ -11,8 +11,27 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     return { where: `a.secao_id in (${marks(ids)})`, params: ids };
   };
 
+  // Última movimentação da ação (acoes.movimentada_em): toda gravação bem-sucedida em /api/acoes/:id/... conta
+  // (status, prioridade, edição, tempo, comentário, checklist, impedimento, pedido de prazo, redirecionamento,
+  // arquivamento, aceite). A data é gravada antes da resposta sair. Ação nova usa a data de criação.
+  const movimentou = (id) => run('update acoes set movimentada_em = ? where id = ?', agoraISO(), id);
+  app.use('/api/acoes/:id', (req, res, next) => {
+    const id = Number(req.params.id);
+    if (req.method === 'GET' || !Number.isSafeInteger(id)) return next();
+    const enviar = res.json.bind(res);
+    res.json = (corpo) => {
+      if (res.statusCode >= 400) return enviar(corpo);
+      movimentou(id).then(() => enviar(corpo), next);
+      return res;
+    };
+    next();
+  });
+  const limiteParada = () => addDays(hoje(), -(DIAS_SEM_MOVIMENTO - 1)); // movimentada antes deste dia = parada há 7+ dias
+
   const SELECT_ACAO = `select a.*, s.nome as secao_nome, s.sigla as secao_sigla,
       ua.perfil as autor_perfil,
+      ua.secao_id as autor_secao_id,
+      us.chefe_id as autor_secao_chefe_id,
       d.criado_por as demandado_por_id,
       ud.nome as demandado_por_nome,
       ud.perfil as demandado_por_perfil,
@@ -28,6 +47,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     from acoes a
     join secoes s on s.id = a.secao_id
     left join usuarios ua on ua.id = a.criado_por
+    left join secoes us on us.id = ua.secao_id
     left join diretrizes d on d.id = a.diretriz_id
     left join usuarios ud on ud.id = d.criado_por
     left join reunioes r on r.id = d.reuniao_id`;
@@ -37,12 +57,16 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     compartilhada: !!a.compartilhada,
     encerrada: !!a.encerrada,
     arquivada: !!a.arquivada,
+    apresentada: !!a.apresentada_em,
     pedido_pendente: !!a.pedido_pendente,
     impedimentos_abertos: Number(a.impedimentos_abertos || 0),
     impedimento_critico: !!a.impedimento_critico,
     checklist_total: Number(a.checklist_total || 0),
     checklist_feitos: Number(a.checklist_feitos || 0),
     atrasada: a.status !== 'concluida' && !a.encerrada && !a.arquivada && a.prazo < hoje(),
+    movimentada_em: a.movimentada_em || a.criada_em,
+    // Em curso e sem nenhuma movimentação há DIAS_SEM_MOVIMENTO dias ou mais (ver movimentou).
+    parada: a.status !== 'concluida' && !a.encerrada && !a.arquivada && (a.movimentada_em || a.criada_em) < limiteParada(),
     demandada_diretor: !!a.diretriz_id || a.demandado_por_perfil === 'diretor',
     demandado_em: a.demandado_em || a.criada_em,
     demandado_por_nome: a.demandado_por_nome,
@@ -56,14 +80,28 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     if (!a) throw falha(404, 'Ação não encontrada.');
     return a;
   };
-  // `a` sempre chega aqui vindo de acaoVisivel(user, ...) no mesmo pedido: para o perfil Chefe, a
-  // visibilidade já exige a.secao_id em subarvore(user.secao_id) — a mesma condição que a gestão exige.
-  // Repetir essa consulta (uma ida a mais ao banco) não muda o resultado; por isso não se repete aqui.
-  const podeExcluirAcao = (user, a) => {
+  // Quem responde pela ação como autor: o chefe ou suplente, as que ele mesmo criou (o titular, também as do
+  // suplente da sua seção); o Diretor e o Apoio, as criadas pela gestão (Diretor, Apoio ou Diretor Adjunto);
+  // o Administrador, todas. `a` sempre chega aqui vindo de acaoVisivel(user, ...), já com a visibilidade conferida.
+  const ehAutor = (user, a) => {
     if (user.perfil === 'administrador') return true;
-    if (['diretor','apoio'].includes(user.perfil)) return a.criado_por === user.id || ['diretor','apoio'].includes(a.autor_perfil);
-    return user.perfil === 'chefe' && !a.diretriz_id && !!user.secao_id;
+    if (['diretor', 'apoio'].includes(user.perfil)) return a.criado_por === user.id || ['diretor', 'apoio', 'administrador'].includes(a.autor_perfil);
+    if (user.perfil !== 'chefe' || !a.criado_por) return false;
+    const titularDoSuplente = a.autor_perfil === 'chefe' && a.autor_secao_id === user.secao_id && a.autor_secao_chefe_id === user.id;
+    return a.criado_por === user.id || titularDoSuplente;
   };
+  // O autor edita título e detalhamento enquanto a ação não foi apresentada em reunião; o prazo, enquanto ela está
+  // em curso (sempre guardando o anterior em acao_prazos); exclui só se ela não foi apresentada nem concluída.
+  const permissoes = (user, a) => {
+    const autor = ehAutor(user, a);
+    const emCurso = !a.encerrada && !a.arquivada && a.status !== 'concluida';
+    return {
+      pode_editar: autor && !a.encerrada && !a.apresentada_em,
+      pode_mudar_prazo: autor && emCurso,
+      pode_excluir: autor && !a.encerrada && a.status !== 'concluida' && !a.apresentada_em,
+    };
+  };
+  const NAO_GERE = 'Só quem criou a ação pode editá-la ou excluí-la: o chefe, as que ele (ou o seu suplente) criou; o Diretor e o Diretor Adjunto, as que direcionaram.';
   const chefeGere = (user, acao) => {
     if (user.perfil === 'administrador') return; // o Administrador age em qualquer seção
     if (user.perfil !== 'chefe' || !user.secao_id) {
@@ -82,7 +120,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const destino = b.destino === 'todos' ? 'todos' : 'especificos';
     let alvos;
     if (destino === 'todos') {
-      alvos = (await q('select id from secoes where pai_id is null and ativa = 1')).map((r) => r.id);
+      // "Todos os Centros" não inclui a Diretoria Adjunta, que não é Centro: ela recebe quando escolhida.
+      alvos = (await q("select id from secoes where pai_id is null and ativa = 1 and tipo != 'diretoria_adjunta'")).map((r) => r.id);
     } else {
       const ids = [...new Set((b.secoes || []).map(Number))];
       const validados = [];
@@ -90,9 +129,14 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         if (await q1('select 1 from secoes where id = ? and pai_id is null and ativa = 1', i)) validados.push(i);
       }
       alvos = validados;
-      if (alvos.length !== ids.length) throw falha(400, 'Só Centros e Coordenação ativos podem receber ações do Diretor.');
+      if (alvos.length !== ids.length) throw falha(400, 'Só Centros, Coordenação e Diretoria Adjunta ativos podem receber ações do Diretor.');
     }
     if (!alvos.length) throw falha(400, 'Escolha ao menos uma seção para receber a ação.');
+    // O Diretor Adjunto (Administrador vinculado à Diretoria Adjunta) não direciona ações para a própria seção:
+    // as ações dela ele cria em "Minhas ações".
+    if (user.perfil === 'administrador' && user.secao_id && alvos.includes(user.secao_id)) {
+      throw falha(400, 'O Diretor Adjunto não direciona ações para a própria seção. Crie essas ações em "Minhas ações".');
+    }
     const detalhe = texto(b.detalhe, 2000) || null;
     return await db.transaction(async () => {
       if (reuniaoId !== null) {
@@ -123,11 +167,61 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     res.status(201);
     return await criarDiretriz(req.user, req.body || {});
   }));
-  app.get('/api/diretrizes', permit('diretor', 'apoio', 'administrador'), h(async () =>
-    await q(`select d.*, u.nome as criado_por_nome,
+  app.get('/api/diretrizes', permit('diretor', 'apoio', 'administrador'), h(async () => {
+    const lista = await q(`select d.*, u.nome as criado_por_nome,
          (select count(*) from acoes a where a.diretriz_id = d.id) total,
          (select count(*) from acoes a where a.diretriz_id = d.id and a.status = 'concluida') concluidas
-       from diretrizes d left join usuarios u on u.id = d.criado_por order by d.criado_em desc, d.id desc limit 30`)));
+       from diretrizes d left join usuarios u on u.id = d.criado_por order by d.criado_em desc, d.id desc limit 30`);
+    if (!lista.length) return lista;
+    // Seções que têm hoje a ação de cada diretriz (uma ação redirecionada aparece na seção de destino).
+    const ids = lista.map((d) => d.id);
+    const secoes = await q(`select a.diretriz_id, s.id, s.sigla, s.nome from acoes a join secoes s on s.id = a.secao_id
+      where a.diretriz_id in (${marks(ids)}) order by s.ordem, s.id`, ...ids);
+    return lista.map((d) => ({
+      ...d,
+      secoes: secoes.filter((s) => s.diretriz_id === d.id).map(({ id, sigla, nome }) => ({ id, sigla, nome })),
+    }));
+  }));
+
+  // Acrescentar seções a um direcionamento já feito: cada seção nova recebe a mesma ação (título, detalhamento,
+  // prioridade), ligada à mesma diretriz. As seções que já a receberam não mudam. O prazo é o da diretriz, ou outro
+  // informado (necessário quando o da diretriz já passou).
+  app.post('/api/diretrizes/:id/secoes', permit('diretor', 'apoio', 'administrador'), h(async (req, res) => {
+    const id = Number(req.params.id);
+    const b = req.body || {};
+    const ids = [...new Set((Array.isArray(b.secoes) ? b.secoes : []).map(Number))];
+    if (!ids.length) throw falha(400, 'Escolha ao menos uma seção para acrescentar.');
+    const out = await db.transaction(async () => {
+      const d = await q1(`select * from diretrizes where id = ?${db.isPg ? ' for update' : ''}`, id);
+      if (!d) throw falha(404, 'Direcionamento não encontrado.');
+      const prazo = b.prazo || d.prazo;
+      if (!ehISO(prazo)) throw falha(400, 'Informe o prazo da ação.');
+      if (prazo < hoje()) throw falha(400, 'O prazo desta ação já passou. Informe um novo prazo para as seções acrescentadas.');
+      for (const s of ids) {
+        if (!(await q1('select 1 from secoes where id = ? and pai_id is null and ativa = 1', s))) {
+          throw falha(400, 'Só Centros, Coordenação e Diretoria Adjunta ativos podem receber ações do Diretor.');
+        }
+      }
+      if (req.user.perfil === 'administrador' && req.user.secao_id && ids.includes(req.user.secao_id)) {
+        throw falha(400, 'O Diretor Adjunto não direciona ações para a própria seção. Crie essas ações em "Minhas ações".');
+      }
+      const jaTem = (await q(`select secao_id from acoes where diretriz_id = ? and secao_id in (${marks(ids)})`, id, ...ids)).map((r) => r.secao_id);
+      if (jaTem.length) throw falha(409, 'Alguma das seções escolhidas já recebeu esta ação. Atualize a tela e escolha outras.');
+      for (const s of ids) {
+        const aId = (await run(
+          `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em, criado_por) values (?,?,?,?,?,?,?,?,?)`,
+          d.id, s, d.titulo, d.detalhe, prazo, prazo, d.prioridade, agoraISO(), req.user.id,
+        )).lastInsertRowid;
+        await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
+          aId, req.user.id, 'Ação demandada pelo Diretor (seção acrescentada ao direcionamento).', agoraISO());
+      }
+      // "Todos os Centros" deixa de descrever o destino quando entra uma seção a mais: passa a listar as seções.
+      if (d.destino === 'todos') await run("update diretrizes set destino = 'especificos' where id = ?", d.id);
+      return { id: d.id, acoes_criadas: ids.length };
+    });
+    res.status(201);
+    return out;
+  }));
 
   const STATUS_OK = new Set(STATUS);
 
@@ -142,6 +236,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       params.push(...ids);
     }
     if (STATUS_OK.has(f.status)) { where.push('a.status = ?'); params.push(f.status); }
+    if (ehISO(f.prazo)) { where.push('a.prazo = ?'); params.push(f.prazo); } // usado ao direcionar: ações já planejadas para o mesmo dia
     const sit = f.situacao || 'abertas';
     if (sit === 'arquivadas') {
       where.push('a.arquivada = 1');
@@ -155,7 +250,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     if (f.q) { where.push('(a.titulo like ? or a.detalhe like ?)'); params.push(`%${f.q}%`, `%${f.q}%`); }
     return (await q(`${SELECT_ACAO} where ${where.join(' and ')}
               order by a.encerrada, case a.status when 'concluida' then 1 else 0 end,
-                       case when a.status != 'concluida' and a.prazo < '${hoje()}' then 0 else 1 end, a.prazo, a.id`, ...params)).map(acaoOut);
+                       case when a.status != 'concluida' and a.prazo < '${hoje()}' then 0 else 1 end, a.prazo, a.id`, ...params))
+      .map((a) => ({ ...acaoOut(a), ...permissoes(req.user, a) }));
   }));
 
   app.post('/api/acoes', permit('chefe', 'diretor', 'apoio', 'administrador'), h(async (req, res) => {
@@ -188,12 +284,15 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     try {
       return await db.transaction(async () => {
         const a = await acaoVisivel(req.user, Number(req.params.id));
-        if (!(await podeExcluirAcao(req.user,a))) throw falha(403,'Diretor e Apoio só podem excluir ações criadas pela gestão. Chefes não podem excluir demandas da direção.');
+        if (!ehAutor(req.user, a)) throw falha(403, NAO_GERE);
+        if (a.status === 'concluida' || a.encerrada) throw falha(409, 'Ação concluída não pode ser excluída: ela faz parte do histórico da seção. Se quiser tirá-la da lista, arquive.');
+        if (a.apresentada_em) throw falha(409, 'Esta ação já foi apresentada em reunião e não pode mais ser excluída. O prazo ainda pode ser alterado.');
         if (await q1('select id from acoes where acao_pai_id=?',a.id)) throw falha(409,'Exclua primeiro as ações derivadas desta ação.');
         await run('delete from tempo where acao_id = ?', a.id);
         await run('delete from acao_comentarios where acao_id = ?', a.id);
         await run('delete from impedimentos where acao_id = ?', a.id);
         await run('delete from acao_checklist where acao_id = ?', a.id);
+        await run('delete from acao_prazos where acao_id = ?', a.id);
         await run('delete from pedidos_prazo where acao_id = ?', a.id);
         await run('delete from acoes where id = ?', a.id);
         return { ok: true, id: a.id };
@@ -231,8 +330,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   app.get('/api/acoes/:id', h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     // Cinco consultas independentes: em série custariam uma ida ao banco cada (o maior custo desta tela
-    // é a rede, não o SQL). pode_excluir não consulta nada (ver podeExcluirAcao).
-    const [comentarios, lancamentos, pedidos, impedimentos, checklist] = await Promise.all([
+    // é a rede, não o SQL). As permissões não consultam nada (ver permissoes).
+    const [comentarios, lancamentos, pedidos, impedimentos, checklist, prazos] = await Promise.all([
       q(`select c.*, u.nome as usuario_nome from acao_comentarios c left join usuarios u on u.id = c.usuario_id where c.acao_id = ? order by c.id`, a.id),
       q(`select t.*, u.nome as usuario_nome from tempo t left join usuarios u on u.id = t.usuario_id where t.acao_id = ? order by t.data desc, t.id desc`, a.id),
       q('select * from pedidos_prazo where acao_id = ? order by id desc', a.id),
@@ -240,10 +339,13 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         left join usuarios uc on uc.id = i.criado_por left join usuarios ur on ur.id = i.resolvido_por
         where i.acao_id = ? order by i.id desc`, a.id),
       q('select * from acao_checklist where acao_id = ? order by ordem, id', a.id),
+      q(`select h.*, u.nome as alterado_por_nome from acao_prazos h left join usuarios u on u.id = h.alterado_por
+        where h.acao_id = ? order by h.alterado_em, h.id`, a.id),
     ]);
     return {
       ...acaoOut(a),
-      pode_excluir: podeExcluirAcao(req.user, a),
+      ...permissoes(req.user, a),
+      prazos,
       comentarios,
       lancamentos,
       pedidos,
@@ -254,10 +356,46 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
 
   app.patch('/api/acoes/:id', h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
-    await chefeGere(req.user, a);
+    const b = req.body || {};
+    const autor = ehAutor(req.user, a);
+    // Status é da execução: o chefe da seção (ou o Administrador). Prioridade: quem executa ou o autor.
+    // Título, detalhamento e prazo: só o autor (ver ehAutor e permissoes).
+    const edicao = ['titulo', 'detalhe', 'prazo'].some((k) => k in b);
+    if (edicao && !autor) throw falha(403, NAO_GERE);
+    if (b.status !== undefined || (b.prioridade !== undefined && !autor)) await chefeGere(req.user, a);
     if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
 
-    const p = req.body?.prioridade;
+    if (edicao) {
+      const titulo = 'titulo' in b ? texto(b.titulo, 160) : a.titulo;
+      if (!titulo) throw falha(400, 'O título da ação não pode ficar vazio.');
+      const detalhe = 'detalhe' in b ? (texto(b.detalhe, 2000) || null) : a.detalhe;
+      const prazo = 'prazo' in b ? b.prazo : a.prazo;
+      if (!ehISO(prazo)) throw falha(400, 'Informe o prazo da ação.');
+      if (prazo !== a.prazo && prazo < hoje()) throw falha(400, 'O novo prazo não pode ser anterior a hoje.');
+      const textoMudou = titulo !== a.titulo || (detalhe || null) !== (a.detalhe || null);
+      const prazoMudou = prazo !== a.prazo;
+      const pode = permissoes(req.user, a);
+      if (textoMudou && !pode.pode_editar) {
+        throw falha(409, 'Esta ação já foi apresentada em reunião: o título e o detalhamento não mudam mais. O prazo ainda pode ser alterado.');
+      }
+      if (prazoMudou && !pode.pode_mudar_prazo) throw falha(409, 'O prazo só muda enquanto a ação está em curso (não concluída nem arquivada).');
+      const mudou = [titulo !== a.titulo && 'título', (detalhe || null) !== (a.detalhe || null) && 'detalhamento',
+        prazoMudou && `prazo (de ${br(a.prazo)} para ${br(prazo)})`].filter(Boolean);
+      if (mudou.length) {
+        await db.transaction(async () => {
+          await run('update acoes set titulo = ?, detalhe = ?, prazo = ? where id = ?', titulo, detalhe, prazo, a.id);
+          // Toda mudança de prazo guarda o anterior; prazo_original continua sendo o primeiro.
+          if (prazoMudou) {
+            await run(`insert into acao_prazos (acao_id, prazo_anterior, prazo_novo, origem, alterado_em, alterado_por)
+              values (?,?,?,'edicao',?,?)`, a.id, a.prazo, prazo, agoraISO(), req.user.id);
+          }
+          await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
+            a.id, req.user.id, `Ação editada: ${mudou.join(', ')}.`, agoraISO());
+        });
+      }
+    }
+
+    const p = b.prioridade;
     if (p !== undefined) {
       if (!PRIORIDADES.includes(p)) throw falha(400, 'Prioridade inválida (use alta, media ou baixa).');
       await run('update acoes set prioridade = ? where id = ?', p, a.id);
@@ -533,7 +671,12 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         where id = ? and status = 'pendente'`,
         aprovar ? 'aprovado' : 'recusado', agoraISO(), req.user.id, reuniaoId, p.id);
       if (!alterado.changes) throw falha(409, 'Este pedido já foi decidido. Atualize a tela.');
-      if (aprovar) await run('update acoes set prazo = ? where id = ?', p.novo_prazo, p.acao_id);
+      await movimentou(p.acao_id);
+      if (aprovar) {
+        await run('update acoes set prazo = ? where id = ?', p.novo_prazo, p.acao_id);
+        await run(`insert into acao_prazos (acao_id, prazo_anterior, prazo_novo, origem, pedido_id, alterado_em, alterado_por)
+          values (?,?,?,'pedido',?,?,?)`, p.acao_id, p.prazo, p.novo_prazo, p.id, agoraISO(), req.user.id);
+      }
       return { ok: true, status: aprovar ? 'aprovado' : 'recusado' };
     });
   }));

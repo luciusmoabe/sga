@@ -9,9 +9,9 @@ test('migrações: aplicação concorrente é idempotente e registra a versão',
   t.after(() => db.close());
   await assert.rejects(verificarMigracoes(db), /Migrações pendentes/);
   const resultados = await Promise.all([aplicarMigracoes(db), aplicarMigracoes(db)]);
-  assert.deepEqual(resultados, [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], []]);
+  assert.deepEqual(resultados, [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], []]);
   await verificarMigracoes(db);
-  assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 10);
+  assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 14);
 });
 
 test('migrações: esquema antigo recebe arquivamento sem perder ações existentes', async (t) => {
@@ -20,7 +20,7 @@ test('migrações: esquema antigo recebe arquivamento sem perder ações existen
   await seed(db);
   const antes = await db.prepare('select id, titulo from acoes order by id').all();
   await db.exec('drop index uq_pedido_pendente_acao; drop index uq_reuniao_em_andamento; drop table schema_migrations; alter table acoes drop column arquivada');
-  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
   assert.deepEqual(await db.prepare('select id, titulo from acoes order by id').all(), antes);
   assert.ok((await db.prepare('select arquivada from acoes').all()).every(a => a.arquivada === 0));
 });
@@ -61,7 +61,7 @@ test('migrações: erro de DDL desfaz índices e registro da migração', async 
   await assert.rejects(aplicarMigracoes(db), /Falha de DDL/);
   assert.deepEqual(await db.prepare("select name from sqlite_master where name in ('schema_migrations','uq_pedido_pendente_acao')").all(), []);
   db.exec = executar;
-  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
 });
 
 test('migrações: índices impedem duplicidades até em escritas diretas', async (t) => {
@@ -166,4 +166,30 @@ test('migrações: banco anterior à versão 10 ganha o checklist das ações se
   await assert.rejects(db.prepare("insert into acao_checklist (acao_id, texto, criado_em) values (999999, 'Órfão', 'x')").run(), /FOREIGN KEY/);
   assert.equal((await db.prepare("select count(*) n from sqlite_master where name = 'idx_checklist_acao'").get()).n, 1);
   assert.deepEqual(await aplicarMigracoes(db), [], 'reexecução não altera nada');
+});
+
+test('migrações: banco anterior à versão 13 ganha histórico de prazos e marca as ações já apresentadas', async (t) => {
+  const db = openDb(':memory:');
+  t.after(() => db.close());
+  await seed(db);
+  await db.exec(`drop table acao_prazos; alter table acoes drop column apresentada_em; delete from schema_migrations where id = 13;
+    delete from decisoes; delete from reunioes; update pedidos_prazo set status = 'recusado' where status = 'aprovado'`);
+  const [antiga, nova] = await db.prepare("select id from acoes where interna = 0 order by id limit 2").all();
+  await db.prepare("update acoes set criada_em = '2026-09-01T09:00:00' where id = ?").run(antiga.id);
+  await db.prepare("update acoes set criada_em = '2026-09-20T09:00:00' where id = ?").run(nova.id);
+  await db.prepare(`insert into reunioes (data, semana, iniciada_em, encerrada_em, status)
+    values ('2026-09-08', '2026-09-08', '2026-09-08T10:00:00', '2026-09-08T11:30:00', 'enviada')`).run();
+  const pedido = (await db.prepare(`insert into pedidos_prazo (acao_id, usuario_id, prazo_atual, novo_prazo, justificativa, status, criado_em, decidido_em, decidido_por)
+    values (?, 3, '2026-09-30', '2026-10-15', 'Teste', 'aprovado', '2026-09-05T09:00:00', '2026-09-06T09:00:00', 1)`).run(antiga.id)).lastInsertRowid;
+  const total = (await db.prepare('select count(*) n from acoes').get()).n;
+
+  assert.deepEqual(await aplicarMigracoes(db), [13]);
+
+  assert.equal((await db.prepare('select count(*) n from acoes').get()).n, total, 'nenhuma ação some');
+  assert.equal((await db.prepare('select apresentada_em from acoes where id = ?').get(antiga.id)).apresentada_em, '2026-09-08');
+  assert.equal((await db.prepare('select apresentada_em from acoes where id = ?').get(nova.id)).apresentada_em, null, 'criada depois da reunião');
+  const historico = await db.prepare('select acao_id, prazo_anterior, prazo_novo, origem, pedido_id from acao_prazos').all();
+  assert.deepEqual(historico, [{ acao_id: antiga.id, prazo_anterior: '2026-09-30', prazo_novo: '2026-10-15', origem: 'pedido', pedido_id: pedido }]);
+  assert.deepEqual(await aplicarMigracoes(db), [], 'reexecução não altera nada');
+  assert.equal((await db.prepare('select count(*) n from acao_prazos').get()).n, 1, 'reexecução não duplica o histórico');
 });

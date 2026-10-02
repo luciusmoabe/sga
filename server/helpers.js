@@ -1,4 +1,4 @@
-import { addDays, semaforo } from './logic.js';
+import { DIAS_SEM_MOVIMENTO, addDays, semaforo } from './logic.js';
 import { porNecessidade as compararNecessidade } from '../public/js/regras.js';
 
 export class HttpError extends Error {
@@ -54,13 +54,15 @@ export const ultimaAtualizacao = async (db, secaoId, semana) => {
   return atualizacaoDe(row);
 };
 
-/** Ids de cada Centro/Coordenação ativo e de suas subseções, numa única consulta recursiva
- *  (antes eram N consultas, uma por Centro). `union` descarta repetições e protege contra ciclos. */
-export async function arvoresDosCentros(db) {
+/** Ids de cada seção ativa do primeiro nível e de suas subseções, numa única consulta recursiva
+ *  (antes eram N consultas, uma por Centro). `union` descarta repetições e protege contra ciclos.
+ *  Com `reuniao`, só o que aparece na reunião: uma seção fora dela leva junto as subseções abaixo. */
+export async function arvoresDosCentros(db, { reuniao = false } = {}) {
+  const filtro = reuniao ? ' and na_reuniao = 1' : '';
   const rows = await db.prepare(
     `with recursive t(centro_id, id) as (
-       select id, id from secoes where pai_id is null and ativa = 1
-       union select t.centro_id, s.id from secoes s join t on s.pai_id = t.id
+       select id, id from secoes where pai_id is null and ativa = 1${filtro}
+       union select t.centro_id, s.id from secoes s join t on s.pai_id = t.id${reuniao ? ' where s.na_reuniao = 1' : ''}
      ) select centro_id, id from t order by centro_id, id`,
   ).all();
   const arvores = new Map();
@@ -73,18 +75,21 @@ export async function arvoresDosCentros(db) {
 
 /** Painel da semana: uma linha por Centro/Coordenação, somando as subseções abaixo.
  *  Poucas consultas e todas independentes rodam em paralelo: com o banco distante, o tempo da tela
- *  é o número de idas em série (não de consultas). `arvoresPre` evita repetir a árvore quando o chamador já a tem. */
+ *  é o número de idas em série (não de consultas). `arvoresPre` evita repetir a árvore quando o chamador já a tem;
+ *  as seções do primeiro nível fora dela (fora da reunião, por exemplo) não entram. */
 export async function painelSemana(db, semana, hoje, arvoresPre = null) {
-  const [centros, arvores] = await Promise.all([
+  const [todosCentros, arvores] = await Promise.all([
     db.prepare(
       `select s.*, u.nome as chefe_nome from secoes s left join usuarios u on u.id = s.chefe_id
        where s.pai_id is null and s.ativa = 1 order by s.ordem, s.id`,
     ).all(),
     arvoresPre ?? arvoresDosCentros(db),
   ]);
+  const centros = todosCentros.filter((c) => arvores.has(c.id));
   if (!centros.length) return [];
 
   const ate = addDays(hoje, 2);
+  const limiteParada = addDays(hoje, -(DIAS_SEM_MOVIMENTO - 1)); // sem movimentação antes deste dia = parada há 7+ dias
   // Todos os ids de seções (raízes + descendentes), achatados com mapeamento para o centro raiz
   const todosIds = [];
   const idParaCentro = new Map();
@@ -105,11 +110,12 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
          coalesce(sum(case when status != 'concluida' and prazo < ? then 1 end), 0) atrasadas,
          coalesce(sum(case when status != 'concluida' and prazo >= ? and prazo <= ? then 1 end), 0) vencendo,
          coalesce(sum(case when status != 'concluida' then 1 end), 0) abertas,
-         coalesce(sum(case when status != 'concluida' and prazo < ? and interna = 1 and compartilhada = 0 then 1 end), 0) atrasadas_internas
+         coalesce(sum(case when status != 'concluida' and prazo < ? and interna = 1 and compartilhada = 0 then 1 end), 0) atrasadas_internas,
+         coalesce(sum(case when status != 'concluida' and (interna = 0 or compartilhada = 1) and coalesce(movimentada_em, criada_em) < ? then 1 end), 0) paradas
        from acoes
        where encerrada = 0 and arquivada = 0 and secao_id in (${marks(todosIds)})
        group by secao_id`,
-    ).all(hoje, hoje, ate, hoje, ...todosIds),
+    ).all(hoje, hoje, ate, hoje, limiteParada, ...todosIds),
     // 2: última atualização de cada seção, incluindo subseções
     db.prepare(
       `select a.*
@@ -157,12 +163,13 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
   for (const row of statsRows) {
     const cId = idParaCentro.get(row.secao_id);
     if (cId == null) continue;
-    const prev = statsMap.get(cId) ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0 };
+    const prev = statsMap.get(cId) ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0, paradas: 0 };
     statsMap.set(cId, {
       atrasadas:          prev.atrasadas          + Number(row.atrasadas),
       vencendo:           prev.vencendo           + Number(row.vencendo),
       abertas:            prev.abertas            + Number(row.abertas),
       atrasadas_internas: prev.atrasadas_internas + Number(row.atrasadas_internas),
+      paradas: prev.paradas + Number(row.paradas),
     });
   }
   for (const row of tempoRows) {
@@ -182,7 +189,7 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
   }
 
   return centros.map((c) => {
-    const st  = statsMap.get(c.id)   ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0 };
+    const st  = statsMap.get(c.id)   ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0, paradas: 0 };
     const at  = atMap.get(c.id)      ?? null;
     const impedimentosCriticos = criticosMap.get(c.id) ?? 0;
     // Crítico = impedimento crítico aberto em ação em curso. A marca do relato semanal antigo ainda vale
@@ -190,7 +197,7 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
     const critico = impedimentosCriticos > 0 || arvores.get(c.id).some(id => atMap.get(id)?.critico);
     const cor = semaforo({ enviada: !!at, atrasadas: st.atrasadas, vencendo: st.vencendo, critico });
     return {
-      secao: { id: c.id, nome: c.nome, sigla: c.sigla, tipo: c.tipo, chefe_nome: c.chefe_nome },
+      secao: { id: c.id, nome: c.nome, sigla: c.sigla, tipo: c.tipo, chefe_nome: c.chefe_nome, na_reuniao: !!c.na_reuniao },
       cor,
       enviada:            !!at,
       enviada_em:         at?.enviada_em ?? null,
@@ -200,6 +207,7 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
       vencendo:           st.vencendo,
       abertas:            st.abertas,
       atrasadas_internas: st.atrasadas_internas,
+      paradas:            st.paradas, // ações visíveis ao Diretor sem atualização há DIAS_SEM_MOVIMENTO dias ou mais
       pedidos_pendentes:  pedidosMap.get(c.id) ?? 0,
       tempo_semana:       tempoMap.get(c.id)   ?? 0,
       subsecoes:          (arvores.get(c.id)?.length ?? 1) - 1,
@@ -212,7 +220,7 @@ export const porNecessidade = (lista) => [...lista].sort(compararNecessidade);
 /** Cartões do Modo Reunião: painel + relato da semana + ações visíveis ao Diretor + pedidos de prazo.
  *  Consultas agrupadas para todos os Centros de uma vez (antes eram três por Centro). */
 export async function cartoesReuniao(db, semana, hoje) {
-  const arvores = await arvoresDosCentros(db);
+  const arvores = await arvoresDosCentros(db, { reuniao: true });
   const painel = await painelSemana(db, semana, hoje, arvores);
   const itens = porNecessidade(painel);
   const todosIds = itens.flatMap((p) => arvores.get(p.secao.id) ?? [p.secao.id]);

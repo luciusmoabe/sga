@@ -83,10 +83,10 @@ export function abrirForm({ titulo, corpo, rotulo = 'Salvar', cancelar = 'Cancel
   return dlg;
 }
 
-export function confirmar({ titulo, texto, rotulo = 'Confirmar', perigo = false }) {
+export function confirmar({ titulo, texto, rotulo = 'Confirmar', cancelar = 'Cancelar', perigo = false }) {
   return new Promise((resolver) => {
     let ok = false;
-    const dlg = abrirForm({ titulo, corpo: `<p>${texto}</p>`, rotulo, perigo, aoEnviar: async () => { ok = true; } });
+    const dlg = abrirForm({ titulo, corpo: `<p>${texto}</p>`, rotulo, cancelar, perigo, aoEnviar: async () => { ok = true; } });
     dlg.addEventListener('close', () => resolver(ok));
   });
 }

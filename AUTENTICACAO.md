@@ -133,6 +133,15 @@ npm run admin:criar -- --sqlite data/sgc.db "Nome Completo" administrador@orgao.
 
 O comando cria a conta no Supabase e o usuário local com perfil Administrador. A senha vai pelo ambiente, nunca na linha de comando, e é provisória: a pessoa cria a própria no primeiro acesso. Se a conta já existe no Supabase, use `SGC_ADMIN_SUBJECT=<UUID do usuário Supabase>` em vez da senha: o comando só vincula a conta, sem criar nem alterar senha. Pode-se criar mais de um Administrador.
 
+Diretoria Adjunta: quem faz parte dela tem o perfil Administrador. Cadastre a seção na tela de Estrutura (tipo Diretoria Adjunta) e use `SGC_ADMIN_SECAO=<ID da seção>` ao criar o Administrador. Para um Administrador que já existe, vincule ou desvincule pelo servidor:
+
+```bash
+npm run admin:secao -- --sqlite data/sgc.db administrador@orgao.gov.br <ID da seção>
+npm run admin:secao -- --sqlite data/sgc.db administrador@orgao.gov.br nenhuma
+```
+
+O vínculo não muda perfil nem acesso; nenhuma tela ou rota da API cria, promove ou vincula Administradores.
+
 ### Senha inicial e troca obrigatória
 
 Contas criadas pelo Diretor ou pelo Administrador, e contas cuja senha foi redefinida por eles (botão Login), nascem com `usuarios.trocar_senha = 1`. Enquanto isso, a API só responde `GET /bootstrap`, `POST /auth/trocar-senha` e `POST /auth/sair` (as demais rotas respondem 403 com `trocar_senha: true`), e a interface mostra somente a tela "Crie a sua senha". A troca (`POST /api/auth/trocar-senha`) confirma a senha atual no Supabase, grava a nova pela API administrativa (é preciso `SUPABASE_SERVICE_ROLE_KEY` no servidor), libera a conta e encerra as outras sessões dela. O mesmo endpoint atende a troca voluntária pelo botão "Alterar senha" do menu; usuários não podem redefinir a própria senha pelo botão Login da gestão. A senha nova precisa ter de 12 a 128 caracteres e ser diferente da atual. Como a senha provisória fica conhecida por quem cadastrou, ela não deve ser reaproveitada.

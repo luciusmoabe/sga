@@ -1,5 +1,5 @@
 import { FREQUENCIAS, HORA_PADRAO, LIMITE_COMBINADOS, addDays, agora, br, ehDiaReuniao, parseISO, refDiaReuniao } from './logic.js';
-import { cartoesReuniao, falha, h, json, permit, texto } from './helpers.js';
+import { arvoresDosCentros, cartoesReuniao, falha, h, json, permit, texto } from './helpers.js';
 
 const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 const PRIO = { alta: 'alta', media: 'média', baixa: 'baixa' };
@@ -254,10 +254,13 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       ped.forEach((p) => linhas.push(`- [${p.sigla}] "${p.titulo}": novo prazo ${br(p.novo_prazo)} ${p.status === 'aprovado' ? 'aprovado' : 'recusado'}.`));
       linhas.push('');
     }
-    // Impedimentos críticos ainda abertos (só de ações visíveis ao Diretor): ficam registrados na ata para a próxima reunião.
-    const criticos = await q(`select i.descricao, i.apoio, a.titulo, s.sigla from impedimentos i join acoes a on a.id = i.acao_id
+    // Impedimentos críticos ainda abertos (só de ações visíveis ao Diretor e de seções que aparecem na reunião):
+    // ficam registrados na ata para a próxima reunião.
+    const naReuniao = new Set([...(await arvoresDosCentros(db, { reuniao: true })).values()].flat());
+    const criticos = (await q(`select i.descricao, i.apoio, a.titulo, a.secao_id, s.sigla from impedimentos i join acoes a on a.id = i.acao_id
       join secoes s on s.id = a.secao_id where i.resolvido_em is null and i.critico = 1 and a.status != 'concluida'
-        and a.arquivada = 0 and a.encerrada = 0 and (a.interna = 0 or a.compartilhada = 1) order by s.ordem, s.id, i.id`);
+        and a.arquivada = 0 and a.encerrada = 0 and (a.interna = 0 or a.compartilhada = 1) order by s.ordem, s.id, i.id`))
+      .filter((c) => naReuniao.has(c.secao_id));
     if (criticos.length) {
       linhas.push('Impedimentos críticos em aberto:');
       criticos.forEach((c) => linhas.push(`- [${c.sigla}] "${c.titulo}": ${c.descricao}${c.apoio ? ` (apoio solicitado: ${c.apoio})` : ''}`));
@@ -273,6 +276,13 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       emAndamento(r);
       const ataTexto = await gerarAta(r);
       await run(`update reunioes set status = 'rascunho', encerrada_em = ?, ata_texto = ? where id = ?`, agoraISO(), ataTexto, r.id);
+      // As ações que estavam nos cartões foram apresentadas: título e detalhamento não mudam mais e elas não são
+      // excluídas (o prazo continua podendo mudar). Guarda a data da primeira reunião; reabrir e encerrar de novo não altera.
+      const apresentadas = (await cartoesReuniao(db, r.semana, hoje())).flatMap((c) => c.acoes.map((a) => a.id));
+      for (let i = 0; i < apresentadas.length; i += 500) {
+        const lote = apresentadas.slice(i, i + 500);
+        await run(`update acoes set apresentada_em = ? where apresentada_em is null and id in (${lote.map(() => '?').join(',')})`, r.data, ...lote);
+      }
       return fmt(await q1('select * from reunioes where id = ?', r.id));
     });
   }));

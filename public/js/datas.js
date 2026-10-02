@@ -24,6 +24,8 @@ export const somarDias = (data, dias) => {
   d.setUTCDate(d.getUTCDate() + dias);
   return d.toISOString().slice(0, 10);
 };
+/** Dias civis de `de` até `ate` (datas AAAA-MM-DD). */
+export const diasEntre = (de, ate) => Math.round((parseData(ate) - parseData(de)) / 86400000);
 
 /** Valores sem offset (incluindo registros antigos) representam o horário de Bahia. */
 export function instante(valor) {

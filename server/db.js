@@ -14,10 +14,11 @@ create table if not exists secoes (
   id integer primary key,
   nome text not null,
   sigla text,
-  tipo text not null check (tipo in ('centro','coordenacao','subsecao')),
+  tipo text not null check (tipo in ('centro','coordenacao','subsecao','diretoria_adjunta')),
   pai_id integer references secoes(id),
   ordem integer not null default 0,
   ativa integer not null default 1,
+  na_reuniao integer not null default 1,
   chefe_id integer,
   criada_em text not null
 );

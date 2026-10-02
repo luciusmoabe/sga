@@ -4,8 +4,9 @@ import { est } from './estado.js';
 import {
   $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, STATUS, toast, vazio,
 } from './ui.js';
-import { abrirAcao, abrirNovoImpedimento, aceitaImpedimento } from './acao-comum.js';
+import { abrirAcao, abrirEditarAcao, abrirNovoImpedimento, aceitaImpedimento } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
+import { dataNoFuso, diasEntre, instante } from './datas.js';
 import { relatoHTML } from './telas-diretor.js';
 
 const semSecao = (raiz) => {
@@ -13,16 +14,89 @@ const semSecao = (raiz) => {
     'Você ainda não está vinculado a uma seção', 'Peça ao Diretor para atribuí-lo a uma seção na tela Estrutura.')}</div>`;
 };
 
+// ---------- Precisa de atenção ----------
+/** Dias desde a última movimentação da ação (status, tempo, checklist, impedimento, comentário, prazo). */
+const diasSemMovimento = (a) => diasEntre(dataNoFuso(instante(a.movimentada_em || a.criada_em)), est.boot.hoje);
+const seloParada = (a) => (a.parada ? `<span class="pilula atencao-selo" title="Atualize o status ou registre o andamento">Sem atualização há ${diasSemMovimento(a)} dias</span>` : '');
+
+/** Ações em aberto que pedem um gesto do chefe, cada uma pelo motivo mais urgente: atrasada, sem atualização
+ *  há DIAS_SEM_MOVIMENTO dias ou mais, ou com prazo até o dia da reunião. */
+function itensAtencao(abertas, semana) {
+  const hoje = est.boot.hoje;
+  const motivo = (a) => {
+    if (a.atrasada) return { ordem: 0, texto: `Atrasada desde ${br(a.prazo)}`, classe: 'ruim' };
+    if (a.parada) return { ordem: 1, texto: `Sem atualização há ${diasSemMovimento(a)} dias`, classe: 'atencao' };
+    if (a.prazo >= hoje && a.prazo <= semana) return { ordem: 2, texto: `Vence em ${br(a.prazo)}, até a reunião`, classe: 'atencao' };
+    return null;
+  };
+  return abertas.map((a) => ({ a, m: motivo(a) })).filter((x) => x.m)
+    .sort((x, y) => x.m.ordem - y.m.ordem || x.a.prazo.localeCompare(y.a.prazo));
+}
+
+/** Botões rápidos: os passos de status permitidos (sem voltar para "a fazer", que apaga o tempo), tempo e detalhe. */
+const botoesRapidos = (a) => {
+  const passos = { a_fazer: [['em_andamento', 'Iniciar']], em_andamento: [['concluida', 'Concluir'], ['bloqueada', 'Bloquear']], bloqueada: [['em_andamento', 'Retomar']] }[a.status] || [];
+  return `${passos.filter(([s]) => TRANSICOES[a.status].includes(s) && (s !== 'concluida' || a.tempo_total > 0))
+    .map(([s, rotulo]) => `<button type="button" class="btn btn-sec btn-mini" data-rapido-status="${s}">${rotulo}</button>`).join('')}
+    <button type="button" class="btn btn-fantasma btn-mini" data-rapido-tempo>Registrar tempo</button>
+    <button type="button" class="btn btn-fantasma btn-mini" data-rapido-abrir>Abrir</button>`;
+};
+
+function quadroAtencaoHTML(abertas, semana) {
+  const itens = itensAtencao(abertas, semana);
+  const MAX = 6;
+  return `<aside class="atencao-quadro" aria-labelledby="atencao-titulo">
+    <p class="atencao-sobre">Um momento para atualizar</p>
+    <h2 id="atencao-titulo">Precisa de atenção</h2>
+    ${itens.length ? `<p class="atencao-lead">Estas ações estão atrasadas, vencem até a reunião ou estão há algum tempo sem andamento registrado. Atualizar o status mantém o Diretor a par antes da reunião.</p>
+      <ul class="atencao-lista">${itens.slice(0, MAX).map(({ a, m }) => `<li data-atencao="${a.id}">
+        <div class="atencao-item-titulo">${esc(a.titulo)}</div>
+        <div class="pequeno"><span class="${m.classe}">${m.texto}</span> · ${pilulaStatus(a)}</div>
+        <div class="atencao-botoes">${botoesRapidos(a)}</div></li>`).join('')}</ul>
+      ${itens.length > MAX ? `<p class="pequeno"><a href="#/minhas-acoes">E mais ${itens.length - MAX} em Minhas ações</a></p>` : ''}`
+      : '<p class="atencao-lead">Tudo em dia. Nenhuma ação precisa da sua atenção agora.</p>'}
+  </aside>`;
+}
+
+/** Liga os botões do quadro; `acoes` é a lista usada para desenhá-lo e `aoMudar` recarrega a tela. */
+function ligarAtencao(raiz, acoes, aoMudar) {
+  const acaoDe = (el) => acoes.find((a) => a.id === Number(el.closest('[data-atencao]').dataset.atencao));
+  on(raiz, 'click', '[data-rapido-status]', async (el) => {
+    try {
+      await patch(`/acoes/${acaoDe(el).id}`, { status: el.dataset.rapidoStatus });
+      toast(`Status atualizado para "${STATUS[el.dataset.rapidoStatus]}".`);
+      await aoMudar();
+    } catch (e) { toast(e.message, 'erro'); }
+  });
+  on(raiz, 'click', '[data-rapido-tempo]', (el) => {
+    const a = acaoDe(el);
+    abrirForm({
+      titulo: 'Registrar tempo',
+      corpo: `<p class="suave pequeno">Ação: <b>${esc(a.titulo)}</b></p>
+        <div class="campo"><label for="rt-min">Minutos gastos</label><input id="rt-min" name="minutos" type="number" min="1" max="1440" step="1" inputmode="numeric" required></div>`,
+      rotulo: 'Registrar tempo',
+      aoEnviar: async (d) => {
+        await post(`/acoes/${a.id}/tempo`, { minutos: Number(d.minutos) });
+        toast('Tempo registrado.');
+        await aoMudar();
+      },
+    });
+  });
+  on(raiz, 'click', '[data-rapido-abrir]', (el) => abrirAcao(acaoDe(el).id, aoMudar).catch((e) => toast(e.message, 'erro')));
+}
+
 // ---------- Início ----------
 export async function inicio(raiz, { refresh }) {
   if (!est.user.secao_id) return semSecao(raiz);
   const semana = est.boot.semana;
-  const [up, abertas] = await Promise.all([get(`/atualizacao?semana=${semana}&resumo=1`), get('/acoes?situacao=abertas')]);
+  // Só a seção do usuário (e as subordinadas): para o Administrador da Diretoria Adjunta, restringe à própria seção.
+  const [up, abertas] = await Promise.all([get(`/atualizacao?semana=${semana}&resumo=1`), get(`/acoes?situacao=abertas&secao=${est.user.secao_id}`)]);
   const atrasadas = abertas.filter((a) => a.atrasada).length;
   const vencendo = abertas.filter((a) => !a.atrasada && a.prazo <= addDias(est.boot.hoje, 2)).length;
   const pedidos = abertas.filter((a) => a.pedido_pendente).length;
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>${esc(est.boot.secao?.nome || 'Minha seção')}</h1><div class="sub">Olá, ${esc(est.user.nome.split(' ')[0])}. Aqui está o que precisa da sua atenção.</div></div></div>
+    <div class="inicio-grade"><div class="inicio-principal">
     <div class="cartao"><div class="linha entre"><div>
       <h2>Sua atualização desta semana</h2>
       ${up.atual ? `<p class="suave" style="margin:2px 0 0">Enviada em ${dataHora(up.atual.enviada_em)}${up.atual.usuario_nome && up.atual.usuario_nome !== est.user.nome ? ` por ${esc(up.atual.usuario_nome)}` : ''} (versão ${up.atual.versao}). Se algo mudou, envie uma correção.</p>`
@@ -40,7 +114,9 @@ export async function inicio(raiz, { refresh }) {
       ${abertas.length ? `<table><tbody>${abertas.slice(0, 4).map((a) => `<tr class="clicavel" data-acao="${a.id}" tabindex="0">
         <td><b>${esc(a.titulo)}</b>${a.demandada_diretor ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">Demandada pelo Diretor em ${br(a.demandado_em || a.criada_em)}</div>` : ''}</td>
         <td class="num">${br(a.prazo)}</td><td>${pilulaStatus(a)}</td></tr>`).join('')}</tbody></table>`
-        : vazio('Nenhuma ação em aberto', 'Quando o Diretor direcionar algo, aparecerá aqui.')}</div>`;
+        : vazio('Nenhuma ação em aberto', 'Quando o Diretor direcionar algo, aparecerá aqui.')}</div>
+    </div>${quadroAtencaoHTML(abertas, semana)}</div>`;
+  ligarAtencao(raiz, abertas, refresh);
   const abrir = (el) => abrirAcao(el.dataset.acao, refresh).catch((e) => toast(e.message, 'erro'));
   on(raiz, 'click', 'tr[data-acao]', abrir);
   on(raiz, 'keydown', 'tr[data-acao]', (el, ev) => { if (ev.key === 'Enter') abrir(el); });
@@ -49,10 +125,13 @@ export async function inicio(raiz, { refresh }) {
 // ---------- Minhas ações ----------
 export async function minhasAcoes(raiz) {
   if (!est.user.secao_id) return semSecao(raiz);
+  // Só a seção do usuário (e as subordinadas). Para o chefe é o mesmo que ele já enxerga; para o Administrador
+  // da Diretoria Adjunta, que enxerga todas as seções, restringe a tela à própria seção.
+  const daSecao = `&secao=${est.user.secao_id}`;
   const buscar = () => Promise.all([
-    get('/acoes?situacao=abertas'),
-    get('/acoes?situacao=concluidas'),
-    get('/acoes?situacao=arquivadas'),
+    get(`/acoes?situacao=abertas${daSecao}`),
+    get(`/acoes?situacao=concluidas${daSecao}`),
+    get(`/acoes?situacao=arquivadas${daSecao}`),
   ]);
   let [abertas, concl, arq] = await buscar();
 
@@ -90,6 +169,7 @@ export async function minhasAcoes(raiz) {
           </div>
           <div class="acao-selos">
             ${a.atrasada ? '<span class="pilula atraso">Atrasada</span>' : ''}
+            ${seloParada(a)}
             ${a.demandada_diretor ? '<span class="pilula diretor" title="Ações demandadas pelo Diretor não podem ser arquivadas nem excluídas pela seção">Demandada pelo Diretor</span>' : ''}
             <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade].toLowerCase()}</span>
             ${a.pedido_pendente ? '<span class="pilula">Pedido de prazo enviado</span>' : ''}
@@ -97,6 +177,7 @@ export async function minhasAcoes(raiz) {
             ${a.checklist_total ? `<span class="pilula" title="Checklist">☑ ${a.checklist_feitos}/${a.checklist_total}</span>` : ''}
             ${a.status === 'concluida' && !a.arquivada ? '<span class="pilula st-concluida">Aguardando aceite</span>' : ''}
             ${a.arquivada ? '<span class="pilula enc">Arquivada</span>' : ''}
+            ${a.apresentada ? '<span class="pilula" title="Título e detalhamento não mudam mais; o prazo pode ser alterado">Apresentada em reunião</span>' : ''}
           </div>
         </header>
         ${a.detalhe ? `<p class="acao-detalhe">${esc(a.detalhe)}</p>` : ''}
@@ -109,12 +190,13 @@ export async function minhasAcoes(raiz) {
         ` : ''}
         <footer class="acao-rodape">
           <button type="button" class="btn btn-fantasma btn-mini" data-detalhe>Detalhes e histórico</button>
-          ${!a.arquivada && a.status !== 'concluida' && !a.pedido_pendente ? '<button type="button" class="btn btn-fantasma btn-mini" data-prazo>Pedir novo prazo</button>' : ''}
+          ${!a.arquivada && a.status !== 'concluida' && !a.pedido_pendente && !a.pode_mudar_prazo ? '<button type="button" class="btn btn-fantasma btn-mini" data-prazo>Pedir novo prazo</button>' : ''}
           ${aceitaImpedimento(a) ? '<button type="button" class="btn btn-fantasma btn-mini" data-impedimento>Impedimento</button>' : ''}
-          ${!a.demandada_diretor ? `<details class="mais"><summary class="btn btn-fantasma btn-mini">Mais</summary>
+          ${!a.demandada_diretor || a.pode_editar || a.pode_mudar_prazo ? `<details class="mais"><summary class="btn btn-fantasma btn-mini">Mais</summary>
             <div class="mais-itens">
-              ${a.arquivada ? '<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar</button>' : '<button type="button" class="btn btn-sec btn-mini" data-arquivar>Arquivar</button>'}
-              <button type="button" class="btn btn-sec btn-mini perigo-texto" data-excluir>Excluir ação</button>
+              ${a.pode_editar ? '<button type="button" class="btn btn-sec btn-mini" data-editar>Editar</button>' : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" data-editar>Alterar prazo</button>' : ''}
+              ${a.demandada_diretor ? '' : a.arquivada ? '<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar</button>' : '<button type="button" class="btn btn-sec btn-mini" data-arquivar>Arquivar</button>'}
+              ${a.pode_excluir ? '<button type="button" class="btn btn-sec btn-mini perigo-texto" data-excluir>Excluir ação</button>' : ''}
             </div></details>` : ''}
         </footer>
       </article>`).join('') : `<div class="cartao">${vazio('Nenhuma ação nesta visão', aba === 'arquivadas' ? 'Nenhuma ação arquivada.' : 'Quando o Diretor ou você criarem ações, elas aparecerão aqui.')}</div>`}`;
@@ -143,6 +225,7 @@ export async function minhasAcoes(raiz) {
   });
 
   on(raiz, 'click', '[data-impedimento]', (el) => abrirNovoImpedimento(acaoDe(el), recarregar));
+  on(raiz, 'click', '[data-editar]', (el) => abrirEditarAcao(acaoDe(el), recarregar));
 
   on(raiz, 'click', '[data-arquivar]', async (el) => {
     const a = acaoDe(el);
@@ -187,10 +270,11 @@ export async function minhasAcoes(raiz) {
           <div class="campo"><label for="na-prazo">Prazo</label><input id="na-prazo" type="date" name="prazo" required min="${est.boot.hoje}" value="${addDias(est.boot.hoje, 7)}"></div>
           <div class="campo"><label for="na-prio">Prioridade</label><select id="na-prio" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div>
         </div>
-        <div class="escolha" style="margin-top:8px"><label><input type="checkbox" name="interna" value="1"> Ação interna da subseção (não exibida na pauta executiva do Diretor)</label></div>`,
+        ${est.user.perfil === 'chefe' ? '<div class="escolha" style="margin-top:8px"><label><input type="checkbox" name="interna" value="1"> Ação interna da subseção (não exibida na pauta executiva do Diretor)</label></div>' : ''}`,
       rotulo: 'Criar ação',
       aoEnviar: async (d) => {
         await post('/acoes', {
+          secao_id: est.user.secao_id, // o chefe sempre cria na própria seção; o Administrador informa qual
           titulo: d.titulo,
           detalhe: d.detalhe,
           prazo: d.prazo,

@@ -2,6 +2,9 @@
 // Uma falha desfaz todas as migrações pendentes desta execução. Nunca remove dados.
 import { alinharIntegridade } from './migration-integridade.js';
 import { aplicarPerfilAdministrador } from './migration-perfil-admin.js';
+import { aplicarDiretoriaAdjunta } from './migration-diretoria-adjunta.js';
+import { aplicarPrazosEReuniao } from './migration-prazos-reuniao.js';
+import { aplicarMovimentacao } from './migration-movimentacao.js';
 import { sqlSeguranca } from './seguranca-supabase.js';
 const MIGRACOES = [
   {
@@ -146,6 +149,42 @@ const MIGRACOES = [
         concluido_por integer references usuarios(id)
       );
       create index if not exists idx_checklist_acao on acao_checklist(acao_id);`);
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
+  {
+    // Diretoria Adjunta: seção de primeiro nível só de estrutura, cujos membros têm o perfil Administrador.
+    id: 11, nome: 'secao_diretoria_adjunta',
+    async aplicar(db) {
+      await aplicarDiretoriaAdjunta(db);
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
+  {
+    // Cada seção escolhe se aparece na reunião (cartões do Modo Reunião, pauta e ata). Todas começam aparecendo.
+    id: 12, nome: 'secao_na_reuniao',
+    async aplicar(db) {
+      const colunas = db.isPg
+        ? await db.prepare("select column_name as nome from information_schema.columns where table_schema=current_schema() and table_name='secoes'").all()
+        : (await db.prepare('pragma table_info(secoes)').all()).map(c => ({ nome: c.name }));
+      if (!colunas.some(c => c.nome === 'na_reuniao')) await db.exec('alter table secoes add column na_reuniao integer not null default 1');
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
+  {
+    // Histórico de prazos (toda mudança guarda o prazo anterior) e marca de ação apresentada em reunião,
+    // que deixa de ter título e detalhamento editados e de ser excluída.
+    id: 13, nome: 'prazos_e_acoes_apresentadas',
+    async aplicar(db) {
+      await aplicarPrazosEReuniao(db);
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
+  {
+    // Data da última movimentação de cada ação, para mostrar as ações sem atualização ao chefe e ao Diretor.
+    id: 14, nome: 'acoes_ultima_movimentacao',
+    async aplicar(db) {
+      await aplicarMovimentacao(db);
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },

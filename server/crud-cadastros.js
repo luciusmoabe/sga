@@ -1,12 +1,19 @@
 import { falha } from './helpers.js';
+import { DIRETORIA_ADJUNTA, TIPOS_SECAO } from './logic.js';
 
 export async function editarHierarquia(db, id, dados) {
   const rows = await db.prepare('select id,pai_id,tipo,ativa from secoes').all();
   const atual = rows.find(s=>s.id===id);
   const tipo = dados.tipo ?? atual.tipo;
   const pai = 'pai_id' in dados ? (dados.pai_id === '' || dados.pai_id === null ? null : Number(dados.pai_id)) : atual.pai_id;
-  if (!['centro','coordenacao','subsecao'].includes(tipo)) throw falha(400,'Tipo de seção inválido.');
+  if (!TIPOS_SECAO.includes(tipo)) throw falha(400,'Tipo de seção inválido.');
+  // A Diretoria Adjunta nasce e continua como tal: virar ou deixar de ser Diretoria Adjunta mudaria quem tem chefe,
+  // subseções e ações. Para trocar, crie a seção do tipo certo.
+  if ((tipo === DIRETORIA_ADJUNTA) !== (atual.tipo === DIRETORIA_ADJUNTA)) {
+    throw falha(400, 'Uma seção não vira nem deixa de ser Diretoria Adjunta. Crie uma seção nova do tipo desejado.');
+  }
   if (tipo === 'subsecao' && !rows.some(s=>s.id===pai && s.ativa)) throw falha(400,'Escolha uma seção superior ativa.');
+  if (tipo === 'subsecao' && rows.find(s=>s.id===pai)?.tipo === DIRETORIA_ADJUNTA) throw falha(400,'A Diretoria Adjunta não tem subseções.');
   if (tipo !== 'subsecao' && pai !== null) throw falha(400,'Centros e Coordenações ficam no primeiro nível.');
   atual.pai_id=pai; atual.tipo=tipo;
   const mapa=new Map(rows.map(s=>[s.id,s]));
@@ -38,6 +45,7 @@ export async function excluirCadastro(db, tabela, id) {
           ['impedimentos','resolvido_por','resoluções de impedimento'],
           ['acao_checklist','criado_por','itens de checklist criados'],
           ['acao_checklist','concluido_por','itens de checklist concluídos'],
+          ['acao_prazos','alterado_por','alterações de prazo'],
           ['tempo','usuario_id','lançamentos de tempo'],
           ['pedidos_prazo','usuario_id','pedidos de prazo'],
           ['pedidos_prazo','decidido_por','decisões de prazo'],

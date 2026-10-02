@@ -2,9 +2,11 @@
 import { get, patch, post, put, del } from './api.js';
 import { atualizarSessao, ehAdmin } from './estado.js';
 import { abrirForm, confirmar, esc, on, toast } from './ui.js';
-import { HORA_FECHAMENTO, ROTULO_PERFIL } from './regras.js';
+import { DIRETORIA_ADJUNTA, HORA_FECHAMENTO, ROTULO_PERFIL, ROTULO_TIPO } from './regras.js';
 
-const TIPO = { centro: 'Centro', coordenacao: 'Coordenação', subsecao: 'Subseção' };
+const TIPO = ROTULO_TIPO;
+/** A Diretoria Adjunta é só estrutura: sem chefe, subseções nem ações; quem faz parte é Administrador. */
+const ehDA = (s) => s?.tipo === DIRETORIA_ADJUNTA;
 const PERFIL = ROTULO_PERFIL;
 // Contas do Diretor e do Administrador só o Administrador altera; a conta do Administrador só muda pelo servidor.
 const protegidoParaMim = (u) => u.perfil === 'administrador' || (u.perfil === 'diretor' && !ehAdmin());
@@ -56,12 +58,14 @@ export async function estrutura(raiz, { refresh }) {
     return `<li><div class="estrutura-secao ${s.ativa ? '' : 'estrutura-inativa'}" data-id="${s.id}">
       <div class="estrutura-identidade">
         ${filhos(s.id).length ? `<button class="estrutura-expandir" ${busca || ui.estadoSecao !== 'todas' ? 'disabled' : ''} data-expandir="${s.id}" aria-expanded="${!!aberta}" aria-controls="filhas-${s.id}" aria-label="${aberta ? 'Recolher' : 'Expandir'} subseções de ${esc(s.nome)}">${aberta ? '−' : '+'}</button>` : '<span class="estrutura-marcador" aria-hidden="true">•</span>'}
-        <div><strong>${esc(s.nome)}</strong><div class="estrutura-metadados">${esc(TIPO[s.tipo])}${s.sigla ? ` · ${esc(s.sigla)}` : ''}${filhos(s.id).length ? ` · ${filhos(s.id).length} ${filhos(s.id).length === 1 ? 'subseção' : 'subseções'}` : ''}</div></div>
+        <div><strong>${esc(s.nome)}</strong><div class="estrutura-metadados">${esc(TIPO[s.tipo])}${s.sigla ? ` · ${esc(s.sigla)}` : ''}${filhos(s.id).length ? ` · ${filhos(s.id).length} ${filhos(s.id).length === 1 ? 'subseção' : 'subseções'}` : ''}${s.na_reuniao ? '' : ' · <span class="estrutura-selo" title="Não aparece nos cartões do Modo Reunião, na pauta nem na ata">Fora da reunião</span>'}</div></div>
       </div>
-      <div class="estrutura-responsavel"><span class="estrutura-legenda">Responsável</span><span>${esc(s.chefe_nome || 'Não atribuído')}</span></div>
+      <div class="estrutura-responsavel">${ehDA(s)
+        ? `<span class="estrutura-legenda">Administradores</span><span>${esc((s.membros || []).map((m) => m.nome).join(', ') || 'Nenhum vinculado')}</span>`
+        : `<span class="estrutura-legenda">Responsável</span><span>${esc(s.chefe_nome || 'Não atribuído')}</span>`}</div>
       <span class="estrutura-status ${s.ativa ? 'ativo' : ''}">${s.ativa ? 'Ativa' : 'Inativa'}</span>
       <div class="estrutura-acoes"><button class="btn btn-sec btn-mini" data-a="renomear" aria-label="Editar ${esc(s.nome)}">Editar</button>
-        ${opcoes(s.nome, `<button data-a="chefe">Gerenciar chefia</button>${s.ativa && s.nivel < LIMITE ? '<button data-a="sub">Adicionar subseção</button>' : ''}<button data-a="cima">Mover para cima</button><button data-a="baixo">Mover para baixo</button><button data-a="${s.ativa ? 'desativar' : 'reativar'}">${s.ativa ? 'Desativar' : 'Reativar'} seção</button><button class="estrutura-perigo" data-a="excluir-secao">Excluir seção</button>`)}</div>
+        ${opcoes(s.nome, `${ehDA(s) ? '<span class="estrutura-menu-nota">Membros: Administradores vinculados pelo servidor (npm run admin:secao)</span>' : '<button data-a="chefe">Gerenciar chefia</button>'}${s.ativa && s.nivel < LIMITE && !ehDA(s) ? '<button data-a="sub">Adicionar subseção</button>' : ''}<button data-a="reuniao">${s.na_reuniao ? 'Tirar da reunião' : 'Incluir na reunião'}</button><button data-a="cima">Mover para cima</button><button data-a="baixo">Mover para baixo</button><button data-a="${s.ativa ? 'desativar' : 'reativar'}">${s.ativa ? 'Desativar' : 'Reativar'} seção</button><button class="estrutura-perigo" data-a="excluir-secao">Excluir seção</button>`)}</div>
       </div>${sub ? `<ul id="filhas-${s.id}" ${aberta ? '' : 'hidden'}>${sub}</ul>` : ''}</li>`;
   };
   const linhaUsuario = u => `<tr>
@@ -75,7 +79,7 @@ export async function estrutura(raiz, { refresh }) {
     <div class="estrutura-resumo" aria-label="Resumo dos cadastros">
       <div><strong>${secoes.filter(s=>s.ativa).length}</strong><span>Seções ativas</span></div>
       <div><strong>${usuarios.filter(u=>u.ativo).length}</strong><span>Usuários ativos</span></div>
-      <div><strong>${secoes.filter(s=>s.ativa && !s.chefe_id).length}</strong><span>Seções sem chefe</span></div>
+      <div><strong>${secoes.filter(s=>s.ativa && !s.chefe_id && !ehDA(s)).length}</strong><span>Seções sem chefe</span></div>
     </div>
     <nav class="estrutura-abas" aria-label="Áreas da estrutura">
       <button data-painel="secoes" aria-controls="estrutura-secoes">Seções</button>
@@ -83,7 +87,7 @@ export async function estrutura(raiz, { refresh }) {
       <button data-painel="reuniao" aria-controls="estrutura-reuniao">Reunião semanal</button>
     </nav>
     <section id="estrutura-secoes" class="estrutura-painel" aria-labelledby="titulo-secoes">
-      <div class="estrutura-barra"><div><h2 id="titulo-secoes">Organização das seções</h2><p class="suave">Centros, coordenações e subseções em até três níveis.</p></div><button class="btn btn-primario" data-a="nova">+ Nova seção</button></div>
+      <div class="estrutura-barra"><div><h2 id="titulo-secoes">Organização das seções</h2><p class="suave">Centros, coordenações e subseções em até três níveis, e a Diretoria Adjunta.</p></div><button class="btn btn-primario" data-a="nova">+ Nova seção</button></div>
       <div class="estrutura-filtros"><div class="campo"><label for="buscar-secao">Buscar seção ou responsável</label><input id="buscar-secao" type="search" placeholder="Nome, sigla ou responsável" value="${esc(ui.buscaSecao)}"></div><div class="campo"><label for="estado-secao">Situação</label><select id="estado-secao"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="inativas">Inativas</option></select></div></div>
       <div id="lista-secoes"></div>
     </section>
@@ -176,7 +180,7 @@ export async function estrutura(raiz, { refresh }) {
       <div class="campo"><label for="eu-nome">Nome</label><input id="eu-nome" name="nome" value="${esc(u.nome)}" maxlength="120" required></div>
       <div class="campo"><label for="eu-email">E-mail</label><input id="eu-email" name="email" type="email" value="${esc(u.email || '')}" ${u.tem_login ? 'disabled' : ''}><div class="dica">Para contas vinculadas, altere e-mail e senha pelo botão Login.</div></div>
       ${protegidoParaMim(u) ? '<p>Perfil e acesso protegidos: só o Administrador altera o Diretor, e o Administrador só muda pelo servidor.</p>' : `<div class="campo"><label for="eu-perfil">Perfil</label><select id="eu-perfil" name="perfil">${ehAdmin() ? `<option value="diretor" ${u.perfil==='diretor'?'selected':''}>Diretor</option>` : ''}<option value="chefe" ${u.perfil==='chefe'?'selected':''}>Chefe de seção</option><option value="apoio" ${u.perfil==='apoio'?'selected':''}>Apoio do Diretor</option></select></div>
-      <div class="campo"><label for="eu-secao">Seção (Chefe)</label><select id="eu-secao" name="secao_id"><option value="">Sem seção</option>${secoes.filter(s=>s.ativa && (!s.chefe_id || s.chefe_id===u.id)).map(s=>`<option value="${s.id}" ${s.id===u.secao_id?'selected':''}>${esc(s.nome)}</option>`).join('')}</select></div>`}`,
+      <div class="campo"><label for="eu-secao">Seção (Chefe)</label><select id="eu-secao" name="secao_id"><option value="">Sem seção</option>${secoes.filter(s=>s.ativa && !ehDA(s) && (!s.chefe_id || s.chefe_id===u.id)).map(s=>`<option value="${s.id}" ${s.id===u.secao_id?'selected':''}>${esc(s.nome)}</option>`).join('')}</select></div>`}`,
       aoEnviar:async d=>{await patch(`/usuarios/${u.id}`,d);salvo('Usuário atualizado.');}
     });
   });
@@ -207,6 +211,8 @@ export async function estrutura(raiz, { refresh }) {
         if(await confirmar({titulo:'Excluir seção',texto:`Excluir ${esc(s.nome)}? Seções com usuários, subseções ou histórico não podem ser excluídas.`,rotulo:'Excluir',perigo:true})) {await del(`/secoes/${id}`);salvo('Seção excluída.');}
       } else if (a === 'cima' || a === 'baixo') { await patch(`/secoes/${id}`, { mover: a }); refresh(); }
       else if (a === 'reativar') { await patch(`/secoes/${id}`, { ativa: true }); salvo('Seção reativada.'); }
+      // Tirar da reunião não desativa: a seção continua recebendo ações e aparecendo no Painel.
+      else if (a === 'reuniao') { await patch(`/secoes/${id}`, { na_reuniao: !s.na_reuniao }); salvo(s.na_reuniao ? `${s.nome} não aparece mais na reunião.` : `${s.nome} volta a aparecer na reunião.`); }
       else if (a === 'desativar') {
         try { await patch(`/secoes/${id}`, { ativa: false }); salvo('Seção desativada.'); }
         catch (e) {
@@ -225,9 +231,10 @@ export async function estrutura(raiz, { refresh }) {
           titulo: 'Editar seção',
           corpo: `<div class="campo"><label for="r-nome">Nome</label><input id="r-nome" name="nome" required maxlength="120" value="${esc(s.nome)}"></div>
                   <div class="campo"><label for="r-sigla">Sigla</label><input id="r-sigla" name="sigla" maxlength="12" value="${esc(s.sigla || '')}"></div>
-                  <div class="campo"><label for="r-tipo">Tipo</label><select id="r-tipo" name="tipo">${Object.entries(TIPO).map(([k,v])=>`<option value="${k}" ${s.tipo===k?'selected':''}>${v}</option>`).join('')}</select></div>
-                  <div class="campo"><label for="r-pai">Seção superior</label><select id="r-pai" name="pai_id" required><option value="">Escolha uma seção</option>${secoes.filter(x=>x.ativa && !descendentes.has(x.id) && x.nivel < LIMITE).map(x=>`<option value="${x.id}" ${s.pai_id===x.id?'selected':''}>${esc(x.nome)}</option>`).join('')}</select></div>`,
-          aoEnviar: async (d) => { if(d.tipo !== 'subsecao') d.pai_id=null; await patch(`/secoes/${id}`, d); salvo('Seção atualizada.'); },
+                  <div class="escolha"><label><input type="checkbox" name="na_reuniao" value="1" ${s.na_reuniao ? 'checked' : ''}> Aparece na reunião (cartões do Modo Reunião, pauta e ata)</label>${filhos(s.id).length ? '<div class="dica">Fora da reunião, as subseções desta seção também ficam de fora.</div>' : ''}</div>
+                  ${ehDA(s) ? '<p class="suave pequeno">Diretoria Adjunta: fica no primeiro nível, sem chefe nem subseções.</p>' : `<div class="campo"><label for="r-tipo">Tipo</label><select id="r-tipo" name="tipo">${Object.entries(TIPO).filter(([k])=>k!==DIRETORIA_ADJUNTA).map(([k,v])=>`<option value="${k}" ${s.tipo===k?'selected':''}>${v}</option>`).join('')}</select></div>
+                  <div class="campo"><label for="r-pai">Seção superior</label><select id="r-pai" name="pai_id" required><option value="">Escolha uma seção</option>${secoes.filter(x=>x.ativa && !ehDA(x) && !descendentes.has(x.id) && x.nivel < LIMITE).map(x=>`<option value="${x.id}" ${s.pai_id===x.id?'selected':''}>${esc(x.nome)}</option>`).join('')}</select></div>`}`,
+          aoEnviar: async (d) => { d.na_reuniao = d.na_reuniao === '1'; if(ehDA(s)) { delete d.tipo; delete d.pai_id; } else if(d.tipo !== 'subsecao') d.pai_id=null; await patch(`/secoes/${id}`, d); salvo('Seção atualizada.'); },
         });
       } else if (a === 'chefe') {
         formulario({
@@ -239,10 +246,21 @@ export async function estrutura(raiz, { refresh }) {
       } else if (a === 'sub' || a === 'nova') {
         formulario({
           titulo: a === 'sub' ? `Nova subseção em ${s.nome}` : 'Nova seção',
-          corpo: `${a === 'nova' ? `<div class="campo"><label>Tipo</label><div class="escolha"><label><input type="radio" name="tipo" value="centro" checked> Centro</label><label><input type="radio" name="tipo" value="coordenacao"> Coordenação</label></div></div>` : ''}
+          corpo: `${a === 'nova' ? `<div class="campo"><label>Tipo</label><div class="escolha"><label><input type="radio" name="tipo" value="centro" checked> Centro</label><label><input type="radio" name="tipo" value="coordenacao"> Coordenação</label>${secoes.some(ehDA) ? '' : `<label><input type="radio" name="tipo" value="${DIRETORIA_ADJUNTA}"> Diretoria Adjunta</label>`}</div></div>` : ''}
             <div class="campo"><label for="n-nome">Nome</label><input id="n-nome" name="nome" required maxlength="120" placeholder="Ex.: Centro de Estudos Econômicos"></div>
             <div class="campo"><label for="n-sigla">Sigla (opcional)</label><input id="n-sigla" name="sigla" maxlength="12"></div>
-            <div class="campo"><label for="n-chefe">Chefe (opcional)</label><select id="n-chefe" name="chefe_id">${opcoesChefe(null)}</select></div>`,
+            <div class="campo"><label for="n-chefe">Chefe (opcional)</label><select id="n-chefe" name="chefe_id">${opcoesChefe(null)}</select></div>
+            <p class="suave pequeno" id="n-dica-da" hidden>A Diretoria Adjunta não tem chefe nem subseções. Recebe ações e envia relato como as demais seções; quem faz parte dela tem o perfil Administrador e é vinculado pelo servidor.</p>`,
+          aoAbrir: (dlg, form) => {
+            // Diretoria Adjunta não tem chefe: troca o campo pela explicação.
+            const ajustar = () => {
+              const da = form.querySelector('input[name=tipo]:checked')?.value === DIRETORIA_ADJUNTA;
+              const chefe = form.querySelector('#n-chefe');
+              chefe.closest('.campo').hidden = da; chefe.disabled = da;
+              form.querySelector('#n-dica-da').hidden = !da;
+            };
+            form.querySelectorAll('input[name=tipo]').forEach((r) => r.addEventListener('change', ajustar));
+          },
           aoEnviar: async (d) => {
             await post('/secoes', { nome: d.nome, sigla: d.sigla, chefe_id: d.chefe_id || null, tipo: a === 'sub' ? 'subsecao' : d.tipo, pai_id: a === 'sub' ? Number(id) : null });
             salvo('Seção criada.');
@@ -254,7 +272,7 @@ export async function estrutura(raiz, { refresh }) {
           corpo: `<div class="campo"><label for="ca-nome">Nome</label><input id="ca-nome" name="nome" maxlength="120" required></div>
             <div class="campo"><label for="ca-email">E-mail de login</label><input id="ca-email" name="email" type="email" maxlength="160" autocomplete="off" required></div>
             <div class="campo"><label for="ca-senha">Senha inicial</label><input id="ca-senha" name="senha" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><div class="dica">De 12 a 128 caracteres. É provisória: a pessoa será obrigada a criar a própria senha no primeiro acesso. Entregue-a diretamente a ela.</div></div>
-            <div class="campo"><label for="ca-secao">Seção</label><select id="ca-secao" name="secao_id" required><option value="">Escolha uma seção</option>${secoes.filter(s => s.ativa).map(s => `<option value="${s.id}">${esc(s.nome)}${s.sigla ? ` (${esc(s.sigla)})` : ''}${s.chefe_id ? ` — chefe atual: ${esc(s.chefe_nome || 'atribuído')}` : ''}</option>`).join('')}</select><div class="dica">Todas as seções ativas estão disponíveis. Se já houver chefe, escolha substituí-lo ou cadastrar como suplente.</div></div>
+            <div class="campo"><label for="ca-secao">Seção</label><select id="ca-secao" name="secao_id" required><option value="">Escolha uma seção</option>${secoes.filter(s => s.ativa && !ehDA(s)).map(s => `<option value="${s.id}">${esc(s.nome)}${s.sigla ? ` (${esc(s.sigla)})` : ''}${s.chefe_id ? ` — chefe atual: ${esc(s.chefe_nome || 'atribuído')}` : ''}</option>`).join('')}</select><div class="dica">Todas as seções ativas estão disponíveis. Se já houver chefe, escolha substituí-lo ou cadastrar como suplente.</div></div>
             <div class="campo"><label for="ca-perfil">Perfil</label><select id="ca-perfil" name="perfil">${ehAdmin() ? '<option value="diretor">Diretor</option>' : ''}<option value="chefe">Chefe de seção (vê a sua seção e as subordinadas)</option><option value="apoio">Apoio do Diretor (sem seção)</option></select></div>
             <div class="escolha"><label><input type="checkbox" id="ca-suplente" name="suplente" value="1"> Cadastrar como suplente (mantém o chefe atual; os dois passam a poder responder pela seção)</label></div>
             <p>Confira o e-mail: a conta será criada com acesso imediato, sem envio de convite.</p>`,
