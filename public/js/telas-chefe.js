@@ -155,7 +155,7 @@ export async function minhasAcoes(raiz) {
         </div>
         <button class="btn btn-primario" id="btn-nova-acao">+ Nova ação</button>
       </div>
-      <div class="linha" style="margin:10px 0 16px;gap:8px;flex-wrap:wrap">
+      <div class="linha abas-lista" style="margin:10px 0 16px;gap:8px;flex-wrap:wrap">
         <button type="button" class="btn ${aba === 'ativas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="ativas">Todas ativas (${todasAtivas.length})</button>
         <button type="button" class="btn ${aba === 'abertas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="abertas">Abertas (${abertas.length})</button>
         <button type="button" class="btn ${aba === 'concluidas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="concluidas">Concluídas (${concl.length})</button>

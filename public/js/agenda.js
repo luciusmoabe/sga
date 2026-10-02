@@ -67,7 +67,7 @@ export async function agenda(raiz, { q, refresh }) {
       ${dias.map((d) => {
         const itens = (porDia.get(d) || []).sort((x, y) => (x.status === 'concluida') - (y.status === 'concluida'));
         const cor = corDoDia(d, itens, hoje);
-        return `<section class="cartao agenda-dia ${d === hoje ? 'agenda-hoje' : ''}">
+        return `<section class="cartao agenda-dia ${d === hoje ? 'agenda-hoje' : ''} ${itens.length ? '' : 'agenda-dia-vazio'}">
           <header class="agenda-dia-cabeca">
             <div><b>${nomeDiaCompleto(d)}</b> <span class="suave">${br(d)}</span>${d === hoje ? ' <span class="pilula">Hoje</span>' : ''}</div>
             ${cor ? sem(cor) : itens.length ? '<span class="suave pequeno">Sem pendência</span>' : ''}

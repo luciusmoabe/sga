@@ -64,7 +64,7 @@ export async function atualizacao(raiz, { refresh }) {
       <div class="cartao"><h2>Observações</h2><div class="campo"><label for="obs" class="suave pequeno">Algo que não está nas ações (opcional)</label>
         <textarea id="obs" maxlength="600" placeholder="Ex.: contexto para a reunião">${esc(observacoes)}</textarea></div></div>
       <div class="espaco"></div>
-      <button class="btn btn-primario" type="submit">${at ? 'Enviar correção' : 'Enviar atualização'}</button>
+      <div class="barra-acao"><button class="btn btn-primario" type="submit">${at ? 'Enviar correção' : 'Enviar atualização'}</button></div>
     </form>`;
 
   const gravarRascunho = () => {

@@ -1051,3 +1051,124 @@ body.carregando::before {
 .agenda-item:hover { border-color: var(--line-str); }
 .agenda-item-titulo { font-weight: 600; }
 .agenda-item-selos { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---------- Celular (até 760 px): aplicativo instalável ----------
+   No computador nada muda: a barra de topo, as abas e a folha "Mais" só aparecem aqui. Princípios: navegação ao
+   alcance do polegar (abas embaixo), alvos de toque de 44 px ou mais, ação principal sempre visível, diálogos como
+   folhas que sobem de baixo, fonte de 16 px nos campos (o iPhone não dá zoom) e áreas seguras (entalhe e barra de gestos). */
+.topo-movel, .abas-movel { display: none; }
+
+@media (max-width: 760px) {
+  html { -webkit-text-size-adjust: 100%; }
+  body { -webkit-tap-highlight-color: transparent; }
+  .lateral { display: none; }
+  .principal { order: 1; padding: 12px 16px calc(88px + env(safe-area-inset-bottom)); }
+
+  /* Barra de topo */
+  .topo-movel {
+    display: flex; align-items: center; justify-content: space-between; order: 0;
+    position: sticky; top: 0; z-index: 30;
+    padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
+    background: var(--bg); border-bottom: 1px solid var(--line);
+  }
+  .topo-movel-logo { height: 30px; width: auto; }
+  .topo-movel-conta {
+    width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
+    background: var(--green-bg); color: var(--ink-2); border: 1px solid var(--line-str);
+    font: 700 .82rem var(--sans); letter-spacing: .02em; cursor: pointer;
+  }
+
+  /* Abas inferiores */
+  .abas-movel {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -4px 18px rgba(30,46,34,.07);
+  }
+  .abas-movel a, .abas-movel button {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 54px; padding: 0; border: 0; border-radius: 12px; background: none; cursor: pointer;
+    color: var(--muted); font: 600 .7rem var(--sans); text-decoration: none;
+  }
+  .abas-movel svg { width: 22px; height: 22px; padding: 3px 14px; border-radius: 999px; box-sizing: content-box; }
+  .abas-movel a[aria-current="page"], .abas-movel button.ativa { color: var(--ink-2); }
+  .abas-movel a[aria-current="page"] svg, .abas-movel button.ativa svg { background: var(--green-bg); }
+  .abas-movel .selo { position: absolute; top: 2px; left: calc(50% + 8px); min-width: 18px; height: 18px; font-size: .68rem; }
+
+  /* Diálogos como folhas que sobem de baixo, com os botões sempre visíveis */
+  dialog { width: 100%; max-width: 100%; margin: auto 0 0; border-radius: 20px 20px 0 0; max-height: 92dvh; animation: folha-sobe .22s ease-out; }
+  .dlg { max-height: 92dvh; padding: 0 18px; }
+  .dlg::before { content: ''; display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--line-str); margin: 10px auto 12px; }
+  .dlg h2 { font-size: 1.15rem; }
+  .dlg .rodape {
+    position: sticky; bottom: 0; z-index: 1; margin: 16px -18px 0;
+    padding: 12px 18px calc(12px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid var(--line);
+  }
+  .dlg .rodape .btn { flex: 1; min-height: 48px; justify-content: center; }
+
+  /* Folha "Mais" */
+  .folha-mais { padding: 0 16px calc(16px + env(safe-area-inset-bottom)); overflow-y: auto; }
+  .folha-alca { width: 40px; height: 4px; border-radius: 2px; background: var(--line-str); margin: 10px auto 14px; }
+  .folha-conta { display: flex; align-items: center; gap: 12px; padding: 0 4px 14px; border-bottom: 1px solid var(--line); }
+  .folha-grupo { padding: 14px 10px 4px; font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .folha-menu a { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 10px; border-radius: 10px; color: var(--ink); text-decoration: none; font-weight: 500; }
+  .folha-menu a[aria-current="page"] { background: var(--green-bg); color: var(--ink-2); font-weight: 650; }
+  .folha-acoes { display: grid; gap: 8px; margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .folha-acoes .btn { min-height: 48px; justify-content: center; }
+
+  /* Toque e leitura */
+  input, select, textarea { font-size: 16px; }
+  .btn { min-height: 44px; }
+  .btn-mini { min-height: 40px; padding: 8px 12px; font-size: .84rem; }
+  .cabeca h1 { font-size: 1.4rem; }
+  #toasts { left: 16px; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); }
+
+  /* Semana: só o texto, sem a pista gráfica */
+  .trilho { padding: 10px 14px; margin-bottom: 14px; }
+  .trilho-pista { display: none; }
+  .trilho-topo { flex-direction: column; gap: 2px; margin: 0; }
+  .trilho-topo b { font-size: .92rem; }
+  .trilho-topo span { font-size: .8rem; }
+
+  /* Início: contadores compactos e "Próximas ações" como lista */
+  .inicio-principal .grade { grid-template-columns: 1fr 1fr !important; gap: 10px; }
+  .inicio-principal .grade .cartao { padding: 12px 14px; }
+  .inicio-principal .grade .num { font-size: 1.5rem !important; }
+  .inicio-principal table, .inicio-principal tbody { display: block; }
+  .inicio-principal tr { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .inicio-principal td { display: block; padding: 0; border: 0; }
+  .inicio-principal td:first-child { grid-column: 1 / -1; }
+  .inicio-principal td.num::before { content: 'Prazo '; color: var(--muted); }
+
+  /* Minhas ações: abas deslizantes, status em grade 2x2, tempo numa linha e ações com alvo grande */
+  .abas-lista { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; margin-inline: -16px !important; padding-inline: 16px; }
+  .abas-lista::-webkit-scrollbar { display: none; }
+  .abas-lista .btn { flex-shrink: 0; }
+  .segmento { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .segmento button { min-height: 46px; border-bottom: 1px solid var(--line-str); }
+  .segmento button:nth-child(2n) { border-right: 0; }
+  .segmento button:nth-last-child(-n+2) { border-bottom: 0; }
+  .tempo-linha { flex-wrap: nowrap; }
+  .tempo-linha input { flex: 1; width: auto; min-width: 0; }
+  .acao-rodape { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .acao-rodape > .btn { justify-content: center; border: 1px solid var(--line); }
+  .mais { grid-column: 1 / -1; margin-left: 0; }
+  .mais > summary { display: flex; justify-content: center; border: 1px solid var(--line); }
+  .mais-itens { flex-wrap: wrap; justify-content: stretch; }
+  .mais-itens .btn { flex: 1 1 40%; justify-content: center; }
+
+  /* Minha atualização: o envio fica sempre à mão, acima das abas */
+  .barra-acao {
+    position: sticky; bottom: calc(70px + env(safe-area-inset-bottom)); z-index: 20;
+    margin: 0 -16px; padding: 18px 16px 8px; background: linear-gradient(to bottom, transparent, var(--bg) 40%);
+  }
+  .barra-acao .btn { width: 100%; min-height: 50px; justify-content: center; font-size: 1rem; }
+
+  /* Agenda: dia sem ação vira uma linha fina */
+  .agenda-dia-vazio { padding: 10px 14px; }
+  .agenda-dia-vazio > p { display: none; }
+  .agenda-dia-vazio .agenda-dia-cabeca { margin: 0; }
+  .agenda-dia-vazio .agenda-dia-cabeca::after { content: 'Nada previsto'; color: var(--muted); font-size: .8rem; }
+}
+@keyframes folha-sobe { from { transform: translateY(28px); opacity: .6; } }
+@media (prefers-reduced-motion: reduce) { dialog { animation: none; } }

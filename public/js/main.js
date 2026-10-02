@@ -215,21 +215,78 @@ function casca() {
       : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}"><span class="menu-rotulo">${ICONES[m[0]] || ''}${esc(m[1])}</span>${m[2] === 'selo' ? '<span class="selo oculto" id="selo-prazos"></span>' : ''}</a>`).join('')}</nav>
     <div class="usuario"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}${est.boot?.secao?.tipo === DIRETORIA_ADJUNTA ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}<br><span class="usuario-acoes">${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
       <button class="btn btn-fantasma btn-mini oculto" id="instalar-app" style="margin-top:6px">Instalar aplicativo</button></div></aside>
-    <main class="principal"><div id="trilho"></div><div id="conteudo"></div></main></div>`;
+    <main class="principal"><div id="trilho"></div><div id="conteudo"></div></main>
+    ${cascaMovel(u, menu)}</div>`;
   atualizarBotaoInstalar();
   $('#alterar-senha')?.addEventListener('click', () => abrirTrocaSenha());
   $('#sair').addEventListener('click', async () => {
     try { await sair(); est.user = null; est.boot = null; location.hash = '#/'; render(); }
     catch (e) { toast(e.message); }
   });
+  ligarCascaMovel();
+}
+
+// ---------- Celular (até 760 px): barra de topo, abas inferiores e folha "Mais" ----------
+// No computador estes elementos ficam escondidos e a lateral continua igual. As abas trazem as telas mais usadas
+// de cada perfil, ao alcance do polegar; "Mais" reúne o resto do menu e a conta.
+const ABAS_MOVEL = {
+  chefe: [['inicio', 'Início'], ['minhas-acoes', 'Ações'], ['atualizacao', 'Atualização'], ['agenda', 'Agenda']],
+  gestao: [['painel', 'Painel'], ['agenda', 'Agenda'], ['acoes', 'Ações'], ['prazos', 'Prazos']],
+};
+const ICONE_MAIS = '<svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.5" cy="10" r="1.2"/><circle cx="10" cy="10" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/></svg>';
+const iniciais = (nome) => nome.split(/\s+/).filter((p) => p.length > 2 || /^[A-ZÁÉÍÓÚ]/.test(p)).slice(-2).map((p) => p[0]).join('').toUpperCase() || nome[0];
+
+function cascaMovel(u, menu) {
+  const abas = u.perfil === 'chefe' ? ABAS_MOVEL.chefe : ABAS_MOVEL.gestao;
+  const rotuloPerfil = `${PERFIL[u.perfil]}${est.boot?.secao ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}`;
+  return `<header class="topo-movel">
+      <img src="/imagens/logo-agilis.png" alt="Agilis" class="topo-movel-logo">
+      <button type="button" class="topo-movel-conta" data-abrir-mais aria-label="Conta e mais opções">${esc(iniciais(u.nome))}</button>
+    </header>
+    <nav class="abas-movel" aria-label="Navegação principal">
+      ${abas.map(([rota, rotulo]) => `<a href="#/${rota}" data-rota="${rota}">${ICONES[rota] || ''}<span>${rotulo}</span>${rota === 'prazos' ? '<span class="selo oculto selo-prazos"></span>' : ''}</a>`).join('')}
+      <button type="button" data-abrir-mais data-aba-mais>${ICONE_MAIS}<span>Mais</span></button>
+    </nav>
+    <dialog class="folha-mais" aria-label="Mais opções">
+      <div class="folha-alca" aria-hidden="true"></div>
+      <div class="folha-conta"><span class="topo-movel-conta" aria-hidden="true">${esc(iniciais(u.nome))}</span>
+        <div><b>${esc(u.nome)}</b><div class="suave pequeno">${rotuloPerfil}</div></div></div>
+      <nav class="folha-menu" aria-label="Todas as telas">${menu.map((m) => m[0].startsWith('#')
+        ? `<div class="folha-grupo">${esc(m[0].slice(1))}</div>`
+        : `<a href="#/${m[0]}" data-rota="${m[0]}">${ICONES[m[0]] || ''}<span>${esc(m[1])}</span></a>`).join('')}</nav>
+      <div class="folha-acoes">
+        ${sessao.modo === 'demo' ? '' : '<button type="button" class="btn btn-sec" data-conta="senha">Alterar senha</button>'}
+        <button type="button" class="btn btn-sec oculto" data-conta="instalar">Instalar aplicativo</button>
+        <button type="button" class="btn btn-sec" data-conta="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button>
+        <button type="button" class="btn btn-fantasma" data-fechar-mais>Fechar</button>
+      </div>
+    </dialog>`;
+}
+
+function ligarCascaMovel() {
+  const folha = $('.folha-mais');
+  if (!folha) return;
+  const fechar = () => folha.open && folha.close();
+  // Ouvintes nos próprios botões (recriados com a casca), para não se acumularem em `app` a cada troca de perfil.
+  for (const b of app.querySelectorAll('[data-abrir-mais]')) {
+    b.addEventListener('click', () => {
+      $('[data-conta="instalar"]', folha)?.classList.toggle('oculto', !promptInstalar);
+      if (!folha.open) folha.showModal();
+    });
+  }
+  folha.addEventListener('click', (ev) => {
+    if (ev.target === folha || ev.target.closest('[data-fechar-mais], .folha-menu a')) fechar(); // toque fora da folha ou num link
+  });
+  on(folha, 'click', '[data-conta="senha"]', () => { fechar(); abrirTrocaSenha(); });
+  on(folha, 'click', '[data-conta="instalar"]', () => { fechar(); $('#instalar-app')?.click(); });
+  on(folha, 'click', '[data-conta="sair"]', () => { fechar(); $('#sair').click(); });
 }
 
 // A contagem vem no bootstrap: não há requisição própria para o selo.
 function atualizarSelo() {
   if (est.user.perfil === 'chefe') return;
   const n = est.boot?.pedidos_pendentes ?? 0;
-  const s = $('#selo-prazos');
-  if (s) { s.textContent = n; s.classList.toggle('oculto', !n); }
+  for (const s of document.querySelectorAll('#selo-prazos, .selo-prazos')) { s.textContent = n; s.classList.toggle('oculto', !n); }
 }
 
 let gen = 0;
@@ -262,10 +319,12 @@ async function renderizar() {
     }
     document.body.classList.remove('tv');
     if (!$('.app') || $('.app')?.dataset.perfil !== est.user.perfil) { casca(); $('.app').dataset.perfil = est.user.perfil; }
-    for (const a of document.querySelectorAll('.menu a')) {
+    for (const a of document.querySelectorAll('.menu a, .abas-movel a, .folha-menu a')) {
       const ativa = a.dataset.rota === rota || (rota === 'centro' && a.dataset.rota === 'painel') || (rota === 'pauta' && a.dataset.rota === 'painel');
       if (ativa) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     }
+    // No celular, a aba "Mais" fica marcada quando a tela atual não tem aba própria.
+    $('[data-aba-mais]')?.classList.toggle('ativa', !document.querySelector('.abas-movel a[aria-current]'));
     $('#trilho').innerHTML = def.trilho ? trilho(est.boot) : '';
     const conteudo = $('#conteudo');
     const novo = document.createElement('div');
