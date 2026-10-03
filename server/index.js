@@ -8,7 +8,8 @@ import { configurarAuth } from './auth.js';
 const auth = configurarAuth();
 const db = openDb();
 if (db.isPg) {
-  await db.prepare('select 1').get();
+  // `verificarMigracoes` já faz uma consulta real (schema_migrations): um "select 1" à parte antes dela
+  // só soma mais uma tentativa de conexão, sem checar nada que esta já não cheque.
   await verificarMigracoes(db);
   if (process.env.NODE_ENV !== 'production') {
     console.log('Conectado ao Supabase PostgreSQL com sucesso!');
