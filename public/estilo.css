@@ -840,7 +840,10 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
   margin-bottom: 10px;
   break-inside: avoid;
 }
-/* ---------- Início do chefe: quadro "Precisa de atenção" ---------- */
+/* ---------- Início do chefe: aviso do Diretor/Administrador e quadro "Precisa de atenção" ---------- */
+.aviso-banner { background: var(--green-bg); border: 1px solid var(--line); border-left: 4px solid var(--green); border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; }
+.aviso-banner-tag { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 650; color: var(--green); margin: 0 0 4px; }
+.aviso-banner-texto { margin: 0; font-weight: 600; }
 .inicio-grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 20px; align-items: start; }
 .atencao-quadro { background: var(--pale); border: 1px solid var(--line); border-radius: 16px; padding: 22px 22px 18px; position: sticky; top: 16px; }
 .atencao-sobre { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 650; color: var(--muted); margin: 0 0 6px; }

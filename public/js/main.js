@@ -10,6 +10,7 @@ import { combinados } from './combinados.js';
 import { estrutura } from './estrutura.js';
 import { atas, reuniaoDetalhe, reunioes } from './atas.js';
 import { inicioReuniao, viewReuniao } from './reuniao.js';
+import { avisos } from './avisos.js';
 import { DIRETORIA_ADJUNTA, ROTULO_PERFIL } from './regras.js';
 import { abrirTrocaSenha, telaTrocaSenha } from './senha.js';
 
@@ -24,6 +25,7 @@ const ROTAS = {
   prazos: { f: prazos, perfis: LEITURA, titulo: 'Pedidos de prazo' },
   pauta: { f: pauta, perfis: LEITURA, titulo: 'Pauta' },
   estrutura: { f: estrutura, perfis: ['diretor', 'administrador'], titulo: 'Estrutura' },
+  avisos: { f: avisos, perfis: ['diretor', 'administrador'], titulo: 'Avisos' },
   combinados: { f: combinados, perfis: TODOS, titulo: 'Combinados' },
   reunioes: { f: (r, p) => (p.id ? reuniaoDetalhe(r, p) : reunioes(r, p)), perfis: LEITURA, titulo: 'Reuniões e atas' },
   // Sem id: tela comum de início (nada é criado ao abrir a rota). Com id: Modo Reunião em tela cheia.
@@ -54,6 +56,7 @@ const ICONES = {
   'minhas-acoes': '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5,5 4,6.5 6.5,3.5"/><line x1="9" y1="5" x2="17.5" y2="5"/><polyline points="2.5,11 4,12.5 6.5,9.5"/><line x1="9" y1="11" x2="17.5" y2="11"/><line x1="2.5" y1="16" x2="17.5" y2="16"/></svg>',
   historico: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10a6.5 6.5 0 1 0 1.9-4.6"/><polyline points="2.5,3.5 3.5,6.5 6.5,5.5"/><polyline points="10,7 10,10.3 12.5,11.8"/></svg>',
   atas: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h7l3.5 3.5v11.5H5z"/><path d="M12 2.5v3.5h3.5"/><line x1="7.5" y1="10" x2="14" y2="10"/><line x1="7.5" y1="13.5" x2="14" y2="13.5"/></svg>',
+  avisos: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3c-2.5 0-4 2-4 4.5V11l-1.5 2.5h11L14 11V7.5C14 5 12.5 3 10 3z"/><path d="M8 15.5a2 2 0 0 0 4 0"/></svg>',
 };
 
 const MENU_GESTAO = [
@@ -70,6 +73,7 @@ const MENU_GESTAO = [
   ['reunioes', 'Reuniões e atas'],
   ['#Organização', 'diretor'],
   ['estrutura', 'Estrutura', '', 'diretor'],
+  ['avisos', 'Avisos', '', 'diretor'],
 ];
 const MENU_CHEFE = [
   ['#Minha Seção'],
@@ -83,7 +87,7 @@ const MENU_CHEFE = [
   ['atas', 'Atas'],
 ];
 // O Administrador tem acesso total: o menu do Diretor, com a estrutura como "Contas e estrutura".
-const MENU_ADMIN = MENU_GESTAO.map((m) => (m[0] === '#Organização' ? ['#Administração'] : m[0] === 'estrutura' ? ['estrutura', 'Contas e estrutura'] : m));
+const MENU_ADMIN = MENU_GESTAO.map((m) => (m[0] === '#Organização' ? ['#Administração'] : m[0] === 'estrutura' ? ['estrutura', 'Contas e estrutura'] : m[0] === 'avisos' ? ['avisos', 'Avisos'] : m));
 const PERFIL = ROTULO_PERFIL;
 const app = document.getElementById('app');
 
@@ -93,7 +97,8 @@ function lerRota() {
   const [rota, id] = caminho.split('/');
   return { rota, id, q: new URLSearchParams(qs || '') };
 }
-const casaDe = () => (est.user.perfil === 'chefe' ? '#/inicio' : '#/painel');
+// Início da seção também é a tela de entrada do Administrador da Diretoria Adjunta (mesma tela do chefe).
+const casaDe = () => (est.user.perfil === 'chefe' || (est.user.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA) ? '#/inicio' : '#/painel');
 
 
 // O bootstrap (usuário, semana, selo) muda pouco: reaproveitá-lo poupa uma ida ao servidor a cada troca de tela.

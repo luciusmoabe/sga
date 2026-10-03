@@ -8,6 +8,7 @@ import { rotasAcoes } from './rotas-acoes.js';
 import { rotasEstrutura } from './rotas-estrutura.js';
 import { rotasSemana } from './rotas-semana.js';
 import { rotasReunioes } from './reunioes.js';
+import { rotasAvisos } from './rotas-avisos.js';
 import { cabecalhosSeguranca } from './seguranca-http.js';
 import { configurarAuth, instalarAuth } from './auth.js';
 import { administradorAuth } from './cadastro-chefes.js';
@@ -16,7 +17,7 @@ const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
  * Monta a aplicação. As rotas ficam por assunto: estrutura (seções e usuários), ações (diretrizes,
- * ações e pedidos de prazo), semana (sessão, atualização semanal e painel) e reuniões.
+ * ações e pedidos de prazo), semana (sessão, atualização semanal e painel), reuniões e avisos.
  */
 export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } = {}) {
   const app = express();
@@ -43,6 +44,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   const { criarDiretriz, SELECT_ACAO, acaoOut } = rotasAcoes(app, ctx);
   rotasSemana(app, { ...ctx, SELECT_ACAO, acaoOut });
   rotasReunioes(app, { ...ctx, criarDiretriz });
+  rotasAvisos(app, ctx);
 
   // ---------- Erros ----------
   app.use('/api', (req, res, next) => next(falha(404, 'Rota não encontrada.')));

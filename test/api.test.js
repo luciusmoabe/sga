@@ -21,6 +21,7 @@ test.after(async () => {
 
 const DIRETOR = 1;
 const APOIO = 2;
+const ADMINISTRADOR = 10;
 const CHEFE = { CPE: 3, COF: 4, CGP: 5, CIG: 6, CCP: 7, CPR: 8, IND: 9 };
 const SEMANA = '2026-09-22';
 
@@ -197,6 +198,42 @@ test('combinados: cadastro completo, arquivamento em vez de exclusão e aviso de
   assert.ok(gestao.data.itens.some((c) => c.id === id && c.arquivado), 'arquivado continua no histórico');
   assert.equal((await call(DIRETOR, 'DELETE', `/combinados/${id}`)).status, 404, 'não há exclusão definitiva');
   assert.equal((await call(DIRETOR, 'PUT', '/config', { combinados_frequencia: 'nunca' })).status, 400);
+});
+
+test('avisos: só Diretor e Administrador gerenciam; só o vigente aparece na janela de datas', async () => {
+  assert.equal((await call(CHEFE.CPE, 'POST', '/avisos', { texto: 'x', data_fim: '2026-09-20' })).status, 403);
+  assert.equal((await call(APOIO, 'POST', '/avisos', { texto: 'x', data_fim: '2026-09-20' })).status, 403, 'Apoio não gerencia avisos');
+  assert.equal((await call(DIRETOR, 'POST', '/avisos', { texto: '  ', data_fim: '2026-09-20' })).status, 400);
+  assert.equal((await call(DIRETOR, 'POST', '/avisos', { texto: 'Sem data fim' })).status, 400);
+  assert.equal((await call(DIRETOR, 'POST', '/avisos', { texto: 'Data fim no passado', data_fim: '2026-09-18' })).status, 400);
+  assert.equal((await call(DIRETOR, 'POST', '/avisos', { texto: 'Fim antes do início', data_inicio: '2026-09-25', data_fim: '2026-09-20' })).status, 400);
+
+  // Sem data_inicio informada, assume hoje; termina hoje, então já está vigente.
+  const vigente = await call(DIRETOR, 'POST', '/avisos', { texto: 'Aviso vigente hoje', data_fim: '2026-09-19' });
+  assert.equal(vigente.status, 201);
+  assert.equal(vigente.data.aviso.ativo, true);
+  assert.equal(vigente.data.aviso.data_inicio, '2026-09-19');
+
+  const futuro = await call(ADMINISTRADOR, 'POST', '/avisos', { texto: 'Aviso futuro', data_inicio: '2026-09-25', data_fim: '2026-09-26' });
+  assert.equal(futuro.status, 201, 'Administrador também gerencia avisos');
+
+  const atual = await call(CHEFE.CPE, 'GET', '/avisos/atual');
+  assert.equal(atual.data.aviso.texto, 'Aviso vigente hoje', 'só o vigente aparece, não o que ainda não começou');
+
+  const lista = await call(DIRETOR, 'GET', '/avisos');
+  assert.equal(lista.data.length, 2);
+  assert.equal(lista.data.find((a) => a.texto === 'Aviso futuro').vigente, false);
+  assert.equal(lista.data.find((a) => a.texto === 'Aviso vigente hoje').vigente, true);
+
+  const id = vigente.data.aviso.id;
+  const editado = await call(DIRETOR, 'PATCH', `/avisos/${id}`, { ativo: false });
+  assert.equal(editado.data.aviso.ativo, false);
+  assert.equal((await call(CHEFE.CPE, 'GET', '/avisos/atual')).data.aviso, null, 'desativado não aparece mais, mesmo dentro da janela');
+
+  assert.equal((await call(CHEFE.CPE, 'DELETE', `/avisos/${id}`)).status, 403);
+  assert.equal((await call(DIRETOR, 'DELETE', `/avisos/${id}`)).status, 200);
+  assert.equal((await call(DIRETOR, 'DELETE', `/avisos/${id}`)).status, 404, 'já excluído');
+  await call(ADMINISTRADOR, 'DELETE', `/avisos/${futuro.data.aviso.id}`);
 });
 
 let reuniaoId;
