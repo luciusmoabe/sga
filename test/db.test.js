@@ -2,6 +2,28 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPgDb, openDb } from '../server/db.js';
 
+test('PostgreSQL: presença usa chave composta sem retornar id; registros individuais retornam id', async () => {
+  const consultas = [];
+  const db = createPgDb({
+    async query(sql, params) {
+      consultas.push({ sql, params });
+      if (/insert into reuniao_participantes/i.test(sql)) {
+        if (/returning id/i.test(sql)) throw new Error('column "id" does not exist');
+        return { rows: [], rowCount: 1 };
+      }
+      return { rows: [{ id: 42 }], rowCount: 1 };
+    },
+  });
+  const presenca = await db.prepare('insert into reuniao_participantes (reuniao_id, usuario_id, nome, secao_nome) values (?,?,?,?)').run(11, 3, 'Participante', null);
+  assert.equal(presenca.changes, 1);
+  assert.equal(presenca.lastInsertRowid, undefined);
+  assert.deepEqual(consultas[0].params, [11, 3, 'Participante', null]);
+  assert.match(consultas[0].sql, /values \(\$1,\$2,\$3,\$4\)/);
+  const info = await db.prepare('insert into reuniao_informacoes (reuniao_id, texto) values (?,?)').run(11, 'Informação');
+  assert.equal(info.lastInsertRowid, 42);
+  assert.match(consultas[1].sql, /RETURNING id$/);
+});
+
 test('Vercel: ausência de PostgreSQL falha antes de criar SQLite', t => {
   const anterior = process.env.VERCEL;
   t.after(() => {

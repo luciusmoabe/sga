@@ -264,7 +264,8 @@ export function createPgDb(pool) {
         run: async (...p) => {
           let s = toPgSql(sql);
           const isInsert = /^\s*insert\s+into/i.test(sql);
-          if (isInsert && !/returning/i.test(sql) && !/\binto\s+config\b/i.test(sql)) {
+          // Estas tabelas usam chave própria/composta e não possuem coluna id.
+          if (isInsert && !/returning/i.test(sql) && !/\binto\s+(?:config|reuniao_participantes)\b/i.test(sql)) {
             s += ' RETURNING id';
           }
           const res = await query(s, p);
