@@ -3,6 +3,7 @@ import { get, patch, post, put, del } from './api.js';
 import { atualizarSessao, ehAdmin } from './estado.js';
 import { abrirForm, confirmar, esc, on, toast } from './ui.js';
 import { DIRETORIA_ADJUNTA, HORA_FECHAMENTO, ROTULO_PERFIL, ROTULO_TIPO } from './regras.js';
+import { ligarConfiguracaoAta } from './ata-cabecalho.js';
 
 const TIPO = ROTULO_TIPO;
 /** A Diretoria Adjunta é só estrutura: sem chefe, subseções nem ações; quem faz parte é Administrador. */
@@ -38,7 +39,7 @@ function formulario(opcoes) {
   }});
 }
 
-export async function estrutura(raiz, { refresh }) {
+export async function estrutura(raiz, { refresh, painel }) {
   const [secoes, usuarios, config] = await Promise.all([get('/secoes'), get('/usuarios'), get('/config')]);
   const diaAtual = config.reuniao_dia != null ? Number(config.reuniao_dia) : 2;
   const horaAtual = config.reuniao_hora || '10:00';
@@ -75,7 +76,7 @@ export async function estrutura(raiz, { refresh }) {
     <td><div class="estrutura-acoes"><button class="btn btn-sec btn-mini" data-editar-u="${u.id}" aria-label="Editar ${esc(u.nome)}">Editar</button>
     ${opcoes(u.nome, `${u.tem_login && (ehAdmin() || !protegidoParaMim(u)) ? `<button data-login-u="${u.id}">Alterar e-mail ou senha</button>` : u.tem_login ? '' : '<span class="estrutura-menu-nota">Cadastro sem acesso ao app</span>'}${u.perfil === 'administrador' ? '<span class="estrutura-menu-nota">Administrador: só o servidor altera perfil e acesso</span>' : u.perfil === 'diretor' && !ehAdmin() ? '<span class="estrutura-menu-nota">Perfil Diretor protegido: peça ao Administrador</span>' : `<button data-u="${u.id}" data-ativo="${u.ativo ? 0 : 1}">${u.ativo ? 'Desativar' : 'Reativar'} usuário</button>${u.perfil === 'diretor' ? '' : `<button class="estrutura-perigo" data-excluir-u="${u.id}">Excluir usuário</button>`}`}`)}</div></td></tr>`;
   raiz.innerHTML = `<div class="estrutura-pagina">
-    <header class="estrutura-cabecalho"><div><p class="estrutura-sobretitulo">ADMINISTRAÇÃO</p><h1>Estrutura</h1><p class="sub">Organize as seções, as pessoas e a rotina de acompanhamento.</p></div></header>
+    <header class="estrutura-cabecalho"><div><p class="estrutura-sobretitulo">ADMINISTRAÇÃO</p><h1>Configuração</h1><p class="sub">Organize as seções, as pessoas, a rotina de acompanhamento e o cabeçalho das atas.</p></div></header>
     <div class="estrutura-resumo" aria-label="Resumo dos cadastros">
       <div><strong>${secoes.filter(s=>s.ativa).length}</strong><span>Seções ativas</span></div>
       <div><strong>${usuarios.filter(u=>u.ativo).length}</strong><span>Usuários ativos</span></div>
@@ -85,6 +86,7 @@ export async function estrutura(raiz, { refresh }) {
       <button data-painel="secoes" aria-controls="estrutura-secoes">Seções</button>
       <button data-painel="usuarios" aria-controls="estrutura-usuarios">Usuários e acessos</button>
       <button data-painel="reuniao" aria-controls="estrutura-reuniao">Reunião semanal</button>
+      <button data-painel="ata" aria-controls="estrutura-ata">Configuração da ata</button>
     </nav>
     <section id="estrutura-secoes" class="estrutura-painel" aria-labelledby="titulo-secoes">
       <div class="estrutura-barra"><div><h2 id="titulo-secoes">Organização das seções</h2><p class="suave">Centros, coordenações e subseções em até três níveis, e a Diretoria Adjunta.</p></div><button class="btn btn-primario" data-a="nova">+ Nova seção</button></div>
@@ -124,7 +126,9 @@ export async function estrutura(raiz, { refresh }) {
       </form>
 
     </section>
+    <section id="estrutura-ata" class="estrutura-painel" hidden><div id="config-ata"></div></section>
   </div>`;
+  ligarConfiguracaoAta(raiz, config);
   const renderSecoes = () => {
     const html = filhos(null).map(no).join('');
     raiz.querySelector('#lista-secoes').innerHTML = html ? `<ul class="estrutura-arvore">${html}</ul>` : `<div class="estrutura-vazio"><strong>${secoes.length ? 'Nenhuma seção encontrada' : 'Sua estrutura começa aqui'}</strong><p>${secoes.length ? 'Experimente outro termo ou altere o filtro de situação.' : 'Adicione a primeira seção para organizar as responsabilidades da equipe.'}</p></div>`;
@@ -137,7 +141,7 @@ export async function estrutura(raiz, { refresh }) {
   const selecionarPainel = painel => {
     ui.painel=painel;
     raiz.querySelectorAll('[data-painel]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.painel===painel)));
-    for(const p of ['secoes','usuarios','reuniao']) { const el=raiz.querySelector(`#estrutura-${p}`); if(el) el.hidden=p!==painel; }
+    for(const p of ['secoes','usuarios','reuniao','ata']) { const el=raiz.querySelector(`#estrutura-${p}`); if(el) el.hidden=p!==painel; }
   };
   on(raiz,'click','[data-painel]',el=>selecionarPainel(el.dataset.painel));
   on(raiz,'click','[data-expandir]',el=>{const id=Number(el.dataset.expandir);ui.recolhidas.has(id)?ui.recolhidas.delete(id):ui.recolhidas.add(id);renderSecoes();raiz.querySelector(`[data-expandir="${id}"]`)?.focus();});
@@ -146,7 +150,7 @@ export async function estrutura(raiz, { refresh }) {
   }
   raiz.addEventListener('keydown',e=>{if(e.key==='Escape') {const d=e.target.closest('.estrutura-opcoes');if(d){d.open=false;d.querySelector('summary').focus();}}});
   raiz.addEventListener('click',e=>{raiz.querySelectorAll('.estrutura-opcoes[open]').forEach(d=>{if(!d.contains(e.target) || e.target.closest('button')) d.open=false;});});
-  renderSecoes();renderUsuarios();selecionarPainel(ui.painel);
+  renderSecoes();renderUsuarios();selecionarPainel(painel || ui.painel);
   const erro = (e) => toast(e.message, 'erro');
   const salvo = (msg) => { toast(msg); refresh(); };
 

@@ -25,8 +25,8 @@ const ROTAS = {
   acoes: { f: acoes, perfis: LEITURA, titulo: 'Ações' },
   prazos: { f: prazos, perfis: LEITURA, titulo: 'Pedidos de prazo' },
   pauta: { f: pauta, perfis: LEITURA, titulo: 'Pauta' },
-  estrutura: { f: estrutura, perfis: ['diretor', 'administrador'], titulo: 'Estrutura' },
-  configuracao: { f: configuracaoAta, perfis: GESTAO, titulo: 'Configuração' },
+  estrutura: { f: estrutura, perfis: ['diretor', 'administrador'], titulo: 'Configuração' },
+  configuracao: { f: (raiz, p) => est.user.perfil === 'apoio' ? configuracaoAta(raiz) : estrutura(raiz, { ...p, painel: 'ata' }), perfis: GESTAO, titulo: 'Configuração' },
   avisos: { f: avisos, perfis: ['diretor', 'administrador'], titulo: 'Avisos' },
   combinados: { f: combinados, perfis: TODOS, titulo: 'Combinados' },
   reunioes: { f: (r, p) => (p.id ? reuniaoDetalhe(r, p) : reunioes(r, p)), perfis: LEITURA, titulo: 'Reuniões e atas' },
@@ -74,8 +74,8 @@ const MENU_GESTAO = [
   ['combinados', 'Combinados'],
   ['reunioes', 'Reuniões e atas'],
   ['#Organização', 'diretor'],
-  ['estrutura', 'Estrutura', '', 'diretor'],
-  ['configuracao', 'Configuração'],
+  ['estrutura', 'Configuração', '', 'diretor'],
+  ['configuracao', 'Configuração', '', 'apoio'],
   ['avisos', 'Avisos', '', 'diretor'],
 ];
 const MENU_CHEFE = [
@@ -89,8 +89,8 @@ const MENU_CHEFE = [
   ['combinados', 'Combinados'],
   ['atas', 'Atas'],
 ];
-// O Administrador tem acesso total: o menu do Diretor, com a estrutura como "Contas e estrutura".
-const MENU_ADMIN = MENU_GESTAO.map((m) => (m[0] === '#Organização' ? ['#Administração'] : m[0] === 'estrutura' ? ['estrutura', 'Contas e estrutura'] : m[0] === 'avisos' ? ['avisos', 'Avisos'] : m));
+// O Administrador tem acesso total às abas de Configuração.
+const MENU_ADMIN = MENU_GESTAO.map((m) => (m[0] === '#Organização' ? ['#Administração'] : m[0] === 'estrutura' ? ['estrutura', 'Configuração'] : m[0] === 'avisos' ? ['avisos', 'Avisos'] : m));
 const PERFIL = ROTULO_PERFIL;
 const app = document.getElementById('app');
 
