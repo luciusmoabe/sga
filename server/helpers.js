@@ -1,5 +1,6 @@
 import { DIAS_SEM_MOVIMENTO, addDays, semaforo } from './logic.js';
 import { porNecessidade as compararNecessidade } from '../public/js/regras.js';
+import { dataNoFuso, instante } from '../public/js/datas.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -228,13 +229,15 @@ export async function cartoesReuniao(db, semana, hoje) {
   const raizes = itens.map((p) => p.secao.id);
   const [acoesRaw, pedidosRaw, atRaw, impedimentosRaw] = todosIds.length ? await Promise.all([
     db.prepare(
-      `select a.id, a.secao_id, a.titulo, a.prazo, a.status, a.prioridade, a.encerrada,
+      `select a.id, a.secao_id, a.titulo, a.prazo, a.status, a.prioridade, a.encerrada, a.concluida_em,
               coalesce((select sum(minutos) from tempo where acao_id = a.id), 0) tempo_total,
               s.sigla secao_sigla
        from acoes a join secoes s on s.id = a.secao_id
-       where a.secao_id in (${marks(todosIds)}) and a.encerrada = 0 and a.arquivada = 0 and (a.interna = 0 or a.compartilhada = 1)
+       where a.secao_id in (${marks(todosIds)}) and (a.interna = 0 or a.compartilhada = 1)
+         and ((a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0)
+           or (a.status = 'concluida' and substr(a.concluida_em, 1, 10) >= ? and substr(a.concluida_em, 1, 10) <= ?))
        order by case a.status when 'concluida' then 1 else 0 end, a.prazo`,
-    ).all(...todosIds),
+    ).all(...todosIds, addDays(semana, -8), semana),
     db.prepare(
       `select p.id, p.acao_id, a.secao_id, p.novo_prazo, p.prazo_atual, p.justificativa, a.titulo acao_titulo
        from pedidos_prazo p join acoes a on a.id = p.acao_id
@@ -264,7 +267,12 @@ export async function cartoesReuniao(db, semana, hoje) {
     }
     return m;
   };
-  const acoesPor = porCentro(acoesRaw);
+  const acoesPor = porCentro(acoesRaw.filter((a) => {
+    if (a.status !== 'concluida') return true;
+    if (!a.concluida_em) return false;
+    const dia = dataNoFuso(instante(a.concluida_em));
+    return dia >= addDays(semana, -7) && dia <= addDays(semana, -1);
+  }));
   const pedidosPor = porCentro(pedidosRaw);
   const impedimentosPor = porCentro(impedimentosRaw);
   const atPor = new Map(atRaw.map((r) => [r.secao_id, atualizacaoDe(r)]));

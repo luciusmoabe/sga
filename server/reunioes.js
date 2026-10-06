@@ -1,5 +1,6 @@
 import { FREQUENCIAS, HORA_PADRAO, LIMITE_COMBINADOS, addDays, agora, br, ehDiaReuniao, parseISO, refDiaReuniao } from './logic.js';
 import { arvoresDosCentros, cartoesReuniao, falha, h, json, permit, texto } from './helpers.js';
+import { registrosReuniao } from './reuniao-registros.js';
 
 const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 const PRIO = { alta: 'alta', media: 'média', baixa: 'baixa' };
@@ -33,6 +34,7 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
     if (!r) throw falha(404, 'Reunião não encontrada.');
     return fn(r);
   });
+  const { complemento, registrarVersao } = registrosReuniao(app, { q, q1, run, agoraISO, comReuniao });
 
   // ---------- Combinados da reunião ----------
   app.get('/api/combinados', h(async (req) => {
@@ -166,10 +168,11 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
     const r = await reuniaoOuErro(req.params.id);
     if (req.user.perfil === 'chefe') {
       if (r.status !== 'enviada') throw falha(404, 'Reunião não encontrada.');
-      return { id: r.id, data: r.data, status: r.status, ata_texto: r.ata_texto, combinados_snapshot: json(r.combinados_snapshot, []) };
+      return { id: r.id, data: r.data, semana: r.semana, status: r.status, enviada_em: r.enviada_em, ata_texto: r.ata_texto, combinados_snapshot: json(r.combinados_snapshot, []), ...await complemento(req.user, r) };
     }
     return {
       ...fmt(r),
+      ...await complemento(req.user, r),
       decisoes: await q(`select d.*, s.sigla secao_sigla, s.nome secao_nome from decisoes d left join secoes s on s.id = d.secao_id where d.reuniao_id = ? order by d.id`, r.id),
       novas_acoes: await q(`select g.*, (select count(*) from acoes a where a.diretriz_id = g.id) total_acoes from diretrizes g where g.reuniao_id = ? order by g.id`, r.id),
       pedidos_decididos: await q(
@@ -226,6 +229,18 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
     const { dia, hora } = await cfgAoVivo();
     const d = parseISO(r.data);
     const linhas = [`ATA DA REUNIÃO SEMANAL — ${br(r.data)} (${DIAS[d.getUTCDay()]})`, ''];
+    if (r.data !== r.semana) linhas.push(`Data prevista / referência semanal: ${br(r.semana)}. Reunião ${r.data < r.semana ? 'antecipada' : 'realizada após a data prevista'} para ${br(r.data)}.`, '');
+    const presentes = await q('select nome, secao_nome from reuniao_participantes where reuniao_id = ? order by nome', r.id);
+    linhas.push('Participantes:');
+    if (presentes.length) presentes.forEach((p) => linhas.push(`- ${p.nome}${p.secao_nome ? ` (${p.secao_nome})` : ''}`));
+    else linhas.push('- Presença não registrada.');
+    linhas.push('');
+    const informacoes = await q('select texto from reuniao_informacoes where reuniao_id = ? order by id', r.id);
+    if (informacoes.length) {
+      linhas.push('Informações e comunicados:');
+      informacoes.forEach((i) => linhas.push(`- ${i.texto}`));
+      linhas.push('');
+    }
     // Os combinados vigentes já ficam guardados em `combinados_snapshot` e aparecem à parte na tela da
     // reunião; não entram no texto da ata para não duplicar o que já está registrado ali.
     const dec = await q(`select d.texto, s.sigla from decisoes d left join secoes s on s.id = d.secao_id where d.reuniao_id = ? order by d.id`, r.id);
@@ -299,6 +314,11 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       if (r.status === 'em_andamento') throw falha(409, 'A ata só existe depois que a reunião é encerrada.');
       const t = texto(req.body?.ata_texto, 20000);
       if (!t) throw falha(400, 'A ata não pode ficar vazia.');
+      if (req.body?.ata_base !== undefined && req.body.ata_base !== r.ata_texto) throw falha(409, 'A ata foi alterada por outra pessoa. Recarregue antes de salvar.');
+      if (r.status === 'enviada' && t !== r.ata_texto) {
+        if (!(await q1('select id from ata_revisoes where reuniao_id = ? limit 1', r.id))) await registrarVersao(r, req.user, r.ata_texto);
+        await registrarVersao(r, req.user, t);
+      }
       await run('update reunioes set ata_texto = ? where id = ?', t, r.id);
       return fmt(await q1('select * from reunioes where id = ?', r.id));
     });
@@ -308,6 +328,7 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
     return comReuniao(req.params.id, async (r) => {
       if (r.status === 'em_andamento') throw falha(409, 'Encerre a reunião antes de excluir a ata.');
       await run('delete from decisoes where reuniao_id = ?', r.id);
+      for (const tabela of ['ata_sugestoes', 'ata_revisoes', 'reuniao_informacoes', 'reuniao_participantes']) await run(`delete from ${tabela} where reuniao_id = ?`, r.id);
       await run('update diretrizes set reuniao_id = null where reuniao_id = ?', r.id);
       await run('update pedidos_prazo set reuniao_id = null where reuniao_id = ?', r.id);
       await run('delete from reunioes where id = ?', r.id);
@@ -318,6 +339,7 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
     return comReuniao(req.params.id, async (r) => {
       if (r.status !== 'rascunho') throw falha(409, 'A ata precisa estar em rascunho para ser enviada.');
       // Protótipo: não há envio de e-mail. A ata passa a ficar visível aos chefes na tela "Atas".
+      await registrarVersao(r, req.user, r.ata_texto);
       await run(`update reunioes set status = 'enviada', enviada_em = ? where id = ?`, agoraISO(), r.id);
       return fmt(await q1('select * from reunioes where id = ?', r.id));
     });

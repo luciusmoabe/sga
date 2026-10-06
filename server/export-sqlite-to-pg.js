@@ -50,7 +50,7 @@ set constraints all deferred;
   // ALTER identity é transacional, ao contrário de setval.
   sql += `set constraints all immediate;
 `;
-  for (const tabela of TABELAS_APP.filter(t => t !== 'config')) {
+  for (const tabela of TABELAS_APP.filter(t => !['config', 'reuniao_participantes'].includes(t))) {
     const { maior } = db.prepare(`select coalesce(max(id), 0) as maior from ${tabela}`).get();
     sql += `alter table ${tabela} alter column id restart with ${maior + 1};
 `;

@@ -67,6 +67,8 @@ test('PostgreSQL: permissões públicas e importação segura', { timeout: 12000
     const arquivo = path.join(pasta, 'origem.db');
     const origem = openDb(arquivo, { databaseUrl: null });
     await seed(origem);
+    await origem.exec(`insert into reuniao_participantes (reuniao_id, usuario_id, nome, secao_nome)
+      select id, 3, 'Ana Ribeiro', 'CPE' from reunioes order by id limit 1;`);
     await origem.exec("update secoes set pai_id = 2 where id = 1; update acoes set titulo = 'Teste ''aspas'' e barra\nlinha' where id = 1");
     const antes = await origem.prepare('select * from secoes order by id').all();
     await origem.close();
@@ -81,6 +83,8 @@ test('PostgreSQL: permissões públicas e importação segura', { timeout: 12000
     try {
       await client.query(sql);
       assert.deepEqual((await client.query('select * from secoes order by id')).rows, antes);
+      assert.deepEqual((await client.query('select usuario_id, nome, secao_nome from reuniao_participantes')).rows,
+        [{ usuario_id: 3, nome: 'Ana Ribeiro', secao_nome: 'CPE' }]);
       assert.equal((await client.query('select titulo from acoes where id = 1')).rows[0].titulo, "Teste 'aspas' e barra\nlinha");
       await assert.rejects(client.query(sql), /destino vazio/);
       await client.query('rollback');

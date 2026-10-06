@@ -53,6 +53,11 @@ export async function excluirCadastro(db, tabela, id) {
           ['combinados','criado_por','combinados'],
           ['reunioes','criada_por','reuniões'],
           ['decisoes','criada_por','decisões de reunião'],
+          ['reuniao_informacoes','criado_por','informações de reunião'],
+          ['reuniao_participantes','usuario_id','presenças em reunião'],
+          ['ata_sugestoes','usuario_id','sugestões de revisão de ata'],
+          ['ata_sugestoes','respondida_por','respostas a sugestões de ata'],
+          ['ata_revisoes','criado_por','versões publicadas de ata'],
         ];
         const historico=[];
         for (const [origem,coluna,rotulo] of referencias) {

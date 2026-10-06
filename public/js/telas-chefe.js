@@ -273,6 +273,7 @@ export async function minhasAcoes(raiz) {
           <div class="campo"><label for="na-prazo">Prazo</label><input id="na-prazo" type="date" name="prazo" required min="${est.boot.hoje}" value="${addDias(est.boot.hoje, 7)}"></div>
           <div class="campo"><label for="na-prio">Prioridade</label><select id="na-prio" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div>
         </div>
+        <div class="escolha"><label><input type="checkbox" name="demanda_diretor" value="1"> Demanda do Diretor</label></div>
         ${est.user.perfil === 'chefe' ? '<div class="escolha" style="margin-top:8px"><label><input type="checkbox" name="interna" value="1"> Ação interna da subseção (não exibida na pauta executiva do Diretor)</label></div>' : ''}`,
       rotulo: 'Criar ação',
       aoEnviar: async (d) => {
@@ -283,6 +284,7 @@ export async function minhasAcoes(raiz) {
           prazo: d.prazo,
           prioridade: d.prioridade,
           interna: d.interna === '1',
+          demanda_diretor: d.demanda_diretor === '1',
         });
         toast('Ação criada com sucesso.');
         recarregar().catch(erro);

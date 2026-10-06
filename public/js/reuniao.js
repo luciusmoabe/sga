@@ -1,7 +1,7 @@
 // Modo Reunião: tela cheia para a TV da sala, conduzida pelo Diretor ou pelo Apoio.
 // Abre com os Combinados, mostra as seções por ordem de necessidade e registra decisões e ações ao vivo.
 // Ficam ocultos na projeção, por padrão: tempo em minutos e ações internas de subseções.
-import { del, get, patch, post } from './api.js';
+import { del, get, patch, post, put } from './api.js';
 import { itensDoRelato, resumoInternas } from './relato-vista.js';
 import { est, hoje } from './estado.js';
 import { $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, parseISO, plural, sem, STATUS, toast } from './ui.js';
@@ -35,6 +35,7 @@ export async function inicioReuniao(raiz) {
         <li>${plural(p.resumo.pedidos, 'pedido de novo prazo aguarda', 'pedidos de novo prazo aguardam')} decisão.</li>
         <li>${plural(comb.ativos, 'combinado ativo abre', 'combinados ativos abrem')} a reunião.</li>
       </ul>
+      ${hoje() < semana ? `<div class="info">Esta reunião será antecipada para ${br(hoje())}. A referência semanal permanece ${br(semana)}: os relatos dessa semana serão usados e a próxima reunião continua prevista para ${br(addDias(semana, 7))}.</div>` : ''}
       <p class="suave pequeno">Ligue o notebook à TV antes de iniciar. Ao começar, a tela passa para o modo de apresentação; use as setas do teclado para avançar.</p>
       <button class="btn btn-primario" id="iniciar-reuniao">Iniciar reunião</button></div>`;
   const botao = $('#iniciar-reuniao', raiz);
@@ -77,7 +78,11 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
         <button class="btn btn-fantasma" data-a="visao" title="Visão geral">Visão geral</button>
         ${S.cartoes.map((c, i) => `<button class="tv-passo cor-${c.cor} ${S.passo === 'secao' && S.idx === i ? 'atual' : ''}" data-a="secao" data-i="${i}" aria-label="${esc(c.secao.sigla || c.secao.nome)}: ${c.cor}" title="${esc(c.secao.nome)}"></button>`).join('')}
       </div>
-      <div class="linha"><button class="btn btn-fantasma" data-a="sair">Sair sem encerrar</button><button class="btn btn-sec" data-a="encerrar">Encerrar reunião</button></div></header>`;
+      <div class="linha"><button class="btn btn-sec" data-a="participantes">Presença (${S.reuniao.participantes.length})</button><button class="btn btn-sec" data-a="informacao">Registrar informação</button><button class="btn btn-fantasma" data-a="sair">Sair sem encerrar</button><button class="btn btn-sec" data-a="encerrar">Encerrar reunião</button></div>${registros()}</header>`;
+
+  const registros = () => `${S.reuniao.data !== S.reuniao.semana ? `<div class="tv-caixa suave">Referência semanal: ${br(S.reuniao.semana)} · realizada em ${br(S.reuniao.data)}</div>` : ''}
+    ${S.reuniao.informacoes.length ? `<details class="tv-cartao tv-informacoes"><summary>Informações e comunicados (${S.reuniao.informacoes.length})</summary>
+      ${S.reuniao.informacoes.map((i) => `<div class="tv-decisao"><span style="white-space:pre-wrap">${esc(i.texto)}</span><span class="tv-decisao-acoes"><button type="button" class="btn btn-fantasma btn-mini" data-editar-info="${i.id}">Editar</button><button type="button" class="btn btn-fantasma btn-mini" data-excluir-info="${i.id}">Excluir</button></span></div>`).join('')}</details>` : ''}`;
 
   const relatoLista = (arr, vazio) => (arr.length ? `<ul>${arr.join('')}</ul>` : `<p class="nada">${vazio}</p>`);
   const li = (t, cls = '') => `<li class="${cls}">${esc(t)}</li>`;
@@ -145,7 +150,7 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
             <span class="linha"><button class="btn btn-ok" data-a="decidir" data-p="${p.id}" data-v="1">Aprovar</button><button class="btn btn-perigo" data-a="decidir" data-p="${p.id}" data-v="0">Recusar</button></span></div>`).join('')}
           <div class="tv-caixa"><h3>Ações da seção</h3></div>
           ${c.acoes.length ? c.acoes.map((a) => `<button type="button" class="tv-acao ${a.atrasada ? 'atrasada' : ''}" data-abrir-acao="${a.id}"><span class="linha1"><b>${esc(a.titulo)}</b><span>${STATUS[a.status]}</span></span>
-            <small>Prazo ${br(a.prazo)}${a.atrasada ? ' · atrasada' : ''}${S.tempo ? '' : ''}</small>${S.tempo ? `<span class="tv-tempo">Tempo: ${fmtMin(a.tempo_total)}</span>` : ''}</button>`).join('')
+            <small>Prazo ${br(a.prazo)}${a.status === 'concluida' ? ` · concluída em ${dataHora(a.concluida_em)}` : ''}${a.atrasada ? ' · atrasada' : ''}</small>${S.tempo ? `<span class="tv-tempo">Tempo: ${fmtMin(a.tempo_total)}</span>` : ''}</button>`).join('')
             : '<p class="nada">Nenhuma ação aberta.</p>'}
           ${decs.length ? `<div class="tv-caixa"><h3>Decisões desta seção</h3></div><div class="tv-decisoes">${decs.map((d) => `<div class="tv-decisao">
             <span>${esc(d.texto)}</span>
@@ -166,6 +171,30 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
   const irPara = (passo, idx = S.idx) => { S.passo = passo; S.idx = idx; desenhar(); };
   const secaoAtual = () => (S.passo === 'secao' ? S.cartoes[S.idx] : null);
   const erro = (e) => toast(e.message, 'erro');
+
+  const formInformacao = (info = null) => abrirForm({
+    titulo: info ? 'Editar informação' : 'Informação ou comunicado para a ata',
+    corpo: `<p class="suave pequeno">Registre informes, contexto ou assuntos discutidos. Este texto fará parte da ata.</p><div class="campo"><label for="ri-texto">Informação</label><textarea id="ri-texto" name="texto" maxlength="2000" required>${esc(info?.texto || '')}</textarea></div>`,
+    aoEnviar: async (d) => {
+      if (info) await patch(`/reunioes/${S.id}/informacoes/${info.id}`, { texto: d.texto });
+      else await post(`/reunioes/${S.id}/informacoes`, { texto: d.texto });
+      await recarregar(); desenhar(); toast('Informação registrada.');
+    },
+  });
+  const formParticipantes = async () => {
+    const candidatos = await get(`/reunioes/${S.id}/candidatos`);
+    const presentes = new Set(S.reuniao.participantes.map((p) => p.usuario_id));
+    abrirForm({
+      titulo: 'Quem participou da reunião?',
+      corpo: `<p class="suave pequeno">Marque quem está presente, incluindo titulares e suplentes. Chefes presentes poderão sugerir revisões após a publicação da ata.</p><div class="escolha">${candidatos.map((u) => `<label><input type="checkbox" name="participante" value="${u.id}" ${presentes.has(u.id) ? 'checked' : ''}> ${esc(u.nome)}${u.secao_nome ? ` · ${esc(u.secao_nome)}` : ''}</label>`).join('')}</div>`,
+      rotulo: 'Salvar presença',
+      aoEnviar: async (d, form) => {
+        const usuarios = [...form.querySelectorAll('input[name=participante]:checked')].map((el) => Number(el.value));
+        await put(`/reunioes/${S.id}/participantes`, { usuarios });
+        await recarregar(); desenhar(); toast('Presença registrada.');
+      },
+    });
+  };
 
   const formAcao = () => {
     const c = secaoAtual();
@@ -222,6 +251,14 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
     const d = S.reuniao.decisoes.find((x) => x.id === Number(el.dataset.editarDec));
     if (d) formDecisaoEditar(d);
   });
+  on(raiz, 'click', '[data-editar-info]', (el) => {
+    const info = S.reuniao.informacoes.find((i) => i.id === Number(el.dataset.editarInfo));
+    if (info) formInformacao(info);
+  });
+  on(raiz, 'click', '[data-excluir-info]', async (el) => {
+    if (!(await confirmar({ titulo: 'Excluir informação', texto: 'Esta informação deixará de fazer parte da reunião e da ata.', rotulo: 'Excluir', perigo: true }))) return;
+    try { await del(`/reunioes/${S.id}/informacoes/${el.dataset.excluirInfo}`); await recarregar(); desenhar(); } catch (e) { erro(e); }
+  });
   on(raiz, 'click', '[data-excluir-dec]', async (el) => {
     const ok = await confirmar({ titulo: 'Excluir decisão', texto: 'Isso apaga permanentemente esta decisão registrada na reunião.', rotulo: 'Excluir decisão', perigo: true });
     if (!ok) return;
@@ -243,6 +280,8 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
       else if (a === 'combinados') irPara('abertura');
       else if (a === 'tempo') { S.tempo = !S.tempo; desenhar(); }
       else if (a === 'acao-nova') formAcao();
+      else if (a === 'informacao') formInformacao();
+      else if (a === 'participantes') await formParticipantes();
       else if (a === 'decisao') formDecisao(false);
       else if (a === 'decisao-geral') formDecisao(true);
       else if (a === 'sair') location.hash = '#/painel';
@@ -252,7 +291,7 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
         await recarregar();
         desenhar();
       } else if (a === 'encerrar') {
-        if (await confirmar({ titulo: 'Encerrar a reunião', texto: 'A ata será montada em rascunho, com as decisões e as novas ações, para revisão antes de enviar aos chefes.', rotulo: 'Encerrar e montar a ata' })) {
+        if (await confirmar({ titulo: 'Encerrar a reunião', texto: `A ata será montada com a presença, as informações, as decisões e as novas ações.${S.reuniao.participantes.length ? '' : ' A presença ainda não foi registrada: registre quem participou para permitir sugestões de revisão da ata.'}`, rotulo: 'Encerrar e montar a ata' })) {
           await post(`/reunioes/${S.id}/encerrar`);
           location.hash = `#/reunioes/${S.id}`;
         }

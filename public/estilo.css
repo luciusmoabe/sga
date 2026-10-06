@@ -1182,3 +1182,12 @@ body.carregando::before {
   .cartao.centro .btn { width: 100%; justify-content: center; }
   #form-dir > .btn-primario { width: 100%; min-height: 50px; justify-content: center; }
 }
+/* Controles de senha e edição do checklist. */
+.senha-com-olho { position: relative; }
+.senha-com-olho input { padding-right: 48px; }
+.senha-olho { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 8px; display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; }
+.senha-olho[aria-pressed=true] { color: var(--green); }
+.checklist-texto { flex: 1; min-width: 0; overflow-wrap: anywhere; text-align: left; background: transparent; border: 0; color: inherit; font: inherit; cursor: text; padding: 4px; }
+.checklist-texto:hover, .checklist-texto:focus-visible { background: var(--bg); text-decoration: underline; }
+.item.previsto [data-texto-check] { flex: 1; min-width: 0; width: 0; }
+.tv-informacoes { width: 100%; max-height: 24vh; overflow-y: auto; }

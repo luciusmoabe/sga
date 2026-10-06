@@ -73,6 +73,13 @@ const ESPERADAS = [
   'PUT /api/atualizacao',
   'PUT /api/config',
   'PUT /api/reunioes/:id/ata',
+  'GET /api/reunioes/:id/candidatos',
+  'PUT /api/reunioes/:id/participantes',
+  'POST /api/reunioes/:id/informacoes',
+  'PATCH /api/reunioes/:id/informacoes/:infoId',
+  'DELETE /api/reunioes/:id/informacoes/:infoId',
+  'POST /api/reunioes/:id/sugestoes',
+  'POST /api/reunioes/:id/sugestoes/:sugestaoId/responder',
 ];
 
 test('a API expõe exatamente as rotas esperadas, sem duplicidade', async (t) => {

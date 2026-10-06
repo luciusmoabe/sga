@@ -58,10 +58,10 @@ const impedimentoHTML = (i) => `<div class="impedimento ${i.aberto ? '' : 'resol
 // ---------- Checklist (apoio visual; quem registra tempo e muda status também mexe aqui) ----------
 /** Mesma regra de quem gerencia tempo e status: o chefe da seção (se enxerga a ação, é da sua árvore) e o Administrador. */
 const gereChecklist = () => est.user?.perfil === 'chefe' || ehAdmin();
-const checklistItemHTML = (it) => `<div class="item previsto" data-checklist-id="${it.id}">
-  <label><input type="checkbox" data-marcar-check="${it.id}" ${it.concluido ? 'checked' : ''} ${gereChecklist() ? '' : 'disabled'}>
-    <span style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</span></label>
-  ${gereChecklist() ? `<button type="button" class="btn btn-fantasma btn-mini" data-excluir-check="${it.id}" aria-label="Excluir item">Excluir</button>` : ''}
+const checklistItemHTML = (it, editavel) => `<div class="item previsto" data-checklist-id="${it.id}">
+  <input type="checkbox" aria-label="${it.concluido ? 'Reabrir' : 'Concluir'} item: ${esc(it.texto)}" data-marcar-check="${it.id}" ${it.concluido ? 'checked' : ''} ${editavel ? '' : 'disabled'}>
+  ${editavel ? `<button type="button" class="checklist-texto" data-editar-check="${it.id}" title="Editar item" style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</button>` : `<span style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</span>`}
+  ${editavel ? `<button type="button" class="btn btn-fantasma btn-mini" data-excluir-check="${it.id}" aria-label="Excluir item">Excluir</button>` : ''}
 </div>`;
 /** Badges do topo e bloco do checklist: extraídos para poder atualizar só essas partes do diálogo
  *  (marcar/adicionar/excluir item não fecha e reabre a tela toda). */
@@ -72,7 +72,7 @@ const badgesHTML = (a) => `${pilulaStatus(a)}
   <span class="suave pequeno">${esc(a.secao_sigla)} · ${esc(a.secao_nome)}</span>`;
 const checklistBlocoHTML = (a) => `
   <h3 style="margin:12px 0 6px">Checklist${a.checklist.length ? ` <span class="suave pequeno">(${a.checklist_feitos}/${a.checklist_total})</span>` : ''}</h3>
-  ${a.checklist.length ? `<div class="itens">${a.checklist.map(checklistItemHTML).join('')}</div>` : '<p class="suave pequeno">Nenhum item no checklist.</p>'}
+  ${a.checklist.length ? `<div class="itens">${a.checklist.map((it) => checklistItemHTML(it, gereChecklist() && !a.encerrada)).join('')}</div>` : '<p class="suave pequeno">Nenhum item no checklist.</p>'}
   ${gereChecklist() && !a.encerrada ? `<div class="add-linha"><input id="novo-check" placeholder="Novo item do checklist" maxlength="200" aria-label="Novo item do checklist"><button type="button" class="btn btn-sec" data-add-check>Adicionar</button></div>` : ''}`;
 
 // ---------- Ao direcionar: ações já planejadas para o mesmo prazo ----------
@@ -173,6 +173,7 @@ export async function abrirAcao(id, aoMudar) {
         <span class="banner-origem-icone">🎯</span>
         <div>
           <strong>Demandada pelo Diretor</strong>
+          ${a.demanda_diretor && !a.diretriz_id ? '<div class="detalhes">Origem informada pela seção.</div>' : ''}
           <div class="detalhes">Determinada em ${dataHora(a.demandado_em || a.criada_em)}${a.demandado_por_nome ? ` por ${esc(a.demandado_por_nome)}` : ''}${a.reuniao_semana ? ` · Reunião de ${br(a.reuniao_semana)}` : ''}</div>
         </div>
       </div>` : (a.interna ? `
@@ -214,7 +215,7 @@ export async function abrirAcao(id, aoMudar) {
     ${a.pode_editar ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Editar ação</button>'
       : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Alterar prazo</button>' : ''}
     ${aceitaRedirecionar(a) ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-redirecionar>Redirecionar para outra seção</button>' : ''}
-    ${!a.demandada_diretor || ehAdmin() ? `
+    ${!a.demandada_diretor || (a.demanda_diretor && !a.diretriz_id) || ehAdmin() ? `
       <div class="linha" style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line);align-items:center">
         ${a.arquivada
           ? `<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar ação</button>`
@@ -249,6 +250,28 @@ export async function abrirAcao(id, aoMudar) {
         dlg.querySelector('#acao-checklist-bloco').innerHTML = checklistBlocoHTML(a);
         aoMudar?.(); // atualiza a lista de quem chamou (ex.: selo na tela de Minhas ações) em segundo plano
       };
+      on(dlg, 'click', '[data-editar-check]', (el) => {
+        if (a.encerrada) return;
+        const id = Number(el.dataset.editarCheck);
+        const item = a.checklist.find((x) => x.id === id);
+        const linha = el.closest('[data-checklist-id]');
+        linha.innerHTML = `<input data-texto-check maxlength="200" aria-label="Texto do item" value="${esc(item.texto)}"><button type="button" class="btn btn-sec btn-mini" data-salvar-check="${id}">Salvar</button><button type="button" class="btn btn-fantasma btn-mini" data-cancelar-check>Cancelar</button>`;
+        linha.querySelector('input').focus();
+      });
+      on(dlg, 'click', '[data-cancelar-check]', atualizarChecklist);
+      on(dlg, 'keydown', '[data-texto-check]', (el, ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); el.parentElement.querySelector('[data-salvar-check]').click(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); atualizarChecklist(); }
+      });
+      on(dlg, 'click', '[data-salvar-check]', async (el) => {
+        const id = Number(el.dataset.salvarCheck);
+        el.disabled = true;
+        try {
+          const item = await patch(`/acoes/${a.id}/checklist/${id}`, { texto: el.parentElement.querySelector('input').value });
+          a.checklist[a.checklist.findIndex((x) => x.id === id)] = item;
+          atualizarChecklist();
+        } catch (e) { el.disabled = false; toast(e.message, 'erro'); }
+      });
       on(dlg, 'click', '[data-add-check]', async () => {
         const campo = dlg.querySelector('#novo-check');
         const t = campo.value.trim();

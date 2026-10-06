@@ -4,6 +4,7 @@ import { est, podeOperar } from './estado.js';
 import { br, confirmar, dataHora, diaSemana, esc, on, plural, toast, vazio } from './ui.js';
 import { baixarPdfAta } from './pdf-ata.js';
 import { blocosDaAta } from './ata-marcacao.js';
+import { ligarRevisaoAta } from './ata-revisao.js';
 
 const ST = { em_andamento: 'Em andamento', rascunho: 'Ata em rascunho', enviada: 'Ata enviada' };
 const cls = { em_andamento: 'st-em_andamento', rascunho: 'st-bloqueada', enviada: 'st-concluida' };
@@ -87,6 +88,8 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
       <div class="cartao"><h2>Decisões</h2>${lista(r.decisoes, (d) => `<b>${esc(d.secao_sigla || 'Geral')}</b> · ${esc(d.texto)}`)}</div>
       <div class="cartao"><h2>Novas ações</h2>${lista(r.novas_acoes, (g) => `${esc(g.titulo)} <span class="suave pequeno">· ${g.destino === 'todos' ? 'todos os Centros' : plural(g.total_acoes, 'seção', 'seções')} · prazo ${br(g.prazo)}</span>`)}</div>
       <div class="cartao"><h2>Pedidos de prazo decididos</h2>${lista(r.pedidos_decididos, (p) => `<b>${esc(p.secao_sigla)}</b> · ${esc(p.acao_titulo)}: ${br(p.novo_prazo)} ${p.status}`)}</div>
+      <div class="cartao"><h2>Informações e comunicados</h2>${lista(r.informacoes, (i) => esc(i.texto))}</div>
+      <div class="cartao"><h2>Participantes</h2>${lista(r.participantes, (p) => `${esc(p.nome)}${p.secao_nome ? ` · ${esc(p.secao_nome)}` : ''}`)}</div>
     </div>
     <div class="espaco nao-imprimir"></div>
     <div class="cartao">
@@ -107,6 +110,7 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
         <div class="linha nao-imprimir" style="margin-top:10px"><button class="btn btn-primario" id="salvar">Salvar alterações</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
       : r.status === 'enviada' ? `<div class="ata">${renderizarAta(r.ata_texto)}</div><p class="suave pequeno">Enviada em ${dataHora(r.enviada_em)}.</p>`
       : '<p class="suave">A ata será montada quando a reunião for encerrada.</p>'}</div>`;
+  const atualizarRevisao = ligarRevisaoAta(raiz, r);
   raiz.querySelector('#pdf-ata')?.addEventListener('click', async (ev) => {
     const botao = ev.currentTarget;
     botao.disabled = true;
@@ -120,7 +124,12 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
   const erro = (e) => toast(e.message, 'erro');
   const texto = () => raiz.querySelector('#ata').value;
   ligarBarraFormatacao(raiz);
-  raiz.querySelector('#salvar').addEventListener('click', async () => { try { await put(`/reunioes/${id}/ata`, { ata_texto: texto() }); toast(r.status === 'enviada' ? 'Alterações salvas.' : 'Rascunho salvo.'); } catch (e) { erro(e); } });
+  const salvar = async () => {
+    const salva = await put(`/reunioes/${id}/ata`, { ata_texto: texto(), ata_base: r.ata_texto });
+    r.ata_texto = salva.ata_texto;
+    await atualizarRevisao?.();
+  };
+  raiz.querySelector('#salvar').addEventListener('click', async () => { try { await salvar(); toast(r.status === 'enviada' ? 'Alterações salvas.' : 'Rascunho salvo.'); } catch (e) { erro(e); } });
   raiz.querySelector('#excluir').addEventListener('click', async () => {
     if (!(await confirmar({ titulo: 'Excluir a ata', texto: 'A reunião, a ata e as decisões registradas serão apagadas e não poderão ser recuperadas. As ações criadas na reunião continuam existindo.', rotulo: 'Excluir ata', perigo: true }))) return;
     try { await del(`/reunioes/${id}`); toast('Ata excluída.'); location.hash = '#/reunioes'; } catch (e) { erro(e); }
@@ -128,7 +137,7 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
   if (r.status !== 'rascunho') return;
   raiz.querySelector('#enviar').addEventListener('click', async () => {
     if (!(await confirmar({ titulo: 'Enviar a ata', texto: 'Depois de enviada, a ata fica disponível para todos os chefes. Você ainda poderá corrigi-la depois.', rotulo: 'Enviar aos chefes' }))) return;
-    try { await put(`/reunioes/${id}/ata`, { ata_texto: texto() }); await post(`/reunioes/${id}/enviar-ata`); toast('Ata enviada aos chefes.'); refresh(); } catch (e) { erro(e); }
+    try { await salvar(); await post(`/reunioes/${id}/enviar-ata`); toast('Ata enviada aos chefes.'); refresh(); } catch (e) { erro(e); }
   });
   raiz.querySelector('#reabrir').addEventListener('click', async () => {
     try { await post(`/reunioes/${id}/reabrir`); location.hash = `#/reuniao/${id}`; } catch (e) { erro(e); }
@@ -142,6 +151,7 @@ export async function atas(raiz, { id }) {
     raiz.innerHTML = `<div class="cabeca"><div><a href="#/atas" class="pequeno nao-imprimir">← Atas</a><h1>Ata de ${br(r.data)}</h1></div>
       <div class="acoes-topo"><button type="button" class="btn btn-sec" id="pdf-ata">Baixar PDF</button></div></div>
       <div class="ata">${renderizarAta(r.ata_texto)}</div>`;
+    ligarRevisaoAta(raiz, r);
     raiz.querySelector('#pdf-ata').addEventListener('click', async (ev) => {
       const botao = ev.currentTarget;
       botao.disabled = true;

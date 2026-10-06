@@ -130,15 +130,24 @@ async function telaEntrada({ expirada = false } = {}) {
         <div class="campo"><label for="login-email">E-mail</label>
         <input id="login-email" name="email" type="email" autocomplete="username" maxlength="254" required></div>
         <div class="campo"><label for="login-password">Senha</label>
-        <input id="login-password" name="senha" type="password" autocomplete="current-password" maxlength="1024" required></div>
+        <div class="senha-com-olho"><input id="login-password" name="senha" type="password" autocomplete="current-password" maxlength="1024" required>
+        <button type="button" class="senha-olho" id="mostrar-senha" aria-label="Mostrar senha" aria-controls="login-password" aria-pressed="false" title="Mostrar senha"><svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
         <p id="login-erro" role="alert" aria-live="polite"></p>
         <button class="btn btn-primario btn-entrar" type="submit">Entrar <span aria-hidden="true">→</span></button>
       </form><p class="login-ajuda">Para solicitar acesso ou redefinir sua senha, contate o administrador do Agilis.</p>
       </div></div>`;
     const form = $('#login-senha');
+    $('#mostrar-senha').addEventListener('click', (e) => {
+      const campo = $('#login-password');
+      const mostrar = campo.type === 'password';
+      campo.type = mostrar ? 'text' : 'password';
+      e.currentTarget.setAttribute('aria-pressed', String(mostrar));
+      e.currentTarget.setAttribute('aria-label', mostrar ? 'Ocultar senha' : 'Mostrar senha');
+      e.currentTarget.title = mostrar ? 'Ocultar senha' : 'Mostrar senha';
+    });
     form.addEventListener('submit', async e => {
       e.preventDefault();
-      const botao = form.querySelector('button');
+      const botao = form.querySelector('button[type=submit]');
       if (botao.disabled) return;
       botao.disabled = true;
       botao.textContent = 'Entrando…';

@@ -67,7 +67,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     movimentada_em: a.movimentada_em || a.criada_em,
     // Em curso e sem nenhuma movimentação há DIAS_SEM_MOVIMENTO dias ou mais (ver movimentou).
     parada: a.status !== 'concluida' && !a.encerrada && !a.arquivada && (a.movimentada_em || a.criada_em) < limiteParada(),
-    demandada_diretor: !!a.diretriz_id || a.demandado_por_perfil === 'diretor',
+    demandada_diretor: !!a.demanda_diretor || !!a.diretriz_id || a.demandado_por_perfil === 'diretor',
     demandado_em: a.demandado_em || a.criada_em,
     demandado_por_nome: a.demandado_por_nome,
     reuniao_semana: a.reuniao_semana,
@@ -267,15 +267,18 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     }
     const detalhe = texto(b.detalhe, 2000) || null;
     const interna = b.interna !== undefined ? (b.interna ? 1 : 0) : 0;
+    if (b.demanda_diretor !== undefined && typeof b.demanda_diretor !== 'boolean') throw falha(400, 'Informe se a ação é demanda do Diretor.');
+    const demanda = b.demanda_diretor === true ? 1 : 0;
+    if (demanda && interna) throw falha(400, 'Uma demanda do Diretor deve ser visível na pauta. Desmarque ação interna.');
     res.status(201);
     const id = (await run(
-      `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, interna, criada_em, criado_por)
-       values (null, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      secaoId, titulo, detalhe, b.prazo, b.prazo, prioridade, interna, agoraISO(), req.user.id,
+      `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, interna, criada_em, criado_por, demanda_diretor)
+       values (null, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      secaoId, titulo, detalhe, b.prazo, b.prazo, prioridade, interna, agoraISO(), req.user.id, demanda,
     )).lastInsertRowid;
     await run(
       'insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
-      id, req.user.id, `Ação criada pela seção (${req.user.nome}).`, agoraISO(),
+      id, req.user.id, `Ação criada pela seção (${req.user.nome}).${demanda ? ' Demanda do Diretor informada pela seção.' : ''}`, agoraISO(),
     );
     return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, id));
   }));
