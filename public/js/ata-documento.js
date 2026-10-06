@@ -1,10 +1,10 @@
 // Conversão entre o documento visual e a marcação textual já usada pelas atas e pelo PDF.
-import { blocosDaAta, segmentosInline, ehTituloAta } from './ata-marcacao.js';
+import { blocosDaAta, segmentosInline, segmentosDaLinhaAta, ehTituloAta } from './ata-marcacao.js';
 
 export function deltaDaAta(texto) {
   const ops = [];
   const linha = (t, lista) => {
-    for (const s of segmentosInline(t)) {
+    for (const s of lista ? segmentosInline(t) : segmentosDaLinhaAta(t)) {
       const attributes = { ...(s.negrito ? { bold: true } : {}), ...(s.italico ? { italic: true } : {}) };
       ops.push({ insert: s.texto, ...(Object.keys(attributes).length ? { attributes } : {}) });
     }

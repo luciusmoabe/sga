@@ -3,7 +3,7 @@ import { del, get, post, put } from './api.js';
 import { est, podeOperar } from './estado.js';
 import { br, confirmar, dataHora, diaSemana, esc, on, plural, toast, vazio } from './ui.js';
 import { baixarPdfAta } from './pdf-ata.js';
-import { blocosDaAta, segmentosInline, ehTituloAta } from './ata-marcacao.js';
+import { blocosDaAta, segmentosInline, segmentosDaLinhaAta, ehTituloAta } from './ata-marcacao.js';
 import { ligarRevisaoAta } from './ata-revisao.js';
 import { campoEditorAta, ligarEditorAta } from './ata-editor.js';
 import { ligarRegistrosHistoricos } from './reuniao-historico.js';
@@ -15,14 +15,14 @@ const cls = { em_andamento: 'st-em_andamento', rascunho: 'st-bloqueada', enviada
 // A leitura sempre escapa o texto antes de aplicar qualquer marcação, então não há risco de alguém
 // injetar tags pelo campo. Ver `ata-marcacao.js` para a análise compartilhada com o PDF.
 function renderizarAta(texto) {
-  const linhaHTML = (t) => segmentosInline(t).map(s => {
+  const linhaHTML = (t, paragrafo = false) => (paragrafo ? segmentosDaLinhaAta(t) : segmentosInline(t)).map(s => {
     let html = esc(s.texto);
     if (s.italico) html = `<em>${html}</em>`;
     if (s.negrito) html = `<strong>${html}</strong>`;
     return html;
   }).join('');
   return blocosDaAta(texto).map((b) => (b.tipo === 'p'
-    ? (b.texto.trim() ? `<p${ehTituloAta(b.texto) ? ' class="ata-titulo"' : ''}>${linhaHTML(b.texto)}</p>` : '<p>&nbsp;</p>')
+    ? (b.texto.trim() ? `<p${ehTituloAta(b.texto) ? ' class="ata-titulo"' : ''}>${linhaHTML(b.texto, true)}</p>` : '<p>&nbsp;</p>')
     : `<${b.tipo}>${b.itens.map((i) => `<li>${linhaHTML(i)}</li>`).join('')}</${b.tipo}>`)).join('');
 }
 

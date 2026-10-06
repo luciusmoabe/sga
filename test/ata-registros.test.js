@@ -32,5 +32,5 @@ test('título da ata fica centralizado no documento visual e mantém texto ao sa
   assert.equal(ehTituloAta('Decisões:'), false);
   const delta = deltaDaAta(texto);
   assert.equal(delta.ops.find(op => op.insert === '\n').attributes.align, 'center');
-  assert.equal(textoDaAta(delta), texto);
+  assert.equal(textoDaAta(delta), texto.replace('Decisões:', '**Decisões:**'));
 });

@@ -3,7 +3,7 @@
 // CSS de impressão do navegador não tem esse alcance); por isso usamos jsPDF, vendorizado localmente em
 // public/js/vendor (sem CDN, licença MIT) e carregado só quando o botão "Baixar PDF" é clicado, para não
 // pesar o carregamento do app para quem não usa o recurso.
-import { blocosDaAta, segmentosInline, ehTituloAta } from './ata-marcacao.js';
+import { blocosDaAta, segmentosInline, segmentosDaLinhaAta, ehTituloAta } from './ata-marcacao.js';
 import { br } from './ui.js';
 
 const MARGEM_ESQ = 25; // mm (2,5 cm), pedido do Diretor
@@ -111,7 +111,7 @@ export async function baixarPdfAta(ataTexto, { dataReuniao, cabecalho = {} } = {
           y += ALTURA_LINHA;
         }
         doc.setFont(FONTE, 'normal');
-      } else y = escreverParagrafo(doc, segmentosInline(b.texto), MARGEM_ESQ, y, larguraDisponivel, limiteInferior);
+      } else y = escreverParagrafo(doc, segmentosDaLinhaAta(b.texto), MARGEM_ESQ, y, larguraDisponivel, limiteInferior);
     } else {
       b.itens.forEach((item, i) => {
         doc.setFont(FONTE, 'normal');

@@ -8,6 +8,22 @@ export function ehTituloAta(texto) {
   return /^ATA\s+DA\s+REUNIÃO\b/i.test(segmentosInline(texto).map(s => s.texto).join('').trim());
 }
 
+// Os títulos estruturais seguem o modelo mesmo quando vêm dos registros sem marcação.
+export function segmentosDaLinhaAta(linha) {
+  const segmentos = segmentosInline(linha);
+  const texto = segmentos.map(s => s.texto).join('');
+  const secao = /^(Participantes|Decisões|(?:Novas )?[Aa]ções|Informações(?: e comunicados)?|Pedidos de novo prazo decididos|Impedimentos críticos em aberto):?\s*$/.test(texto.trim());
+  const proxima = /^Próxima reunião:/.exec(texto);
+  if (secao) return segmentos.map(s => ({ ...s, negrito: true }));
+  if (!proxima) return segmentos;
+  let restantes = proxima[0].length;
+  return segmentos.flatMap(s => {
+    if (!restantes) return [s];
+    const n = Math.min(restantes, s.texto.length); restantes -= n;
+    return [{ ...s, texto: s.texto.slice(0, n), negrito: true }, ...(n < s.texto.length ? [{ ...s, texto: s.texto.slice(n) }] : [])];
+  });
+}
+
 export function blocosDaAta(texto) {
   const linhas = String(texto ?? '').split('\n');
   const blocos = [];

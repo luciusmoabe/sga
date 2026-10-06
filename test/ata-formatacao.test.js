@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { blocosDaAta, segmentosInline } from '../public/js/ata-marcacao.js';
+import { blocosDaAta, segmentosInline, segmentosDaLinhaAta } from '../public/js/ata-marcacao.js';
 import { deltaDaAta, textoDaAta } from '../public/js/ata-documento.js';
 
 test('negrito e itálico combinados são interpretados da mesma forma para leitura e PDF', () => {
@@ -14,8 +14,21 @@ test('negrito e itálico combinados são interpretados da mesma forma para leitu
 
 test('editor carrega atas antigas e preserva linhas, parágrafos e formatos existentes', () => {
   const ata = 'ATA DA REUNIÃO\n\nInformações:\n- **Primeiro**\n- *Segundo*\n\n1. Item um\n2. ***Item dois***\n\nPróxima reunião: 13/10/2026.';
-  assert.equal(textoDaAta(deltaDaAta(ata)), ata);
+  const formatada = ata.replace('Informações:', '**Informações:**').replace('Próxima reunião:', '**Próxima reunião:**');
+  assert.equal(textoDaAta(deltaDaAta(ata)), formatada);
+  assert.equal(textoDaAta(deltaDaAta(formatada)), formatada);
   assert.deepEqual(deltaDaAta('Texto simples').ops, [{ insert: 'Texto simples' }, { insert: '\n' }]);
+});
+
+test('modelo da ata destaca seções e apenas o rótulo da próxima reunião', () => {
+  for (const titulo of ['Participantes:', 'Decisões:', 'Novas ações:', 'Informações:']) {
+    assert.ok(segmentosDaLinhaAta(titulo).every(s => s.negrito));
+  }
+  const proxima = segmentosDaLinhaAta('Próxima reunião: terça-feira, 13/10/2026, às 16:00.');
+  assert.equal(proxima[0].texto, 'Próxima reunião:');
+  assert.equal(proxima[0].negrito, true);
+  assert.equal(proxima[1].negrito, false);
+  assert.deepEqual(segmentosDaLinhaAta('Texto comum'), segmentosInline('Texto comum'));
 });
 
 test('listas do documento visual são salvas com numeração sequencial e podem alternar tipo', () => {
