@@ -34,7 +34,7 @@ export async function ligarEditorAta(raiz, atualizarPrevia) {
   await carregarEditor();
   const area = raiz.querySelector('#ata');
   const quill = new window.Quill(raiz.querySelector('#ata-visual'), {
-    theme: 'snow', formats: ['bold', 'italic', 'list'],
+    theme: 'snow', formats: ['bold', 'italic', 'list', 'align'],
     modules: { toolbar: { container: raiz.querySelector('#ata-ferramentas'), handlers: {
       undo() { this.quill.history.undo(); }, redo() { this.quill.history.redo(); },
     } }, history: { userOnly: true } },

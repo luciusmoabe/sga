@@ -4,6 +4,10 @@
 // as duas lerem a marcação do mesmo jeito. Compatível com atas antigas: sem marcação, vira parágrafo.
 
 /** Divide o texto em blocos: parágrafo ({ tipo: 'p', texto }) ou lista ({ tipo: 'ul' | 'ol', itens }). */
+export function ehTituloAta(texto) {
+  return /^ATA\s+DA\s+REUNIÃO\b/i.test(segmentosInline(texto).map(s => s.texto).join('').trim());
+}
+
 export function blocosDaAta(texto) {
   const linhas = String(texto ?? '').split('\n');
   const blocos = [];

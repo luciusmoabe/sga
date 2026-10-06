@@ -1,5 +1,5 @@
 // Conversão entre o documento visual e a marcação textual já usada pelas atas e pelo PDF.
-import { blocosDaAta, segmentosInline } from './ata-marcacao.js';
+import { blocosDaAta, segmentosInline, ehTituloAta } from './ata-marcacao.js';
 
 export function deltaDaAta(texto) {
   const ops = [];
@@ -8,7 +8,7 @@ export function deltaDaAta(texto) {
       const attributes = { ...(s.negrito ? { bold: true } : {}), ...(s.italico ? { italic: true } : {}) };
       ops.push({ insert: s.texto, ...(Object.keys(attributes).length ? { attributes } : {}) });
     }
-    ops.push({ insert: '\n', ...(lista ? { attributes: { list: lista } } : {}) });
+    ops.push({ insert: '\n', ...(lista ? { attributes: { list: lista } } : ehTituloAta(t) ? { attributes: { align: 'center' } } : {}) });
   };
   for (const b of blocosDaAta(texto)) {
     if (b.tipo === 'p') linha(b.texto);

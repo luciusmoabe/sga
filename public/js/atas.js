@@ -3,7 +3,7 @@ import { del, get, post, put } from './api.js';
 import { est, podeOperar } from './estado.js';
 import { br, confirmar, dataHora, diaSemana, esc, on, plural, toast, vazio } from './ui.js';
 import { baixarPdfAta } from './pdf-ata.js';
-import { blocosDaAta, segmentosInline } from './ata-marcacao.js';
+import { blocosDaAta, segmentosInline, ehTituloAta } from './ata-marcacao.js';
 import { ligarRevisaoAta } from './ata-revisao.js';
 import { campoEditorAta, ligarEditorAta } from './ata-editor.js';
 import { ligarRegistrosHistoricos } from './reuniao-historico.js';
@@ -22,7 +22,7 @@ function renderizarAta(texto) {
     return html;
   }).join('');
   return blocosDaAta(texto).map((b) => (b.tipo === 'p'
-    ? (b.texto.trim() ? `<p>${linhaHTML(b.texto)}</p>` : '<p>&nbsp;</p>')
+    ? (b.texto.trim() ? `<p${ehTituloAta(b.texto) ? ' class="ata-titulo"' : ''}>${linhaHTML(b.texto)}</p>` : '<p>&nbsp;</p>')
     : `<${b.tipo}>${b.itens.map((i) => `<li>${linhaHTML(i)}</li>`).join('')}</${b.tipo}>`)).join('');
 }
 
