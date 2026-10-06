@@ -98,6 +98,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     return {
       pode_editar: autor && !a.encerrada && !a.apresentada_em,
       pode_mudar_prazo: autor && emCurso,
+      pode_mudar_demanda: autor && !a.encerrada && !a.diretriz_id,
       pode_excluir: autor && !a.encerrada && a.status !== 'concluida' && !a.apresentada_em,
     };
   };
@@ -363,12 +364,18 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const autor = ehAutor(req.user, a);
     // Status é da execução: o chefe da seção (ou o Administrador). Prioridade: quem executa ou o autor.
     // Título, detalhamento e prazo: só o autor (ver ehAutor e permissoes).
-    const edicao = ['titulo', 'detalhe', 'prazo'].some((k) => k in b);
+    const edicao = ['titulo', 'detalhe', 'prazo', 'demanda_diretor'].some((k) => k in b);
     if (edicao && !autor) throw falha(403, NAO_GERE);
     if (b.status !== undefined || (b.prioridade !== undefined && !autor)) await chefeGere(req.user, a);
     if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
 
     if (edicao) {
+      if ('demanda_diretor' in b && typeof b.demanda_diretor !== 'boolean') throw falha(400, 'Informe se a ação é demanda do Diretor.');
+      if ('demanda_diretor' in b && a.diretriz_id) throw falha(409, 'A origem desta ação vem de uma diretriz e não pode ser alterada pela marcação.');
+      const demanda = 'demanda_diretor' in b ? Number(b.demanda_diretor) : a.demanda_diretor;
+      const demandaMudou = demanda !== a.demanda_diretor;
+      // Marcar a origem torna a ação visível à gestão, conforme explicado no formulário.
+      const interna = demandaMudou && demanda ? 0 : a.interna;
       const titulo = 'titulo' in b ? texto(b.titulo, 160) : a.titulo;
       if (!titulo) throw falha(400, 'O título da ação não pode ficar vazio.');
       const detalhe = 'detalhe' in b ? (texto(b.detalhe, 2000) || null) : a.detalhe;
@@ -383,10 +390,12 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       }
       if (prazoMudou && !pode.pode_mudar_prazo) throw falha(409, 'O prazo só muda enquanto a ação está em curso (não concluída nem arquivada).');
       const mudou = [titulo !== a.titulo && 'título', (detalhe || null) !== (a.detalhe || null) && 'detalhamento',
-        prazoMudou && `prazo (de ${br(a.prazo)} para ${br(prazo)})`].filter(Boolean);
+        prazoMudou && `prazo (de ${br(a.prazo)} para ${br(prazo)})`,
+        demandaMudou && (demanda ? 'demanda do Diretor sinalizada pela seção' : 'marcação de demanda do Diretor removida'),
+        interna !== a.interna && 'ação passou a ser visível ao Diretor'].filter(Boolean);
       if (mudou.length) {
         await db.transaction(async () => {
-          await run('update acoes set titulo = ?, detalhe = ?, prazo = ? where id = ?', titulo, detalhe, prazo, a.id);
+          await run('update acoes set titulo = ?, detalhe = ?, prazo = ?, demanda_diretor = ?, interna = ? where id = ?', titulo, detalhe, prazo, demanda, interna, a.id);
           // Toda mudança de prazo guarda o anterior; prazo_original continua sendo o primeiro.
           if (prazoMudou) {
             await run(`insert into acao_prazos (acao_id, prazo_anterior, prazo_novo, origem, alterado_em, alterado_por)

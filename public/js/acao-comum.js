@@ -112,26 +112,28 @@ export async function confirmarPrazoNasSecoes({ todos, secoes, prazo }) {
 // ---------- Editar a ação (título, detalhamento, prazo) ----------
 /** Só quem criou a ação edita (o servidor confere e informa em `pode_editar` e `pode_mudar_prazo`): o chefe, as
  *  que ele ou o suplente criou; o Diretor e o Diretor Adjunto, as que direcionaram. Ação já apresentada em reunião
- *  só muda o prazo. Toda mudança de prazo guarda o anterior no histórico. */
+ *  preserva título/detalhamento e permite corrigir a origem. Toda mudança de prazo guarda o anterior no histórico. */
 export function abrirEditarAcao(a, aoConcluir) {
   const soPrazo = !a.pode_editar;
   abrirForm({
-    titulo: soPrazo ? 'Alterar prazo' : 'Editar ação',
+    titulo: soPrazo && !a.pode_mudar_demanda ? 'Alterar prazo' : 'Editar ação',
     corpo: `${soPrazo ? `<p class="suave pequeno">Ação: <b>${esc(a.titulo)}</b></p>
-      <div class="info">Esta ação já foi apresentada em reunião: o título e o detalhamento não mudam mais. O prazo pode ser alterado, e o anterior fica guardado.</div>`
+      <div class="info">O título e o detalhamento desta ação estão preservados.${a.pode_mudar_prazo ? ' O prazo pode ser alterado, e o anterior fica guardado.' : ''}${a.pode_mudar_demanda ? ' Você pode corrigir a marcação de demanda do Diretor.' : ''}</div>`
       : `<div class="campo"><label for="ea-titulo">Título da ação</label><input id="ea-titulo" name="titulo" required maxlength="160" value="${esc(a.titulo)}"></div>
       <div class="campo"><label for="ea-detalhe">Detalhamento (opcional)</label><textarea id="ea-detalhe" name="detalhe" maxlength="2000">${esc(a.detalhe || '')}</textarea></div>`}
-      <div class="campo"><label for="ea-prazo">Prazo</label><input id="ea-prazo" type="date" name="prazo" required value="${esc(a.prazo)}">
-        <div class="dica">${a.prazo !== a.prazo_original ? `Prazo original: ${br(a.prazo_original)}. ` : ''}A mudança de prazo fica registrada no histórico da ação.</div></div>`,
-    rotulo: soPrazo ? 'Alterar prazo' : 'Salvar alterações',
+      <div class="campo"><label for="ea-prazo">Prazo</label><input id="ea-prazo" type="date" name="prazo" required value="${esc(a.prazo)}" ${a.pode_mudar_prazo ? '' : 'disabled'}>
+        <div class="dica">${a.prazo !== a.prazo_original ? `Prazo original: ${br(a.prazo_original)}. ` : ''}A mudança de prazo fica registrada no histórico da ação.</div></div>
+      ${a.pode_mudar_demanda ? `<div class="escolha"><label><input type="checkbox" name="demanda_diretor" value="1" ${a.demanda_diretor ? 'checked' : ''}> Demanda do Diretor</label></div><p class="suave pequeno">A origem será informada pela seção e a alteração ficará no histórico.${a.interna ? ' Ao marcar, esta ação deixará de ser interna e ficará visível ao Diretor.' : ''}</p>` : ''}`,
+    rotulo: soPrazo && !a.pode_mudar_demanda ? 'Alterar prazo' : 'Salvar alterações',
     aoEnviar: async (d) => {
       const mudancas = {};
       if (!soPrazo && d.titulo.trim() !== a.titulo) mudancas.titulo = d.titulo;
       if (!soPrazo && d.detalhe.trim() !== (a.detalhe || '')) mudancas.detalhe = d.detalhe;
-      if (d.prazo !== a.prazo) mudancas.prazo = d.prazo;
+      if (a.pode_mudar_prazo && d.prazo !== a.prazo) mudancas.prazo = d.prazo;
+      if (a.pode_mudar_demanda && (d.demanda_diretor === '1') !== !!a.demanda_diretor) mudancas.demanda_diretor = d.demanda_diretor === '1';
       if (!Object.keys(mudancas).length) { toast('Nada foi alterado.'); return; }
       await patch(`/acoes/${a.id}`, mudancas);
-      toast(soPrazo ? 'Prazo alterado.' : 'Ação atualizada.');
+      toast('Ação atualizada.');
       await aoConcluir?.();
     },
   });
@@ -212,7 +214,7 @@ export async function abrirAcao(id, aoMudar) {
     ${`<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>`}
     ${diretor && a.status === 'concluida' && !a.encerrada ? `<div class="linha"><button type="button" class="btn btn-ok" data-encerrar>Aceitar e encerrar</button>
       <button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>` : ''}
-    ${a.pode_editar ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Editar ação</button>'
+    ${a.pode_editar || a.pode_mudar_demanda ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Editar ação</button>'
       : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Alterar prazo</button>' : ''}
     ${aceitaRedirecionar(a) ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-redirecionar>Redirecionar para outra seção</button>' : ''}
     ${!a.demandada_diretor || (a.demanda_diretor && !a.diretriz_id) || ehAdmin() ? `

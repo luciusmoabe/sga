@@ -34,6 +34,60 @@ async function demo(t) {
   return { db, call, SUPLENTE, nova };
 }
 
+test('ação cadastrada recebe e perde a marcação do Diretor com autoria e histórico preservados', async (t) => {
+  const { db, call, nova, SUPLENTE } = await demo(t);
+  const id = await nova(ANA_CPE, 'Demanda recebida depois do cadastro');
+  const antes = (await call(ANA_CPE, 'GET', `/acoes/${id}`)).data;
+  assert.equal(antes.pode_mudar_demanda, true);
+  assert.equal((await call(SUPLENTE, 'PATCH', `/acoes/${id}`, { demanda_diretor: true })).status, 403);
+  assert.equal((await call(BRUNO_COF, 'PATCH', `/acoes/${id}`, { demanda_diretor: true })).status, 404);
+  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { demanda_diretor: 'true', titulo: 'Não deve mudar' })).status, 400);
+  assert.equal((await call(ANA_CPE, 'GET', `/acoes/${id}`)).data.titulo, antes.titulo);
+  const marcada = await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { demanda_diretor: true });
+  assert.equal(marcada.status, 200);
+  assert.equal(marcada.data.demandada_diretor, true);
+  assert.equal(marcada.data.criado_por, ANA_CPE);
+  assert.equal(marcada.data.diretriz_id, null);
+  assert.deepEqual([marcada.data.titulo, marcada.data.prazo], [antes.titulo, antes.prazo]);
+  const count = (await db.prepare('select count(*) n from acao_comentarios where acao_id = ?').get(id)).n;
+  await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { demanda_diretor: true });
+  assert.equal((await db.prepare('select count(*) n from acao_comentarios where acao_id = ?').get(id)).n, count, 'repetir a marcação não duplica o histórico');
+  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { demanda_diretor: false })).data.demandada_diretor, false);
+  const final = (await call(ANA_CPE, 'GET', `/acoes/${id}`)).data;
+  assert.ok(final.comentarios.some(c => c.texto.includes('demanda do Diretor sinalizada pela seção')));
+  assert.ok(final.comentarios.some(c => c.texto.includes('marcação de demanda do Diretor removida')));
+  const propriaSuplente = await nova(SUPLENTE, 'Ação do suplente');
+  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${propriaSuplente}`, { demanda_diretor: true })).status, 200);
+});
+
+test('marcação de origem funciona após reunião e compartilha ações internas sem alterar diretrizes', async (t) => {
+  const { db, call, nova } = await demo(t);
+  const id = await nova(ANA_CPE, 'Apresentada e concluída');
+  await db.prepare("update acoes set apresentada_em = '2026-09-18', status = 'concluida', concluida_em = '2026-09-18T10:00:00' where id = ?").run(id);
+  const det = (await call(ANA_CPE, 'GET', `/acoes/${id}`)).data;
+  assert.equal(det.pode_editar, false);
+  assert.equal(det.pode_mudar_prazo, false);
+  assert.equal(det.pode_mudar_demanda, true);
+  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { demanda_diretor: true })).status, 200);
+  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { demanda_diretor: false, titulo: 'Tentativa' })).status, 409);
+  assert.equal((await call(ANA_CPE, 'GET', `/acoes/${id}`)).data.demandada_diretor, true, 'tentativa recusada não altera origem');
+  await db.prepare('update acoes set encerrada = 1 where id = ?').run(id);
+  assert.equal((await call(ANA_CPE, 'GET', `/acoes/${id}`)).data.pode_mudar_demanda, false);
+  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { demanda_diretor: false })).status, 409);
+  const interna = await nova(ANA_CPE, 'Interna existente', { interna: true });
+  assert.equal((await call(DIRETOR, 'GET', `/acoes/${interna}`)).status, 404);
+  const marcada = await call(ANA_CPE, 'PATCH', `/acoes/${interna}`, { demanda_diretor: true });
+  assert.equal(marcada.data.interna, false);
+  assert.equal((await call(DIRETOR, 'GET', `/acoes/${interna}`)).status, 200);
+  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${interna}`, { demanda_diretor: false })).data.interna, false);
+  assert.equal((await call(ADMIN, 'PATCH', `/acoes/${interna}`, { demanda_diretor: true })).status, 200);
+  const diretriz = (await call(DIRETOR, 'POST', '/diretrizes', { titulo: 'Demanda automática', prazo: PRAZO, destino: 'especificos', secoes: [CPE] })).data;
+  const automatica = await db.prepare('select id from acoes where diretriz_id = ?').get(diretriz.id);
+  assert.equal((await call(ADMIN, 'GET', `/acoes/${automatica.id}`)).data.pode_mudar_demanda, false);
+  assert.equal((await call(ADMIN, 'PATCH', `/acoes/${automatica.id}`, { demanda_diretor: false })).status, 409);
+  assert.equal((await call(ANA_CPE, 'GET', `/acoes/${automatica.id}`)).data.demandada_diretor, true);
+});
+
 test('o chefe edita e exclui as que criou e as do suplente; o suplente, só as dele', async (t) => {
   const { db, call, SUPLENTE, nova } = await demo(t);
   const daAna = await nova(ANA_CPE, 'Da titular');

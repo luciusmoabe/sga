@@ -14,6 +14,10 @@ Para uma antecipação planejada, recomenda-se um próximo ajuste específico de
 
 Também se recomenda alertar quando já existe reunião encerrada para a mesma referência semanal e oferecer uma reunião complementar de forma explícita. Essa regra evita iniciar acidentalmente outra reunião na data originalmente prevista sem bloquear sessões extraordinárias legítimas. A agenda de exceções, o aviso de reunião complementar e o congelamento integral dos cartões são propostas para evolução; não são implementados neste ajuste.
 
+# Demanda do Diretor em ação já cadastrada
+
+Uma ação já cadastrada pode receber ou perder a marcação **Demanda do Diretor** pelo botão **Editar ação**, respeitando a autoria existente (titular também edita as do suplente; Administrador edita qualquer seção). A marcação pode mudar após apresentação em reunião sem alterar o título, o detalhamento ou a ata já publicada. A alteração fica nos comentários do histórico. Ações encerradas e a origem automática de uma diretriz não mudam. Ao marcar uma ação interna, o formulário informa que ela ficará visível ao Diretor; desmarcar a origem não a torna interna novamente.
+
 # Implantação
 
 A versão nova exige a migração **16**. SQLite aplica a migração na inicialização. Para PostgreSQL, configure `SGC_MIGRATION_DATABASE_URL` e execute `npm run migrate -- --postgres` junto da publicação do código novo. Não execute o código antigo após migrar: ele recusa uma versão desconhecida. As tabelas novas são acessadas pela API Express; RLS e revogações impedem acesso direto pelos papéis públicos do Supabase.

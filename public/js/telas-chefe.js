@@ -197,7 +197,7 @@ export async function minhasAcoes(raiz) {
           ${aceitaImpedimento(a) ? '<button type="button" class="btn btn-fantasma btn-mini" data-impedimento>Impedimento</button>' : ''}
           ${!a.demandada_diretor || a.pode_editar || a.pode_mudar_prazo ? `<details class="mais"><summary class="btn btn-fantasma btn-mini">Mais</summary>
             <div class="mais-itens">
-              ${a.pode_editar ? '<button type="button" class="btn btn-sec btn-mini" data-editar>Editar</button>' : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" data-editar>Alterar prazo</button>' : ''}
+              ${a.pode_editar || a.pode_mudar_demanda ? '<button type="button" class="btn btn-sec btn-mini" data-editar>Editar</button>' : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" data-editar>Alterar prazo</button>' : ''}
               ${a.demandada_diretor ? '' : a.arquivada ? '<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar</button>' : '<button type="button" class="btn btn-sec btn-mini" data-arquivar>Arquivar</button>'}
               ${a.pode_excluir ? '<button type="button" class="btn btn-sec btn-mini perigo-texto" data-excluir>Excluir ação</button>' : ''}
             </div></details>` : ''}
