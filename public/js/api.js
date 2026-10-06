@@ -115,4 +115,4 @@ export const get   = (c)         => api(c);
 export const post  = (c, corpo = {}) => api(c, { method: 'POST',   corpo });
 export const patch = (c, corpo = {}) => api(c, { method: 'PATCH',  corpo });
 export const put   = (c, corpo = {}) => api(c, { method: 'PUT',    corpo });
-export const del   = (c)         => api(c, { method: 'DELETE' });
+export const del   = (c, corpo)  => api(c, { method: 'DELETE', corpo });

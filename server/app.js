@@ -9,6 +9,7 @@ import { rotasEstrutura } from './rotas-estrutura.js';
 import { rotasSemana } from './rotas-semana.js';
 import { rotasReunioes } from './reunioes.js';
 import { rotasAvisos } from './rotas-avisos.js';
+import { rotasCabecalhoAta } from './ata-cabecalho.js';
 import { cabecalhosSeguranca } from './seguranca-http.js';
 import { configurarAuth, instalarAuth } from './auth.js';
 import { administradorAuth } from './cadastro-chefes.js';
@@ -45,6 +46,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   rotasSemana(app, { ...ctx, SELECT_ACAO, acaoOut });
   rotasReunioes(app, { ...ctx, criarDiretriz });
   rotasAvisos(app, ctx);
+  rotasCabecalhoAta(app, ctx);
 
   // ---------- Erros ----------
   app.use('/api', (req, res, next) => next(falha(404, 'Rota não encontrada.')));

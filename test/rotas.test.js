@@ -72,6 +72,7 @@ const ESPERADAS = [
   'DELETE /api/reunioes/:id',
   'PUT /api/atualizacao',
   'PUT /api/config',
+  'PUT /api/config/ata',
   'PUT /api/reunioes/:id/ata',
   'GET /api/reunioes/:id/candidatos',
   'PUT /api/reunioes/:id/participantes',

@@ -4,14 +4,25 @@ import { openDb } from '../server/db.js';
 import { aplicarMigracoes, verificarMigracoes } from '../server/migrations.js';
 import { seed } from '../server/seed.js';
 
+test('migração 17 preserva participantes existentes na ordem anterior e é idempotente', async t => {
+  const db = openDb(':memory:'); t.after(() => db.close()); await seed(db);
+  const r = (await db.prepare('select id from reunioes limit 1').get()).id;
+  await db.prepare('insert into reuniao_participantes (reuniao_id, usuario_id, nome, ordem) values (?, 3, ?, 0)').run(r, 'Zeta');
+  await db.prepare('insert into reuniao_participantes (reuniao_id, usuario_id, nome, ordem) values (?, 4, ?, 1)').run(r, 'Alfa');
+  await db.exec('alter table reuniao_participantes drop column ordem; delete from schema_migrations where id = 17');
+  assert.deepEqual(await aplicarMigracoes(db), [17]);
+  assert.deepEqual((await db.prepare('select nome from reuniao_participantes where reuniao_id = ? order by ordem').all(r)).map(p => p.nome), ['Alfa', 'Zeta']);
+  assert.deepEqual(await aplicarMigracoes(db), []);
+});
+
 test('migrações: aplicação concorrente é idempotente e registra a versão', async (t) => {
   const db = openDb(':memory:');
   t.after(() => db.close());
   await assert.rejects(verificarMigracoes(db), /Migrações pendentes/);
   const resultados = await Promise.all([aplicarMigracoes(db), aplicarMigracoes(db)]);
-  assert.deepEqual(resultados, [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], []]);
+  assert.deepEqual(resultados, [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17], []]);
   await verificarMigracoes(db);
-  assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 16);
+  assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 17);
 });
 
 test('migrações: esquema antigo recebe arquivamento sem perder ações existentes', async (t) => {
@@ -20,7 +31,7 @@ test('migrações: esquema antigo recebe arquivamento sem perder ações existen
   await seed(db);
   const antes = await db.prepare('select id, titulo from acoes order by id').all();
   await db.exec('drop index uq_pedido_pendente_acao; drop index uq_reuniao_em_andamento; drop table schema_migrations; alter table acoes drop column arquivada');
-  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
   assert.deepEqual(await db.prepare('select id, titulo from acoes order by id').all(), antes);
   assert.ok((await db.prepare('select arquivada from acoes').all()).every(a => a.arquivada === 0));
 });
@@ -61,7 +72,7 @@ test('migrações: erro de DDL desfaz índices e registro da migração', async 
   await assert.rejects(aplicarMigracoes(db), /Falha de DDL/);
   assert.deepEqual(await db.prepare("select name from sqlite_master where name in ('schema_migrations','uq_pedido_pendente_acao')").all(), []);
   db.exec = executar;
-  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
 });
 
 test('migrações: índices impedem duplicidades até em escritas diretas', async (t) => {

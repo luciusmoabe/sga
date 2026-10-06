@@ -7,6 +7,7 @@ import { openDb } from '../server/db.js';
 import { seed } from '../server/seed.js';
 import { createApp } from '../server/app.js';
 import { aplicarMigracoes } from '../server/migrations.js';
+import { readFile } from 'node:fs/promises';
 
 async function ambiente(t) {
   const db = openDb(':memory:');
@@ -30,6 +31,46 @@ async function ambiente(t) {
   return { db, api, iniciar, suplente };
 }
 
+test('participantes seguem a ordem enviada e registros atualizam a ata sem perder decisões ou edições', async t => {
+  const { api, iniciar } = await ambiente(t);
+  const r = await iniciar();
+  await api(1, 'PUT', `/reunioes/${r.id}/participantes`, { usuarios: [4, 3, 1] });
+  await api(1, 'POST', `/reunioes/${r.id}/decisoes`, { texto: 'Decisão preservada' });
+  let ata = (await api(1, 'POST', `/reunioes/${r.id}/encerrar`, {})).data.ata_texto;
+  assert.ok(ata.indexOf('Bruno Carvalho') < ata.indexOf('Ana Ribeiro'));
+  await api(1, 'POST', `/reunioes/${r.id}/enviar-ata`, {});
+  const antes = (await api(1, 'GET', `/reunioes/${r.id}`)).data;
+  assert.equal((await api(2, 'POST', `/reunioes/${r.id}/informacoes`, { texto: 'Primeiro informe', ata_base: ata, ata_texto: ata + '\nNota manual preservada.' })).status, 201);
+  const nova = (await api(1, 'GET', `/reunioes/${r.id}`)).data;
+  assert.match(nova.ata_texto, /Nota manual preservada/);
+  assert.match(nova.ata_texto, /Decisão preservada/);
+  assert.ok(nova.ata_texto.indexOf('Informações:') > nova.ata_texto.indexOf('Novas ações:'));
+  assert.equal((await api(1, 'POST', `/reunioes/${r.id}/informacoes`, { texto: 'Base antiga', ata_base: ata, ata_texto: ata })).status, 409);
+  assert.equal((await api(1, 'GET', `/reunioes/${r.id}`)).data.informacoes.length, 1, 'rollback da inclusão com base antiga');
+  assert.equal((await api(1, 'PUT', `/reunioes/${r.id}/participantes`, { usuarios: [1, 4, 3], ata_base: nova.ata_texto, ata_texto: nova.ata_texto })).status, 200);
+  const final = (await api(1, 'GET', `/reunioes/${r.id}`)).data;
+  assert.deepEqual(final.participantes.map(p => p.usuario_id), [1, 4, 3]);
+  assert.ok(final.ata_texto.indexOf('Bruno Carvalho') < final.ata_texto.indexOf('Ana Ribeiro'));
+  assert.ok(final.revisoes.some(v => v.ata_texto === antes.ata_texto));
+  const info = final.informacoes[0];
+  assert.equal((await api(1, 'DELETE', `/reunioes/${r.id}/informacoes/${info.id}`, { ata_base: final.ata_texto, ata_texto: final.ata_texto })).status, 200);
+  assert.doesNotMatch((await api(1, 'GET', `/reunioes/${r.id}`)).data.ata_texto, /Primeiro informe/);
+});
+
+test('cabeçalho e brasão são persistidos, restritos à gestão e validados', async t => {
+  const { api } = await ambiente(t);
+  const png = await readFile(new URL('../public/imagens/brasao_PMBA.png', import.meta.url));
+  const dados = { ata_cabecalho: 'POLÍCIA MILITAR DA BAHIA\nUnidade', ata_brasao: `data:image/png;base64,${png.toString('base64')}` };
+  assert.equal((await api(3, 'PUT', '/config/ata', dados)).status, 403);
+  assert.equal((await api(2, 'PUT', '/config/ata', dados)).status, 200);
+  assert.equal((await api(3, 'GET', '/config')).data.ata_brasao, dados.ata_brasao);
+  assert.equal((await api(1, 'PUT', '/config/ata', { ...dados, ata_brasao: 'data:image/svg+xml;base64,PHN2Zz4=' })).status, 400);
+  assert.equal((await api(1, 'PUT', '/config/ata', { ...dados, ata_cabecalho: 'x'.repeat(1501) })).status, 400);
+  assert.equal((await api(1, 'PUT', '/config/ata', { ...dados, ata_cabecalho: 'x\n'.repeat(13) })).status, 400);
+  assert.equal((await api(1, 'GET', '/config')).data.ata_cabecalho, dados.ata_cabecalho);
+  assert.equal((await api(1, 'PUT', '/config/ata', { ata_cabecalho: '', ata_brasao: '' })).status, 200);
+});
+
 test('a seção sinaliza demanda do Diretor sem atribuir autoria ao Diretor', async (t) => {
   const { db, api } = await ambiente(t);
   const corpo = { titulo: 'Demanda recebida verbalmente', prazo: '2026-10-30', demanda_diretor: true, secao_id: 2 };
@@ -47,7 +88,7 @@ test('a seção sinaliza demanda do Diretor sem atribuir autoria ao Diretor', as
   assert.equal((await api(3, 'POST', `/acoes/${id}/arquivar`, {})).status, 200, 'marcar a origem não altera autoria nem os poderes da seção');
 });
 
-test('informações têm CRUD restrito à gestão antes e depois do encerramento, sem sobrescrever a ata', async (t) => {
+test('informações têm CRUD restrito à gestão e atualizam sua seção na ata após o encerramento', async (t) => {
   const { db, api, iniciar } = await ambiente(t);
   const r = await iniciar();
   assert.equal((await api(3, 'POST', `/reunioes/${r.id}/informacoes`, { texto: 'Tentativa' })).status, 403);
@@ -61,13 +102,13 @@ test('informações têm CRUD restrito à gestão antes e depois do encerramento
   const excluir = await db.prepare('select max(id) id from reuniao_informacoes').get();
   assert.equal((await api(1, 'DELETE', `/reunioes/${r.id}/informacoes/${excluir.id}`)).status, 200);
   const encerrada = await api(1, 'POST', `/reunioes/${r.id}/encerrar`, {});
-  assert.match(encerrada.data.ata_texto, /Informações e comunicados:\n- Visita técnica na sexta\./);
+  assert.match(encerrada.data.ata_texto, /Informações:\n- Visita técnica na sexta\./);
   assert.doesNotMatch(encerrada.data.ata_texto, /Apagar/);
   for (const metodo of ['POST', 'PATCH', 'DELETE']) {
     const caminho = `/reunioes/${r.id}/informacoes${metodo === 'POST' ? '' : `/${info.id}`}`;
     assert.equal((await api(1, metodo, caminho, { texto: 'Após encerramento' })).status, metodo === 'POST' ? 201 : 200);
   }
-  assert.equal((await api(1, 'GET', `/reunioes/${r.id}`)).data.ata_texto, encerrada.data.ata_texto);
+  assert.match((await api(1, 'GET', `/reunioes/${r.id}`)).data.ata_texto, /Informações:\n- Após encerramento/);
   const outra = await iniciar();
   assert.equal((await api(1, 'PATCH', `/reunioes/${outra.id}/informacoes/${info.id}`, { texto: 'Outra reunião' })).status, 404);
   await api(1, 'DELETE', `/reunioes/${outra.id}/informacoes/${info.id}`);
@@ -105,7 +146,7 @@ test('presença identifica titular e suplente; só participantes sugerem revisõ
   assert.equal((await api(3, 'POST', `/reunioes/${r.id}/sugestoes/${sugestoes[0].id}/responder`, { status: 'acolhida', resposta: 'Sim' })).status, 403);
 });
 
-test('gestão completa registros de reunião publicada e libera sugestões sem modificar versões da ata', async (t) => {
+test('gestão completa registros de reunião publicada, integra a ata e preserva versões anteriores', async (t) => {
   const { db, api, iniciar } = await ambiente(t);
   const r = await iniciar();
   const original = (await api(1, 'POST', `/reunioes/${r.id}/encerrar`, {})).data.ata_texto;
@@ -127,8 +168,10 @@ test('gestão completa registros de reunião publicada e libera sugestões sem m
   assert.equal((await api(1, 'PATCH', `/reunioes/${r.id}/informacoes/${info.id}`, { texto: 'Comunicado corrigido' })).status, 200);
   const depois = (await api(1, 'GET', `/reunioes/${r.id}`)).data;
   assert.equal(depois.informacoes[0].texto, 'Comunicado corrigido');
-  assert.equal(depois.ata_texto, original);
-  assert.deepEqual(depois.revisoes, antes.revisoes);
+  assert.match(depois.ata_texto, /Participantes:\n- Ana Ribeiro/);
+  assert.match(depois.ata_texto, /Informações:\n- Comunicado corrigido/);
+  assert.ok(depois.revisoes.length > antes.revisoes.length);
+  assert.ok(depois.revisoes.some(v => v.ata_texto === original));
   assert.equal(depois.status, 'enviada');
   const resumo = (await api(4, 'GET', '/reunioes')).data.find(item => item.id === r.id);
   assert.equal(resumo.informacoes, 1);
@@ -211,8 +254,8 @@ test('migração 16 mantém ações legadas e cria registros com integridade ref
   const { db } = await ambiente(t);
   const antes = await db.prepare('select id, titulo, criado_por from acoes order by id').all();
   await db.exec(`drop table ata_sugestoes; drop table ata_revisoes; drop table reuniao_informacoes; drop table reuniao_participantes;
-    alter table acoes drop column demanda_diretor; delete from schema_migrations where id = 16;`);
-  assert.deepEqual(await aplicarMigracoes(db), [16]);
+    alter table acoes drop column demanda_diretor; delete from schema_migrations where id >= 16;`);
+  assert.deepEqual(await aplicarMigracoes(db), [16, 17]);
   assert.deepEqual(await db.prepare('select id, titulo, criado_por from acoes order by id').all(), antes);
   assert.equal((await db.prepare('select sum(demanda_diretor) n from acoes').get()).n, 0);
   await assert.rejects(db.prepare("insert into reuniao_informacoes (reuniao_id, texto, criado_em) values (999999, 'Órfã', 'x')").run(), /FOREIGN KEY/);

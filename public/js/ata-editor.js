@@ -46,7 +46,11 @@ export async function ligarEditorAta(raiz, atualizarPrevia) {
     area.value = textoDaAta(quill.getContents());
     atualizarPrevia(area.value);
   });
-  return { texto() {
+  return { definirTexto(texto) {
+    area.value = texto;
+    quill.setContents(deltaDaAta(texto), 'silent');
+    quill.history.clear(); atualizarPrevia(texto);
+  }, texto() {
     if (area.value.length > 20000) throw new Error('A ata ultrapassou o limite de 20.000 caracteres. Reduza o texto antes de salvar.');
     return area.value;
   } };

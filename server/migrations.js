@@ -237,6 +237,22 @@ const MIGRACOES = [
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },
+  {
+    id: 17, nome: 'ordem_participantes_reuniao',
+    async aplicar(db) {
+      const colunas = db.isPg
+        ? await db.prepare("select column_name as nome from information_schema.columns where table_schema=current_schema() and table_name='reuniao_participantes'").all()
+        : (await db.prepare('pragma table_info(reuniao_participantes)').all()).map(c => ({ nome: c.name }));
+      if (colunas.some(c => c.nome === 'ordem')) return;
+      await db.exec('alter table reuniao_participantes add column ordem integer not null default 0');
+      // Preserva nas reuniões existentes a ordem alfabética que era exibida.
+      const reunioes = await db.prepare('select distinct reuniao_id from reuniao_participantes').all();
+      for (const r of reunioes) {
+        const pessoas = await db.prepare('select usuario_id from reuniao_participantes where reuniao_id = ? order by nome, usuario_id').all(r.reuniao_id);
+        for (let i = 0; i < pessoas.length; i++) await db.prepare('update reuniao_participantes set ordem = ? where reuniao_id = ? and usuario_id = ?').run(i, r.reuniao_id, pessoas[i].usuario_id);
+      }
+    },
+  },
 ];
 
 async function registros(db) {

@@ -232,17 +232,12 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
     const d = parseISO(r.data);
     const linhas = [`ATA DA REUNIÃO SEMANAL — ${br(r.data)} (${DIAS[d.getUTCDay()]})`, ''];
     if (r.data !== r.semana) linhas.push(`Data prevista / referência semanal: ${br(r.semana)}. Reunião ${r.data < r.semana ? 'antecipada' : 'realizada após a data prevista'} para ${br(r.data)}.`, '');
-    const presentes = await q('select nome, secao_nome from reuniao_participantes where reuniao_id = ? order by nome', r.id);
+    const presentes = await q('select nome, secao_nome from reuniao_participantes where reuniao_id = ? order by ordem, usuario_id', r.id);
     linhas.push('Participantes:');
     if (presentes.length) presentes.forEach((p) => linhas.push(`- ${p.nome}${p.secao_nome ? ` (${p.secao_nome})` : ''}`));
     else linhas.push('- Presença não registrada.');
     linhas.push('');
     const informacoes = await q('select texto from reuniao_informacoes where reuniao_id = ? order by id', r.id);
-    if (informacoes.length) {
-      linhas.push('Informações e comunicados:');
-      informacoes.forEach((i) => linhas.push(`- ${i.texto}`));
-      linhas.push('');
-    }
     // Os combinados vigentes já ficam guardados em `combinados_snapshot` e aparecem à parte na tela da
     // reunião; não entram no texto da ata para não duplicar o que já está registrado ali.
     const dec = await q(`select d.texto, s.sigla from decisoes d left join secoes s on s.id = d.secao_id where d.reuniao_id = ? order by d.id`, r.id);
@@ -264,6 +259,10 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
         linhas.push(`- [${alvo}] ${g.titulo} — prazo ${br(g.prazo)} — prioridade ${PRIO[g.prioridade] || g.prioridade}`);
       }
     } else linhas.push('- Nenhuma ação nova.');
+    linhas.push('');
+    linhas.push('Informações:');
+    if (informacoes.length) informacoes.forEach(i => linhas.push(`- ${i.texto}`));
+    else linhas.push('- Nenhuma informação registrada.');
     linhas.push('');
     const ped = await q(`select p.*, a.titulo, s.sigla from pedidos_prazo p join acoes a on a.id = p.acao_id join secoes s on s.id = a.secao_id where p.reuniao_id = ? and (a.interna = 0 or a.compartilhada = 1) order by p.decidido_em`, r.id);
     if (ped.length) {

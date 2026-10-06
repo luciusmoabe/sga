@@ -7,6 +7,7 @@ import { est, hoje } from './estado.js';
 import { $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, parseISO, plural, sem, STATUS, toast } from './ui.js';
 import { abrirAcao, confirmarPrazoNasSecoes } from './acao-comum.js';
 import { DIAS_SEM_MOVIMENTO } from './regras.js';
+import { acompanharOrdemPresenca } from './presenca-ordem.js';
 
 /**
  * Tela de início (fora do modo TV). Abrir esta rota não cria nada: a reunião só nasce no botão,
@@ -184,12 +185,14 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
   const formParticipantes = async () => {
     const candidatos = await get(`/reunioes/${S.id}/candidatos`);
     const presentes = new Set(S.reuniao.participantes.map((p) => p.usuario_id));
+    let lerOrdem;
     abrirForm({
       titulo: 'Quem participou da reunião?',
-      corpo: `<p class="suave pequeno">Marque quem está presente, incluindo titulares e suplentes. Chefes presentes poderão sugerir revisões após a publicação da ata.</p><div class="escolha">${candidatos.map((u) => `<label><input type="checkbox" name="participante" value="${u.id}" ${presentes.has(u.id) ? 'checked' : ''}> ${esc(u.nome)}${u.secao_nome ? ` · ${esc(u.secao_nome)}` : ''}</label>`).join('')}</div>`,
+      corpo: `<p class="suave pequeno">Marque quem está presente, incluindo titulares e suplentes. A numeração indica a ordem na ata. Para mudar uma posição, desmarque e selecione novamente. Chefes presentes poderão sugerir revisões após a publicação da ata.</p><div class="escolha">${candidatos.map((u) => `<label><input type="checkbox" name="participante" value="${u.id}" ${presentes.has(u.id) ? 'checked' : ''}> ${esc(u.nome)}${u.secao_nome ? ` · ${esc(u.secao_nome)}` : ''}</label>`).join('')}</div>`,
       rotulo: 'Salvar presença',
+      aoAbrir: (dlg, form) => { lerOrdem = acompanharOrdemPresenca(form, S.reuniao.participantes); },
       aoEnviar: async (d, form) => {
-        const usuarios = [...form.querySelectorAll('input[name=participante]:checked')].map((el) => Number(el.value));
+        const usuarios = lerOrdem();
         await put(`/reunioes/${S.id}/participantes`, { usuarios });
         await recarregar(); desenhar(); toast('Presença registrada.');
       },

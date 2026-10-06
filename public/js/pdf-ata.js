@@ -72,7 +72,7 @@ function escreverParagrafo(doc, segmentos, x, y, larguraDisponivel, limiteInferi
 
 /** Monta e baixa o PDF da ata (`ataTexto`, na mesma marcação leve usada na tela). `dataReuniao` (ISO)
  *  é opcional e só aparece no rodapé e no nome do arquivo. */
-export async function baixarPdfAta(ataTexto, { dataReuniao } = {}) {
+export async function baixarPdfAta(ataTexto, { dataReuniao, cabecalho = {} } = {}) {
   const jsPDF = await carregarJsPDF();
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const larguraPagina = doc.internal.pageSize.getWidth();
@@ -83,6 +83,23 @@ export async function baixarPdfAta(ataTexto, { dataReuniao } = {}) {
   doc.setFontSize(TAM_TEXTO);
   doc.setTextColor(20, 30, 24);
   let y = MARGEM;
+  const pmba = new Image(); pmba.src = '/imagens/brasao_PMBA.png';
+  await pmba.decode();
+  const brasoes = [{ imagem: pmba, x: MARGEM_ESQ }];
+  if (cabecalho.ata_brasao) {
+    const direita = new Image(); direita.src = cabecalho.ata_brasao; await direita.decode();
+    brasoes.push({ imagem: direita, x: larguraPagina - MARGEM - 22 });
+  }
+  for (const { imagem, x } of brasoes) {
+    const escala = Math.min(22 / imagem.naturalWidth, 28 / imagem.naturalHeight);
+    const w = imagem.naturalWidth * escala, h = imagem.naturalHeight * escala;
+    doc.addImage(imagem, 'PNG', x + (22 - w) / 2, y, w, h);
+  }
+  doc.setFont(FONTE, 'bold'); doc.setFontSize(10);
+  const linhasCabecalho = doc.splitTextToSize(cabecalho.ata_cabecalho || '', larguraDisponivel - 54);
+  if (linhasCabecalho.length) doc.text(linhasCabecalho, MARGEM_ESQ + larguraDisponivel / 2, y + 4, { align: 'center' });
+  y += Math.max(28, linhasCabecalho.length * 4.1) + 10;
+  doc.setFont(FONTE, 'normal'); doc.setFontSize(TAM_TEXTO);
   for (const b of blocosDaAta(ataTexto)) {
     if (b.tipo === 'p') {
       y = escreverParagrafo(doc, segmentosInline(b.texto), MARGEM_ESQ, y, larguraDisponivel, limiteInferior);

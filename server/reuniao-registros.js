@@ -1,10 +1,11 @@
 import { falha, h, permit, texto } from './helpers.js';
+import { integrarRegistrosAta } from './ata-registros.js';
 
 // Todas as alterações usam a mesma transação e trava do ciclo da reunião.
 export function registrosReuniao(app, { q, q1, run, agoraISO, comReuniao }) {
   const gestao = permit('diretor', 'apoio', 'administrador');
   const publicada = (r) => { if (r.status !== 'enviada') throw falha(409, 'A ata ainda não foi publicada.'); };
-  const participantes = (id) => q('select usuario_id, nome, secao_nome from reuniao_participantes where reuniao_id = ? order by nome', id);
+  const participantes = (id) => q('select usuario_id, nome, secao_nome from reuniao_participantes where reuniao_id = ? order by ordem, usuario_id', id);
   const informacoes = (id) => q('select * from reuniao_informacoes where reuniao_id = ? order by id', id);
   const sugestoes = (id) => q(`select a.*, u.nome usuario_nome, v.nome respondida_por_nome from ata_sugestoes a
     join usuarios u on u.id = a.usuario_id left join usuarios v on v.id = a.respondida_por where a.reuniao_id = ? order by a.id`, id);
@@ -18,6 +19,21 @@ export function registrosReuniao(app, { q, q1, run, agoraISO, comReuniao }) {
       left join usuarios u on u.id = a.criado_por where a.reuniao_id = ? order by a.id desc`, r.id) : [],
   });
   const registrarVersao = (r, user, t) => run('insert into ata_revisoes (reuniao_id, ata_texto, criado_por, criada_em) values (?,?,?,?)', r.id, t, user.id, agoraISO());
+  const integrarAta = async (r, req) => {
+    if (r.status === 'em_andamento') return;
+    if (req.body?.ata_texto !== undefined && req.body.ata_base === undefined) throw falha(400, 'Informe a versão da ata antes de salvar as edições.');
+    if (req.body?.ata_base !== undefined && req.body.ata_base !== r.ata_texto) throw falha(409, 'A ata foi alterada por outra pessoa. Recarregue antes de salvar os registros.');
+    const base = req.body?.ata_texto === undefined ? r.ata_texto : texto(req.body.ata_texto, 20000);
+    if (!base) throw falha(400, 'A ata não pode ficar vazia.');
+    const nova = integrarRegistrosAta(base, await participantes(r.id), await informacoes(r.id));
+    if (nova.length > 20000) throw falha(400, 'A ata ultrapassou o limite de 20.000 caracteres. Reduza o texto antes de salvar.');
+    if (nova === r.ata_texto) return;
+    if (r.status === 'enviada') {
+      if (!(await q1('select id from ata_revisoes where reuniao_id = ? limit 1', r.id))) await registrarVersao(r, req.user, r.ata_texto);
+      await registrarVersao(r, req.user, nova);
+    }
+    await run('update reunioes set ata_texto = ? where id = ?', nova, r.id);
+  };
 
   app.get('/api/reunioes/:id/candidatos', gestao, h(async (req) => {
     if (!(await q1('select id from reunioes where id = ?', Number(req.params.id)))) throw falha(404, 'Reunião não encontrada.');
@@ -37,13 +53,18 @@ export function registrosReuniao(app, { q, q1, run, agoraISO, comReuniao }) {
       pessoas.push(u);
     }
     await run('delete from reuniao_participantes where reuniao_id = ?', r.id);
-    for (const u of pessoas) await run('insert into reuniao_participantes (reuniao_id, usuario_id, nome, secao_nome) values (?,?,?,?)', r.id, u.id, u.nome, u.secao_nome);
+    for (let i = 0; i < pessoas.length; i++) {
+      const u = pessoas[i];
+      await run('insert into reuniao_participantes (reuniao_id, usuario_id, nome, secao_nome, ordem) values (?,?,?,?,?)', r.id, u.id, u.nome, u.secao_nome, i);
+    }
+    await integrarAta(r, req);
     return { participantes: await participantes(r.id) };
   })));
   app.post('/api/reunioes/:id/informacoes', gestao, h(async (req, res) => comReuniao(req.params.id, async (r) => {
     const t = texto(req.body?.texto, 2000);
     if (!t) throw falha(400, 'Escreva a informação.');
     await run('insert into reuniao_informacoes (reuniao_id, texto, criado_por, criado_em) values (?,?,?,?)', r.id, t, req.user.id, agoraISO());
+    await integrarAta(r, req);
     res.status(201);
     return { ok: true };
   })));
@@ -52,10 +73,12 @@ export function registrosReuniao(app, { q, q1, run, agoraISO, comReuniao }) {
     if (!t) throw falha(400, 'Escreva a informação.');
     if (!(await q1('select id from reuniao_informacoes where id = ? and reuniao_id = ?', Number(req.params.infoId), r.id))) throw falha(404, 'Informação não encontrada.');
     await run('update reuniao_informacoes set texto = ? where id = ? and reuniao_id = ?', t, Number(req.params.infoId), r.id);
+    await integrarAta(r, req);
     return { ok: true };
   })));
   app.delete('/api/reunioes/:id/informacoes/:infoId', gestao, h(async (req) => comReuniao(req.params.id, async (r) => {
     await run('delete from reuniao_informacoes where id = ? and reuniao_id = ?', Number(req.params.infoId), r.id);
+    await integrarAta(r, req);
     return { ok: true };
   })));
   app.post('/api/reunioes/:id/sugestoes', permit('chefe'), h(async (req, res) => comReuniao(req.params.id, async (r) => {

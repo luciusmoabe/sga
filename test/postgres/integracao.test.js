@@ -149,7 +149,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     const [a, b] = await cluster.banco();
     await assert.rejects(verificarMigracoes(a), /Migrações pendentes/);
     const resultados = await Promise.all([aplicarMigracoes(a), aplicarMigracoes(b)]);
-    assert.deepEqual(resultados.flat().sort((x, y) => x - y), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+    assert.deepEqual(resultados.flat().sort((x, y) => x - y), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
     await verificarMigracoes(b);
     assert.deepEqual(await aplicarMigracoes(a), []);
   });
@@ -164,7 +164,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     assert.equal((await db.prepare("select to_regclass('uq_pedido_pendente_acao') as nome").get()).nome, null);
     assert.equal((await db.prepare("select count(*) n from information_schema.columns where table_name = 'acoes' and column_name = 'arquivada'").get()).n, 0);
     await db.exec('drop table uq_reuniao_em_andamento');
-    assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+    assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
   });
 
   await t.test('versão 11 recria a restrição de tipo e aceita a Diretoria Adjunta sem perder seções', async () => {

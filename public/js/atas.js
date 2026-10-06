@@ -7,6 +7,7 @@ import { blocosDaAta, segmentosInline } from './ata-marcacao.js';
 import { ligarRevisaoAta } from './ata-revisao.js';
 import { campoEditorAta, ligarEditorAta } from './ata-editor.js';
 import { ligarRegistrosHistoricos } from './reuniao-historico.js';
+import { htmlCabecalhoAta, carregarCabecalhoAta } from './ata-cabecalho.js';
 
 const ST = { em_andamento: 'Em andamento', rascunho: 'Ata em rascunho', enviada: 'Ata enviada' };
 const cls = { em_andamento: 'st-em_andamento', rascunho: 'st-bloqueada', enviada: 'st-concluida' };
@@ -40,7 +41,7 @@ export async function reunioes(raiz) {
 }
 
 export async function reuniaoDetalhe(raiz, { id, refresh }) {
-  const r = await get(`/reunioes/${id}`);
+  const [r, cabecalho] = await Promise.all([get(`/reunioes/${id}`), carregarCabecalhoAta()]);
   const lista = (arr, f) => (arr.length ? `<ul>${arr.map((x) => `<li>${f(x)}</li>`).join('')}</ul>` : '<p class="suave pequeno">Nenhum registro.</p>');
   raiz.innerHTML = `
     <div class="cabeca"><div><a href="#/reunioes" class="pequeno nao-imprimir">← Reuniões e atas</a><h1>Reunião de ${br(r.data)}</h1>
@@ -57,6 +58,7 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
     <div class="espaco nao-imprimir"></div>
     <div class="cartao">
       <div class="linha entre"><h2>Ata</h2>${['rascunho', 'enviada'].includes(r.status) ? '<button type="button" class="btn btn-sec nao-imprimir" id="pdf-ata">Baixar PDF</button>' : ''}</div>
+      ${['rascunho', 'enviada'].includes(r.status) ? htmlCabecalhoAta(cabecalho) : ''}
       ${r.status === 'rascunho' && !podeOperar() ? `<div class="info nao-imprimir">Ata em rascunho: o Diretor ou o Apoio ainda vai revisá-la e enviá-la aos chefes.</div><div class="ata">${renderizarAta(r.ata_texto)}</div>`
       : r.status === 'rascunho' ? `<div class="info nao-imprimir">A ata foi montada a partir do que foi registrado na reunião. Revise, ajuste se precisar e envie aos chefes. Nesta versão do protótipo, "enviar" libera a leitura na tela Atas; não há e-mail.</div>
         ${campoEditorAta(r.ata_texto)}
@@ -69,16 +71,16 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
         <div class="linha nao-imprimir" style="margin-top:10px"><button class="btn btn-primario" id="salvar">Salvar alterações</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
       : r.status === 'enviada' ? `<div class="ata">${renderizarAta(r.ata_texto)}</div><p class="suave pequeno">Enviada em ${dataHora(r.enviada_em)}.</p>`
       : '<p class="suave">A ata será montada quando a reunião for encerrada.</p>'}</div>`;
-  ligarRegistrosHistoricos(raiz, r);
   const editor = ['rascunho', 'enviada'].includes(r.status) && podeOperar()
     ? await ligarEditorAta(raiz, t => { raiz.querySelector('#ata-previa').innerHTML = renderizarAta(t); }) : null;
   const atualizarRevisao = ligarRevisaoAta(raiz, r, { lerTextoAta: () => editor.texto() });
+  ligarRegistrosHistoricos(raiz, r, { editor, atualizarRevisao });
   raiz.querySelector('#pdf-ata')?.addEventListener('click', async (ev) => {
     const botao = ev.currentTarget;
     botao.disabled = true;
     try {
       // Reflete o que está no campo agora (inclusive alterações ainda não salvas), como a pré-visualização já faz.
-      await baixarPdfAta(raiz.querySelector('#ata')?.value ?? r.ata_texto, { dataReuniao: r.data });
+      await baixarPdfAta(raiz.querySelector('#ata')?.value ?? r.ata_texto, { dataReuniao: r.data, cabecalho });
     } catch (e) { toast(e.message, 'erro'); }
     finally { botao.disabled = false; }
   });
@@ -108,15 +110,15 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
 // Chefes: atas enviadas
 export async function atas(raiz, { id }) {
   if (id) {
-    const r = await get(`/reunioes/${id}`);
+    const [r, cabecalho] = await Promise.all([get(`/reunioes/${id}`), carregarCabecalhoAta()]);
     raiz.innerHTML = `<div class="cabeca"><div><a href="#/atas" class="pequeno nao-imprimir">← Atas</a><h1>Ata de ${br(r.data)}</h1></div>
       <div class="acoes-topo">${r.pode_sugerir ? '<button type="button" class="btn btn-primario" data-sugerir-ata-topo>Sugerir revisão</button>' : '<button type="button" class="btn btn-sec" data-ver-revisoes>Revisões da ata</button>'}<button type="button" class="btn btn-sec" id="pdf-ata">Baixar PDF</button></div></div>
-      <div class="ata">${renderizarAta(r.ata_texto)}</div>`;
+      ${htmlCabecalhoAta(cabecalho)}<div class="ata">${renderizarAta(r.ata_texto)}</div>`;
     ligarRevisaoAta(raiz, r);
     raiz.querySelector('#pdf-ata').addEventListener('click', async (ev) => {
       const botao = ev.currentTarget;
       botao.disabled = true;
-      try { await baixarPdfAta(r.ata_texto, { dataReuniao: r.data }); }
+      try { await baixarPdfAta(r.ata_texto, { dataReuniao: r.data, cabecalho }); }
       catch (e) { toast(e.message, 'erro'); }
       finally { botao.disabled = false; }
     });
