@@ -47,7 +47,7 @@ test('a seção sinaliza demanda do Diretor sem atribuir autoria ao Diretor', as
   assert.equal((await api(3, 'POST', `/acoes/${id}/arquivar`, {})).status, 200, 'marcar a origem não altera autoria nem os poderes da seção');
 });
 
-test('informações têm CRUD restrito à gestão, entram na ata e ficam congeladas ao encerrar', async (t) => {
+test('informações têm CRUD restrito à gestão antes e depois do encerramento, sem sobrescrever a ata', async (t) => {
   const { db, api, iniciar } = await ambiente(t);
   const r = await iniciar();
   assert.equal((await api(3, 'POST', `/reunioes/${r.id}/informacoes`, { texto: 'Tentativa' })).status, 403);
@@ -65,12 +65,13 @@ test('informações têm CRUD restrito à gestão, entram na ata e ficam congela
   assert.doesNotMatch(encerrada.data.ata_texto, /Apagar/);
   for (const metodo of ['POST', 'PATCH', 'DELETE']) {
     const caminho = `/reunioes/${r.id}/informacoes${metodo === 'POST' ? '' : `/${info.id}`}`;
-    assert.equal((await api(1, metodo, caminho, { texto: 'Após encerramento' })).status, 409);
+    assert.equal((await api(1, metodo, caminho, { texto: 'Após encerramento' })).status, metodo === 'POST' ? 201 : 200);
   }
+  assert.equal((await api(1, 'GET', `/reunioes/${r.id}`)).data.ata_texto, encerrada.data.ata_texto);
   const outra = await iniciar();
   assert.equal((await api(1, 'PATCH', `/reunioes/${outra.id}/informacoes/${info.id}`, { texto: 'Outra reunião' })).status, 404);
   await api(1, 'DELETE', `/reunioes/${outra.id}/informacoes/${info.id}`);
-  assert.equal((await db.prepare('select texto from reuniao_informacoes where id = ?').get(info.id)).texto, 'Visita técnica na sexta.');
+  assert.equal(await db.prepare('select texto from reuniao_informacoes where id = ?').get(info.id), undefined);
 });
 
 test('presença identifica titular e suplente; só participantes sugerem revisões após publicar', async (t) => {
@@ -89,7 +90,7 @@ test('presença identifica titular e suplente; só participantes sugerem revisõ
   const encerrada = await api(1, 'POST', `/reunioes/${r.id}/encerrar`, {});
   assert.match(encerrada.data.ata_texto, /Ana Ribeiro/);
   assert.match(encerrada.data.ata_texto, /Suplente CPE/);
-  assert.equal((await api(1, 'PUT', `/reunioes/${r.id}/participantes`, { usuarios: [4] })).status, 409);
+  assert.equal((await api(1, 'PUT', `/reunioes/${r.id}/participantes`, { usuarios: [1, 3, suplente] })).status, 200);
   assert.equal((await api(3, 'GET', `/reunioes/${r.id}`)).status, 404);
   await api(2, 'POST', `/reunioes/${r.id}/enviar-ata`, {});
   for (const uid of [3, suplente]) {
@@ -102,6 +103,38 @@ test('presença identifica titular e suplente; só participantes sugerem revisõ
   const sugestoes = (await api(1, 'GET', `/reunioes/${r.id}`)).data.sugestoes;
   assert.deepEqual(sugestoes.map((s) => s.usuario_id), [3, suplente]);
   assert.equal((await api(3, 'POST', `/reunioes/${r.id}/sugestoes/${sugestoes[0].id}/responder`, { status: 'acolhida', resposta: 'Sim' })).status, 403);
+});
+
+test('gestão completa registros de reunião publicada e libera sugestões sem modificar versões da ata', async (t) => {
+  const { db, api, iniciar } = await ambiente(t);
+  const r = await iniciar();
+  const original = (await api(1, 'POST', `/reunioes/${r.id}/encerrar`, {})).data.ata_texto;
+  await api(1, 'POST', `/reunioes/${r.id}/enviar-ata`, {});
+  const antes = (await api(1, 'GET', `/reunioes/${r.id}`)).data;
+  const resumoAntes = (await api(1, 'GET', '/reunioes')).data.find(item => item.id === r.id);
+  assert.equal(resumoAntes.informacoes, 0);
+  assert.equal(resumoAntes.participantes, 0);
+  assert.equal((await api(3, 'GET', `/reunioes/${r.id}`)).data.pode_sugerir, false);
+  assert.equal((await api(3, 'PUT', `/reunioes/${r.id}/participantes`, { usuarios: [3] })).status, 403);
+  assert.equal((await api(2, 'PUT', `/reunioes/${r.id}/participantes`, { usuarios: [3] })).status, 200);
+  assert.equal((await api(3, 'POST', `/reunioes/${r.id}/sugestoes`, { tipo: 'correcao', texto: 'Corrigir o registro antigo' })).status, 201);
+  await db.prepare('update usuarios set ativo = 0 where id = 3').run();
+  assert.equal((await api(1, 'PUT', `/reunioes/${r.id}/participantes`, { usuarios: [3, 4] })).status, 200);
+  assert.equal((await api(1, 'GET', `/reunioes/${r.id}`)).data.participantes.find(p => p.usuario_id === 3).nome, 'Ana Ribeiro');
+  assert.equal((await api(2, 'POST', `/reunioes/${r.id}/informacoes`, { texto: 'Comunicado da reunião passada' })).status, 201);
+  const info = await db.prepare('select id from reuniao_informacoes where reuniao_id = ?').get(r.id);
+  assert.equal((await api(4, 'PATCH', `/reunioes/${r.id}/informacoes/${info.id}`, { texto: 'Tentativa' })).status, 403);
+  assert.equal((await api(1, 'PATCH', `/reunioes/${r.id}/informacoes/${info.id}`, { texto: 'Comunicado corrigido' })).status, 200);
+  const depois = (await api(1, 'GET', `/reunioes/${r.id}`)).data;
+  assert.equal(depois.informacoes[0].texto, 'Comunicado corrigido');
+  assert.equal(depois.ata_texto, original);
+  assert.deepEqual(depois.revisoes, antes.revisoes);
+  assert.equal(depois.status, 'enviada');
+  const resumo = (await api(4, 'GET', '/reunioes')).data.find(item => item.id === r.id);
+  assert.equal(resumo.informacoes, 1);
+  assert.equal(resumo.participantes, 2);
+  assert.equal((await api(2, 'DELETE', `/reunioes/${r.id}/informacoes/${info.id}`)).status, 200);
+  assert.equal((await api(1, 'GET', '/reunioes')).data.find(item => item.id === r.id).informacoes, 0);
 });
 
 test('revisão da ata preserva versões, impede sobrescrita concorrente e responde sugestões atomicamente', async (t) => {

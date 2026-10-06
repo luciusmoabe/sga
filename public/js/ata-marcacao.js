@@ -30,28 +30,33 @@ export function blocosDaAta(texto) {
 // Quebra uma linha em trechos { texto, negrito, italico }, pela mesma marcação (**negrito**, *itálico*);
 // o PDF usa isso para trocar a fonte por trecho (não entende HTML como o navegador).
 export function segmentosInline(linha) {
-  const brutos = [];
-  let pos = 0;
-  const reNegrito = /\*\*(.+?)\*\*/g;
-  let m;
-  while ((m = reNegrito.exec(linha))) {
-    if (m.index > pos) brutos.push({ texto: linha.slice(pos, m.index), negrito: false });
-    brutos.push({ texto: m[1], negrito: true });
-    pos = m.index + m[0].length;
-  }
-  if (pos < linha.length) brutos.push({ texto: linha.slice(pos), negrito: false });
-  const finais = [];
-  for (const parte of brutos) {
-    if (parte.negrito) { finais.push({ texto: parte.texto, negrito: true, italico: false }); continue; }
-    let p2 = 0;
-    const reItalico = /(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g;
-    let m2;
-    while ((m2 = reItalico.exec(parte.texto))) {
-      if (m2.index > p2) finais.push({ texto: parte.texto.slice(p2, m2.index), negrito: false, italico: false });
-      finais.push({ texto: m2[1], negrito: false, italico: true });
-      p2 = m2.index + m2[0].length;
+  const texto = String(linha ?? '');
+  const analisar = (inicio, marcador = '', negrito = false, italico = false, profundidade = 0) => {
+    const segmentos = [];
+    const adicionar = (t, n = negrito, i = italico) => {
+      if (!t) return;
+      const ultimo = segmentos.at(-1);
+      if (ultimo?.negrito === n && ultimo.italico === i) ultimo.texto += t;
+      else segmentos.push({ texto: t, negrito: n, italico: i });
+    };
+    let pos = inicio;
+    while (pos < texto.length) {
+      if (texto[pos] === '\\' && (/[\\*\-]/.test(texto[pos + 1] || '') || (pos === 0 && /^\d+[.)]\s/.test(texto.slice(pos + 1))))) {
+        adicionar(texto[pos + 1]); pos += 2; continue;
+      }
+      if (marcador && texto.startsWith(marcador, pos)) return { segmentos, pos: pos + marcador.length, fechou: true };
+      if (texto[pos] === '*' && profundidade < 8) {
+        const marca = texto.startsWith('***', pos) ? '***' : texto.startsWith('**', pos) ? '**' : '*';
+        const parte = analisar(pos + marca.length, marca, negrito || marca.length > 1, italico || marca.length !== 2, profundidade + 1);
+        if (parte.fechou && parte.segmentos.length) {
+          parte.segmentos.forEach(s => adicionar(s.texto, s.negrito, s.italico));
+          pos = parte.pos; continue;
+        }
+        adicionar(marca); pos += marca.length; continue;
+      }
+      adicionar(texto[pos++]);
     }
-    if (p2 < parte.texto.length) finais.push({ texto: parte.texto.slice(p2), negrito: false, italico: false });
-  }
-  return finais.filter((s) => s.texto !== '');
+    return { segmentos, pos, fechou: false };
+  };
+  return analisar(0).segmentos;
 }

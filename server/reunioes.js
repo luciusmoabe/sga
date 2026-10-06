@@ -150,7 +150,9 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
     return await q(
       `select r.id, r.data, r.semana, r.status, r.iniciada_em, r.encerrada_em, r.enviada_em,
          (select count(*) from decisoes d where d.reuniao_id = r.id) decisoes,
-         (select count(*) from diretrizes g where g.reuniao_id = r.id) novas_acoes
+         (select count(*) from diretrizes g where g.reuniao_id = r.id) novas_acoes,
+         (select count(*) from reuniao_informacoes i where i.reuniao_id = r.id) informacoes,
+         (select count(*) from reuniao_participantes p where p.reuniao_id = r.id) participantes
        from reunioes r ${gere ? '' : `where r.status = 'enviada'`} order by r.data desc, r.id desc limit 40`,
     );
   }));

@@ -4,6 +4,8 @@ Durante a reunião, Diretor, Apoio ou Administrador podem usar **Registrar infor
 
 Use **Presença** para registrar individualmente quem participou, incluindo titular e suplente quando ambos estiverem presentes. A ata guarda os nomes e as seções como estavam no registro de presença. Uma reunião antiga não recebe participantes automaticamente: ter enviado um relato ou ser chefe de uma seção não comprova presença.
 
+Para reuniões passadas, Diretor, Apoio e Administrador podem abrir **Reuniões e atas**, selecionar a reunião e usar **Registrar presença** e **Registrar informação**, mesmo com a ata publicada. Informações também podem ser editadas e excluídas. A presença registrada libera sugestões de revisão dos chefes participantes. Esses registros não reescrevem o texto da ata: para incluí-los no texto e no PDF, revise o editor e salve a ata. Os nomes e seções dos participantes já registrados são preservados, inclusive quando a conta fica inativa.
+
 Depois da publicação, chefes e suplentes registrados como participantes encontram **Sugerir revisão** na tela da ata. Podem solicitar correção, inclusão ou supressão. A gestão revisa o editor da ata e usa **Revisar e responder**. Ao acolher a sugestão, o texto do editor e a resposta são salvos na mesma transação. Uma sugestão não acolhida também recebe justificativa. A sugestão fica visível com autor, data, resultado e resposta. Cada alteração efetiva da ata publicada preserva a versão anterior; o histórico fica disponível na mesma tela. Edições concorrentes com uma base desatualizada são recusadas.
 
 # Reunião antecipada

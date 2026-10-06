@@ -3,8 +3,10 @@ import { del, get, post, put } from './api.js';
 import { est, podeOperar } from './estado.js';
 import { br, confirmar, dataHora, diaSemana, esc, on, plural, toast, vazio } from './ui.js';
 import { baixarPdfAta } from './pdf-ata.js';
-import { blocosDaAta } from './ata-marcacao.js';
+import { blocosDaAta, segmentosInline } from './ata-marcacao.js';
 import { ligarRevisaoAta } from './ata-revisao.js';
+import { campoEditorAta, ligarEditorAta } from './ata-editor.js';
+import { ligarRegistrosHistoricos } from './reuniao-historico.js';
 
 const ST = { em_andamento: 'Em andamento', rascunho: 'Ata em rascunho', enviada: 'Ata enviada' };
 const cls = { em_andamento: 'st-em_andamento', rascunho: 'st-bloqueada', enviada: 'st-concluida' };
@@ -12,54 +14,15 @@ const cls = { em_andamento: 'st-em_andamento', rascunho: 'st-bloqueada', enviada
 // A leitura sempre escapa o texto antes de aplicar qualquer marcação, então não há risco de alguém
 // injetar tags pelo campo. Ver `ata-marcacao.js` para a análise compartilhada com o PDF.
 function renderizarAta(texto) {
-  const linhaHTML = (t) => esc(t)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+  const linhaHTML = (t) => segmentosInline(t).map(s => {
+    let html = esc(s.texto);
+    if (s.italico) html = `<em>${html}</em>`;
+    if (s.negrito) html = `<strong>${html}</strong>`;
+    return html;
+  }).join('');
   return blocosDaAta(texto).map((b) => (b.tipo === 'p'
     ? (b.texto.trim() ? `<p>${linhaHTML(b.texto)}</p>` : '<p>&nbsp;</p>')
     : `<${b.tipo}>${b.itens.map((i) => `<li>${linhaHTML(i)}</li>`).join('')}</${b.tipo}>`)).join('');
-}
-// Envolve a seleção do textarea com um marcador (negrito **, itálico *); sem seleção, insere um texto de exemplo já selecionado.
-function envolverSelecao(area, marcador) {
-  const { selectionStart: s, selectionEnd: e, value } = area;
-  const meio = value.slice(s, e) || 'texto';
-  area.value = value.slice(0, s) + marcador + meio + marcador + value.slice(e);
-  area.focus();
-  area.setSelectionRange(s + marcador.length, s + marcador.length + meio.length);
-}
-// Alterna um prefixo de lista ("- " ou "1. ") em cada linha tocada pela seleção.
-function alternarPrefixoLinhas(area, prefixo) {
-  const { selectionStart: s, selectionEnd: e, value } = area;
-  const inicio = value.lastIndexOf('\n', s - 1) + 1;
-  const fim = value.indexOf('\n', e) === -1 ? value.length : value.indexOf('\n', e);
-  const trecho = value.slice(inicio, fim)
-    .split('\n').map((l) => (l.startsWith(prefixo) ? l.slice(prefixo.length) : prefixo + l)).join('\n');
-  area.value = value.slice(0, inicio) + trecho + value.slice(fim);
-  area.focus();
-  area.setSelectionRange(inicio, inicio + trecho.length);
-}
-const barraFormatacao = () => `<div class="ata-barra nao-imprimir" role="toolbar" aria-label="Formatação do texto">
-  <button type="button" class="btn btn-sec btn-mini" data-fmt="negrito" title="Negrito"><b>N</b></button>
-  <button type="button" class="btn btn-sec btn-mini" data-fmt="italico" title="Itálico"><i>I</i></button>
-  <button type="button" class="btn btn-sec btn-mini" data-fmt="lista" title="Lista com marcadores">• Lista</button>
-  <button type="button" class="btn btn-sec btn-mini" data-fmt="numerada" title="Lista numerada">1. Lista</button>
-</div>`;
-// O Diretor, o Apoio e o Administrador só editam a ata (nunca é mostrada a eles somente a versão
-// renderizada); por isso a pré-visualização ao vivo, atualizada tanto ao digitar quanto ao usar a barra
-// (que muda o texto sem disparar o evento "input" do textarea, então precisa ser atualizada à parte).
-function ligarBarraFormatacao(raiz) {
-  const area = raiz.querySelector('#ata');
-  const previa = raiz.querySelector('#ata-previa');
-  const atualizarPrevia = () => { previa.innerHTML = renderizarAta(area.value); };
-  area.addEventListener('input', atualizarPrevia);
-  on(raiz, 'click', '[data-fmt]', (el) => {
-    const tipo = el.dataset.fmt;
-    if (tipo === 'negrito') envolverSelecao(area, '**');
-    else if (tipo === 'italico') envolverSelecao(area, '*');
-    else if (tipo === 'lista') alternarPrefixoLinhas(area, '- ');
-    else if (tipo === 'numerada') alternarPrefixoLinhas(area, '1. ');
-    atualizarPrevia();
-  });
 }
 
 export async function reunioes(raiz) {
@@ -67,9 +30,9 @@ export async function reunioes(raiz) {
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>Reuniões e atas</h1><div class="sub">Histórico das reuniões semanais. A ata guarda os combinados que estavam valendo naquela data.</div></div>
       ${podeOperar() ? '<div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao">Iniciar ou retomar reunião</a></div>' : ''}</div>
-    <div class="cartao">${lista.length ? `<table><thead><tr><th>Data</th><th>Situação</th><th>Decisões</th><th>Novas ações</th></tr></thead><tbody>
+    <div class="cartao">${lista.length ? `<table class="tabela-lista"><thead><tr><th>Data</th><th>Situação</th><th>Decisões</th><th>Novas ações</th><th>Informações</th><th>Participantes</th></tr></thead><tbody>
       ${lista.map((r) => `<tr class="clicavel" data-id="${r.id}" tabindex="0"><td><b>${br(r.data)}</b> <span class="suave pequeno">${diaSemana(r.data)}</span></td>
-        <td><span class="pilula ${cls[r.status]}">${ST[r.status]}</span></td><td class="num">${r.decisoes}</td><td class="num">${r.novas_acoes}</td></tr>`).join('')}</tbody></table>`
+        <td data-rotulo="Situação"><span class="pilula ${cls[r.status]}">${ST[r.status]}</span></td><td class="num" data-rotulo="Decisões">${r.decisoes}</td><td class="num" data-rotulo="Novas ações">${r.novas_acoes}</td><td class="num" data-rotulo="Informações">${r.informacoes}</td><td class="num" data-rotulo="Participantes">${r.participantes}</td></tr>`).join('')}</tbody></table>`
       : vazio('Nenhuma reunião registrada', 'Use "Iniciar reunião" no dia agendado.')}</div>`;
   const abrir = (el) => { location.hash = `#/reunioes/${el.dataset.id}`; };
   on(raiz, 'click', 'tr[data-id]', abrir);
@@ -88,29 +51,28 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
       <div class="cartao"><h2>Decisões</h2>${lista(r.decisoes, (d) => `<b>${esc(d.secao_sigla || 'Geral')}</b> · ${esc(d.texto)}`)}</div>
       <div class="cartao"><h2>Novas ações</h2>${lista(r.novas_acoes, (g) => `${esc(g.titulo)} <span class="suave pequeno">· ${g.destino === 'todos' ? 'todos os Centros' : plural(g.total_acoes, 'seção', 'seções')} · prazo ${br(g.prazo)}</span>`)}</div>
       <div class="cartao"><h2>Pedidos de prazo decididos</h2>${lista(r.pedidos_decididos, (p) => `<b>${esc(p.secao_sigla)}</b> · ${esc(p.acao_titulo)}: ${br(p.novo_prazo)} ${p.status}`)}</div>
-      <div class="cartao"><h2>Informações e comunicados</h2>${lista(r.informacoes, (i) => esc(i.texto))}</div>
-      <div class="cartao"><h2>Participantes</h2>${lista(r.participantes, (p) => `${esc(p.nome)}${p.secao_nome ? ` · ${esc(p.secao_nome)}` : ''}`)}</div>
+      <div class="cartao" data-informacoes-historicas><h2>Informações e comunicados</h2>${lista(r.informacoes, (i) => esc(i.texto))}</div>
+      <div class="cartao" data-presenca-historica><h2>Participantes</h2>${lista(r.participantes, (p) => `${esc(p.nome)}${p.secao_nome ? ` · ${esc(p.secao_nome)}` : ''}`)}</div>
     </div>
     <div class="espaco nao-imprimir"></div>
     <div class="cartao">
       <div class="linha entre"><h2>Ata</h2>${['rascunho', 'enviada'].includes(r.status) ? '<button type="button" class="btn btn-sec nao-imprimir" id="pdf-ata">Baixar PDF</button>' : ''}</div>
       ${r.status === 'rascunho' && !podeOperar() ? `<div class="info nao-imprimir">Ata em rascunho: o Diretor ou o Apoio ainda vai revisá-la e enviá-la aos chefes.</div><div class="ata">${renderizarAta(r.ata_texto)}</div>`
       : r.status === 'rascunho' ? `<div class="info nao-imprimir">A ata foi montada a partir do que foi registrado na reunião. Revise, ajuste se precisar e envie aos chefes. Nesta versão do protótipo, "enviar" libera a leitura na tela Atas; não há e-mail.</div>
-        ${barraFormatacao()}<textarea class="ata-edicao nao-imprimir" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
-        <p class="suave pequeno nao-imprimir" style="margin:6px 0 0">Formatação simples: **negrito**, *itálico*, linha começando com "- " vira lista.</p>
-        <h3 class="ata-previa-titulo nao-imprimir">Como os chefes vão ver</h3>
-        <div class="ata" id="ata-previa">${renderizarAta(r.ata_texto)}</div>
+        ${campoEditorAta(r.ata_texto)}
+        <details class="nao-imprimir"><summary>Pré-visualização de leitura</summary><div class="ata" id="ata-previa">${renderizarAta(r.ata_texto)}</div></details>
         <div class="linha nao-imprimir" style="margin-top:10px"><button class="btn btn-sec" id="salvar">Salvar rascunho</button><button class="btn btn-primario" id="enviar">Enviar aos chefes</button>
         <button class="btn btn-fantasma" id="reabrir">Reabrir a reunião</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
       : r.status === 'enviada' && podeOperar() ? `<p class="suave pequeno nao-imprimir">Enviada aos chefes em ${dataHora(r.enviada_em)}. As correções valem para todos assim que você salvar.</p>
-        ${barraFormatacao()}<textarea class="ata-edicao nao-imprimir" id="ata" aria-label="Texto da ata">${esc(r.ata_texto || '')}</textarea>
-        <p class="suave pequeno nao-imprimir" style="margin:6px 0 0">Formatação simples: **negrito**, *itálico*, linha começando com "- " vira lista.</p>
-        <h3 class="ata-previa-titulo nao-imprimir">Como os chefes veem</h3>
-        <div class="ata" id="ata-previa">${renderizarAta(r.ata_texto)}</div>
+        ${campoEditorAta(r.ata_texto)}
+        <details class="nao-imprimir"><summary>Pré-visualização de leitura</summary><div class="ata" id="ata-previa">${renderizarAta(r.ata_texto)}</div></details>
         <div class="linha nao-imprimir" style="margin-top:10px"><button class="btn btn-primario" id="salvar">Salvar alterações</button><button class="btn btn-perigo" id="excluir">Excluir ata</button></div>`
       : r.status === 'enviada' ? `<div class="ata">${renderizarAta(r.ata_texto)}</div><p class="suave pequeno">Enviada em ${dataHora(r.enviada_em)}.</p>`
       : '<p class="suave">A ata será montada quando a reunião for encerrada.</p>'}</div>`;
-  const atualizarRevisao = ligarRevisaoAta(raiz, r);
+  ligarRegistrosHistoricos(raiz, r);
+  const editor = ['rascunho', 'enviada'].includes(r.status) && podeOperar()
+    ? await ligarEditorAta(raiz, t => { raiz.querySelector('#ata-previa').innerHTML = renderizarAta(t); }) : null;
+  const atualizarRevisao = ligarRevisaoAta(raiz, r, { lerTextoAta: () => editor.texto() });
   raiz.querySelector('#pdf-ata')?.addEventListener('click', async (ev) => {
     const botao = ev.currentTarget;
     botao.disabled = true;
@@ -122,8 +84,7 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
   });
   if (!['rascunho', 'enviada'].includes(r.status) || !podeOperar()) return;
   const erro = (e) => toast(e.message, 'erro');
-  const texto = () => raiz.querySelector('#ata').value;
-  ligarBarraFormatacao(raiz);
+  const texto = () => editor.texto();
   const salvar = async () => {
     const salva = await put(`/reunioes/${id}/ata`, { ata_texto: texto(), ata_base: r.ata_texto });
     r.ata_texto = salva.ata_texto;
@@ -149,7 +110,7 @@ export async function atas(raiz, { id }) {
   if (id) {
     const r = await get(`/reunioes/${id}`);
     raiz.innerHTML = `<div class="cabeca"><div><a href="#/atas" class="pequeno nao-imprimir">← Atas</a><h1>Ata de ${br(r.data)}</h1></div>
-      <div class="acoes-topo"><button type="button" class="btn btn-sec" id="pdf-ata">Baixar PDF</button></div></div>
+      <div class="acoes-topo">${r.pode_sugerir ? '<button type="button" class="btn btn-primario" data-sugerir-ata-topo>Sugerir revisão</button>' : '<button type="button" class="btn btn-sec" data-ver-revisoes>Revisões da ata</button>'}<button type="button" class="btn btn-sec" id="pdf-ata">Baixar PDF</button></div></div>
       <div class="ata">${renderizarAta(r.ata_texto)}</div>`;
     ligarRevisaoAta(raiz, r);
     raiz.querySelector('#pdf-ata').addEventListener('click', async (ev) => {

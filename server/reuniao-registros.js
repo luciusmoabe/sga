@@ -3,7 +3,6 @@ import { falha, h, permit, texto } from './helpers.js';
 // Todas as alterações usam a mesma transação e trava do ciclo da reunião.
 export function registrosReuniao(app, { q, q1, run, agoraISO, comReuniao }) {
   const gestao = permit('diretor', 'apoio', 'administrador');
-  const aberta = (r) => { if (r.status !== 'em_andamento') throw falha(409, 'A reunião já foi encerrada.'); };
   const publicada = (r) => { if (r.status !== 'enviada') throw falha(409, 'A ata ainda não foi publicada.'); };
   const participantes = (id) => q('select usuario_id, nome, secao_nome from reuniao_participantes where reuniao_id = ? order by nome', id);
   const informacoes = (id) => q('select * from reuniao_informacoes where reuniao_id = ? order by id', id);
@@ -26,11 +25,13 @@ export function registrosReuniao(app, { q, q1, run, agoraISO, comReuniao }) {
       left join secoes s on s.id = u.secao_id where u.ativo = 1 order by u.nome`);
   }));
   app.put('/api/reunioes/:id/participantes', gestao, h(async (req) => comReuniao(req.params.id, async (r) => {
-    aberta(r);
     const ids = req.body?.usuarios;
     if (!Array.isArray(ids) || ids.length > 200 || ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) throw falha(400, 'Selecione os participantes.');
     const pessoas = [];
+    const registrados = await participantes(r.id);
     for (const id of new Set(ids)) {
+      const anterior = registrados.find(p => p.usuario_id === id);
+      if (anterior) { pessoas.push({ ...anterior, id }); continue; }
       const u = await q1(`select u.id, u.nome, s.nome secao_nome from usuarios u left join secoes s on s.id = u.secao_id where u.id = ? and u.ativo = 1`, id);
       if (!u) throw falha(400, 'Participante inválido.');
       pessoas.push(u);
@@ -40,7 +41,6 @@ export function registrosReuniao(app, { q, q1, run, agoraISO, comReuniao }) {
     return { participantes: await participantes(r.id) };
   })));
   app.post('/api/reunioes/:id/informacoes', gestao, h(async (req, res) => comReuniao(req.params.id, async (r) => {
-    aberta(r);
     const t = texto(req.body?.texto, 2000);
     if (!t) throw falha(400, 'Escreva a informação.');
     await run('insert into reuniao_informacoes (reuniao_id, texto, criado_por, criado_em) values (?,?,?,?)', r.id, t, req.user.id, agoraISO());
@@ -48,7 +48,6 @@ export function registrosReuniao(app, { q, q1, run, agoraISO, comReuniao }) {
     return { ok: true };
   })));
   app.patch('/api/reunioes/:id/informacoes/:infoId', gestao, h(async (req) => comReuniao(req.params.id, async (r) => {
-    aberta(r);
     const t = texto(req.body?.texto, 2000);
     if (!t) throw falha(400, 'Escreva a informação.');
     if (!(await q1('select id from reuniao_informacoes where id = ? and reuniao_id = ?', Number(req.params.infoId), r.id))) throw falha(404, 'Informação não encontrada.');
@@ -56,7 +55,6 @@ export function registrosReuniao(app, { q, q1, run, agoraISO, comReuniao }) {
     return { ok: true };
   })));
   app.delete('/api/reunioes/:id/informacoes/:infoId', gestao, h(async (req) => comReuniao(req.params.id, async (r) => {
-    aberta(r);
     await run('delete from reuniao_informacoes where id = ? and reuniao_id = ?', Number(req.params.infoId), r.id);
     return { ok: true };
   })));

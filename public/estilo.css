@@ -1191,3 +1191,12 @@ body.carregando::before {
 .checklist-texto:hover, .checklist-texto:focus-visible { background: var(--bg); text-decoration: underline; }
 .item.previsto [data-texto-check] { flex: 1; min-width: 0; width: 0; }
 .tv-informacoes { width: 100%; max-height: 24vh; overflow-y: auto; }
+.ata-editor { margin: 12px 0; }
+.ata-editor .ql-toolbar.ql-snow { position: sticky; top: 8px; z-index: 2; background: var(--card); border-color: var(--line-str); border-radius: 10px 10px 0 0; }
+.ata-editor .ql-toolbar.ql-snow .ql-formats { margin-right: 10px; }
+.ata-editor .ql-toolbar.ql-snow button { width: 44px; height: 44px; padding: 10px; font-size: 22px; }
+.ata-editor .ql-container.ql-snow { font-family: var(--sans); font-size: 16px; border-color: var(--line-str); border-radius: 0 0 10px 10px; background: var(--card); }
+.ata-editor .ql-editor { min-height: 380px; max-height: 65vh; overflow-y: auto; padding: 18px 20px; line-height: 1.65; }
+.ata-editor .ql-editor p { margin-bottom: 10px; }
+.ata-editor .ql-editor li { margin-bottom: 4px; }
+@media (max-width: 760px) { .ata-editor .ql-toolbar.ql-snow { top: 56px; } .ata-editor .ql-toolbar.ql-snow .ql-formats { margin-right: 2px; } }
