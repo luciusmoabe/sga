@@ -42,11 +42,13 @@ export async function reunioes(raiz) {
 
 export async function reuniaoDetalhe(raiz, { id, refresh }) {
   const [r, cabecalho] = await Promise.all([get(`/reunioes/${id}`), carregarCabecalhoAta()]);
+  const podeExcluirTeste = podeOperar() && r.status === 'em_andamento' && !r.ata_texto?.trim()
+    && [r.participantes, r.decisoes, r.novas_acoes, r.pedidos_decididos, r.informacoes].every(arr => !arr.length);
   const lista = (arr, f) => (arr.length ? `<ul>${arr.map((x) => `<li>${f(x)}</li>`).join('')}</ul>` : '<p class="suave pequeno">Nenhum registro.</p>');
   raiz.innerHTML = `
     <div class="cabeca"><div><a href="#/reunioes" class="pequeno nao-imprimir">← Reuniões e atas</a><h1>Reunião de ${br(r.data)}</h1>
       <div class="sub"><span class="pilula ${cls[r.status]}">${ST[r.status]}</span> · iniciada em ${dataHora(r.iniciada_em)}${r.encerrada_em ? ` · encerrada em ${dataHora(r.encerrada_em)}` : ''}</div></div>
-      ${r.status === 'em_andamento' && podeOperar() ? '<div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao/${r.id}">Voltar ao Modo Reunião</a></div>' : ''}</div>
+      ${r.status === 'em_andamento' && podeOperar() ? `<div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao/${r.id}">Voltar ao Modo Reunião</a>${podeExcluirTeste ? '<button type="button" class="btn btn-perigo" id="excluir-reuniao-teste">Excluir reunião de teste</button>' : ''}</div>` : ''}</div>
     <div class="dois reuniao-registros nao-imprimir" style="align-items:start">
       <div class="cartao" data-presenca-historica><h2>Participantes</h2>${lista(r.participantes, (p) => `${esc(p.nome)}${p.secao_nome ? ` · ${esc(p.secao_nome)}` : ''}`)}</div>
       <div class="cartao"><h2>Decisões</h2>${lista(r.decisoes, (d) => `<b>${esc(d.secao_sigla || 'Geral')}</b> · ${esc(d.texto)}`)}</div>
@@ -74,6 +76,13 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
     ? await ligarEditorAta(raiz, t => { raiz.querySelector('#ata-previa').innerHTML = renderizarAta(t); }) : null;
   const atualizarRevisao = ligarRevisaoAta(raiz, r, { lerTextoAta: () => editor.texto() });
   ligarRegistrosHistoricos(raiz, r, { editor, atualizarRevisao });
+  raiz.querySelector('#excluir-reuniao-teste')?.addEventListener('click', async () => {
+    try {
+      if (!await confirmar({ titulo: `Excluir a reunião de ${br(r.data)}`, texto: `Excluir a reunião de ${br(r.data)}? Esta operação não poderá ser desfeita. A exclusão só é permitida enquanto a reunião estiver sem registros.`, rotulo: 'Excluir reunião de teste', perigo: true })) return;
+      await del(`/reunioes/${id}`, { excluir_teste: true });
+      toast('Reunião de teste excluída.'); location.hash = '#/reunioes';
+    } catch (e) { toast(e.message, 'erro'); }
+  });
   raiz.querySelector('#pdf-ata')?.addEventListener('click', async (ev) => {
     const botao = ev.currentTarget;
     botao.disabled = true;

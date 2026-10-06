@@ -327,7 +327,13 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
   // Exclui a reunião e a ata. Ações criadas na reunião permanecem: só perdem o vínculo com ela.
   app.delete('/api/reunioes/:id', gestao, h(async (req) => {
     return comReuniao(req.params.id, async (r) => {
-      if (r.status === 'em_andamento') throw falha(409, 'Encerre a reunião antes de excluir a ata.');
+      if (r.status === 'em_andamento') {
+        if (req.body?.excluir_teste !== true) throw falha(409, 'Encerre a reunião antes de excluir a ata.');
+        for (const tabela of ['decisoes', 'diretrizes', 'pedidos_prazo', 'ata_sugestoes', 'ata_revisoes', 'reuniao_informacoes', 'reuniao_participantes']) {
+          if (await q1(`select 1 from ${tabela} where reuniao_id = ? limit 1`, r.id)) throw falha(409, 'Esta reunião possui registros e não pode ser excluída como teste. Encerre a reunião para revisar a ata.');
+        }
+        if (r.ata_texto?.trim()) throw falha(409, 'Esta reunião já possui texto de ata e não pode ser excluída como teste.');
+      }
       await run('delete from decisoes where reuniao_id = ?', r.id);
       for (const tabela of ['ata_sugestoes', 'ata_revisoes', 'reuniao_informacoes', 'reuniao_participantes']) await run(`delete from ${tabela} where reuniao_id = ?`, r.id);
       await run('update diretrizes set reuniao_id = null where reuniao_id = ?', r.id);

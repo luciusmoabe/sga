@@ -71,6 +71,36 @@ test('cabeçalho e brasão são persistidos, restritos à gestão e validados', 
   assert.equal((await api(1, 'PUT', '/config/ata', { ata_cabecalho: '', ata_brasao: '' })).status, 200);
 });
 
+test('gestão exclui reunião de teste vazia e pode iniciar outra; chefes não excluem', async t => {
+  const { api, iniciar } = await ambiente(t);
+  for (const uid of [1, 2, 10]) {
+    const r = await iniciar();
+    assert.equal((await api(3, 'DELETE', `/reunioes/${r.id}`, { excluir_teste: true })).status, 403);
+    assert.equal((await api(uid, 'DELETE', `/reunioes/${r.id}`)).status, 409);
+    assert.equal((await api(uid, 'DELETE', `/reunioes/${r.id}`, { excluir_teste: true })).status, 200);
+    assert.equal((await api(1, 'GET', `/reunioes/${r.id}`)).status, 404);
+  }
+  assert.ok((await iniciar()).id);
+});
+
+test('exclusão de teste recusa presença, informação, decisão e pedido vinculado sem apagar registros', async t => {
+  const { db, api, iniciar } = await ambiente(t);
+  const r = await iniciar();
+  const tentar = async () => assert.equal((await api(2, 'DELETE', `/reunioes/${r.id}`, { excluir_teste: true })).status, 409);
+  await api(1, 'PUT', `/reunioes/${r.id}/participantes`, { usuarios: [3] }); await tentar();
+  await api(1, 'PUT', `/reunioes/${r.id}/participantes`, { usuarios: [] });
+  await api(1, 'POST', `/reunioes/${r.id}/informacoes`, { texto: 'Informação real' }); await tentar();
+  const info = await db.prepare('select id from reuniao_informacoes where reuniao_id=?').get(r.id);
+  await api(1, 'DELETE', `/reunioes/${r.id}/informacoes/${info.id}`);
+  await api(1, 'POST', `/reunioes/${r.id}/decisoes`, { texto: 'Decisão real' }); await tentar();
+  const decisao = await db.prepare('select id from decisoes where reuniao_id=?').get(r.id);
+  await api(1, 'DELETE', `/reunioes/${r.id}/decisoes/${decisao.id}`);
+  const pedido = await db.prepare('select id from pedidos_prazo limit 1').get();
+  await db.prepare('update pedidos_prazo set reuniao_id=? where id=?').run(r.id, pedido.id); await tentar();
+  assert.equal((await api(1, 'GET', `/reunioes/${r.id}`)).status, 200);
+  assert.equal((await db.prepare('select reuniao_id from pedidos_prazo where id=?').get(pedido.id)).reuniao_id, r.id);
+});
+
 test('a seção sinaliza demanda do Diretor sem atribuir autoria ao Diretor', async (t) => {
   const { db, api } = await ambiente(t);
   const corpo = { titulo: 'Demanda recebida verbalmente', prazo: '2026-10-30', demanda_diretor: true, secao_id: 2 };
