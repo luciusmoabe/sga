@@ -1,6 +1,6 @@
 import { get, post, put, patch, del } from './api.js';
 import { podeOperar } from './estado.js';
-import { abrirForm, confirmar, esc, on, toast } from './ui.js';
+import { abrirForm, confirmar, dataHora, esc, on, plural, toast } from './ui.js';
 import { acompanharOrdemPresenca } from './presenca-ordem.js';
 
 export function ligarRegistrosHistoricos(raiz, r, { editor, atualizarRevisao } = {}) {
@@ -11,7 +11,8 @@ export function ligarRegistrosHistoricos(raiz, r, { editor, atualizarRevisao } =
   const dadosAta = () => ({ ata_base: r.ata_texto, ata_texto: editor.texto() });
   const desenhar = () => {
     presenca.innerHTML = `<h2>Participantes</h2>${r.participantes.length ? `<ul>${r.participantes.map(p => `<li>${esc(p.nome)}${p.secao_nome ? ` · ${esc(p.secao_nome)}` : ''}</li>`).join('')}</ul>` : '<p class="suave pequeno">Nenhuma presença registrada.</p>'}<button type="button" class="btn btn-sec" data-presenca>Registrar presença</button>${aviso}`;
-    informacoes.innerHTML = `<h2>Informações e comunicados</h2>${r.informacoes.map(i => `<article class="item" style="display:block"><p style="white-space:pre-wrap">${esc(i.texto)}</p><div class="linha"><button type="button" class="btn btn-sec btn-mini" data-editar-info="${i.id}">Editar</button><button type="button" class="btn btn-fantasma btn-mini" data-excluir-info="${i.id}">Excluir</button></div></article>`).join('') || '<p class="suave pequeno">Nenhuma informação registrada.</p>'}<button type="button" class="btn btn-sec" data-nova-info>Registrar informação</button>${aviso}`;
+    informacoes.innerHTML = `<div class="reuniao-informacoes-cabeca"><div><h2>Informações e comunicados</h2><p class="suave pequeno">${plural(r.informacoes.length, 'registro', 'registros')} · Cada informação integra um item da ata.</p></div><button type="button" class="btn btn-primario" data-nova-info>Registrar informação</button></div>
+      <div class="reuniao-informacoes-lista">${r.informacoes.map((i, indice) => `<article class="reuniao-informacao" aria-labelledby="info-titulo-${i.id}"><header><div><h3 id="info-titulo-${i.id}">Informação ${indice + 1}</h3>${i.criado_em ? `<small class="suave">Registrada em ${dataHora(i.criado_em)}</small>` : ''}</div><div class="linha"><button type="button" class="btn btn-sec btn-mini" data-editar-info="${i.id}" aria-label="Editar informação ${indice + 1}">Editar</button><button type="button" class="btn btn-fantasma btn-mini" data-excluir-info="${i.id}" aria-label="Excluir informação ${indice + 1}">Excluir</button></div></header><p class="reuniao-informacao-texto">${esc(i.texto)}</p></article>`).join('') || '<div class="reuniao-informacoes-vazio"><p>Nenhuma informação ou comunicado registrado.</p><p class="suave pequeno">Use Registrar informação para incluir os assuntos apresentados nesta reunião.</p></div>'}</div>${aviso}`;
   };
   const recarregar = async () => {
     const nova = await get(`/reunioes/${r.id}`);

@@ -47,13 +47,12 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
     <div class="cabeca"><div><a href="#/reunioes" class="pequeno nao-imprimir">← Reuniões e atas</a><h1>Reunião de ${br(r.data)}</h1>
       <div class="sub"><span class="pilula ${cls[r.status]}">${ST[r.status]}</span> · iniciada em ${dataHora(r.iniciada_em)}${r.encerrada_em ? ` · encerrada em ${dataHora(r.encerrada_em)}` : ''}</div></div>
       ${r.status === 'em_andamento' && podeOperar() ? '<div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao/${r.id}">Voltar ao Modo Reunião</a></div>' : ''}</div>
-    <div class="dois nao-imprimir" style="align-items:start">
-      <div class="cartao"><h2>Combinados vigentes</h2>${lista(r.combinados_snapshot, (c) => esc(c.texto))}</div>
+    <div class="dois reuniao-registros nao-imprimir" style="align-items:start">
+      <div class="cartao" data-presenca-historica><h2>Participantes</h2>${lista(r.participantes, (p) => `${esc(p.nome)}${p.secao_nome ? ` · ${esc(p.secao_nome)}` : ''}`)}</div>
       <div class="cartao"><h2>Decisões</h2>${lista(r.decisoes, (d) => `<b>${esc(d.secao_sigla || 'Geral')}</b> · ${esc(d.texto)}`)}</div>
       <div class="cartao"><h2>Novas ações</h2>${lista(r.novas_acoes, (g) => `${esc(g.titulo)} <span class="suave pequeno">· ${g.destino === 'todos' ? 'todos os Centros' : plural(g.total_acoes, 'seção', 'seções')} · prazo ${br(g.prazo)}</span>`)}</div>
       <div class="cartao"><h2>Pedidos de prazo decididos</h2>${lista(r.pedidos_decididos, (p) => `<b>${esc(p.secao_sigla)}</b> · ${esc(p.acao_titulo)}: ${br(p.novo_prazo)} ${p.status}`)}</div>
       <div class="cartao" data-informacoes-historicas><h2>Informações e comunicados</h2>${lista(r.informacoes, (i) => esc(i.texto))}</div>
-      <div class="cartao" data-presenca-historica><h2>Participantes</h2>${lista(r.participantes, (p) => `${esc(p.nome)}${p.secao_nome ? ` · ${esc(p.secao_nome)}` : ''}`)}</div>
     </div>
     <div class="espaco nao-imprimir"></div>
     <div class="cartao">

@@ -1192,6 +1192,17 @@ body.carregando::before {
 .item.previsto [data-texto-check] { flex: 1; min-width: 0; width: 0; }
 .tv-informacoes { width: 100%; max-height: 24vh; overflow-y: auto; }
 .ata-editor { margin: 12px 0; }
+.reuniao-registros [data-informacoes-historicas] { grid-column: 1 / -1; }
+.reuniao-informacoes-cabeca, .reuniao-informacao header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.reuniao-informacoes-cabeca h2, .reuniao-informacao h3 { margin: 0 0 6px; }
+.reuniao-informacoes-cabeca > div > p { margin: 0; }
+.reuniao-informacoes-lista { display: grid; gap: 16px; margin: 20px 0; }
+.reuniao-informacao { padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.reuniao-informacao h3 { font-family: var(--sans); font-size: 15px; }
+.reuniao-informacao-texto { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 90ch; line-height: 1.65; margin: 16px 0 0; }
+.reuniao-informacoes-vazio { border: 1px dashed var(--line-str); border-radius: 12px; padding: 20px; }
+.reuniao-informacoes-vazio p { margin: 0 0 6px; }
+@media (max-width: 760px) { .reuniao-informacoes-cabeca > button { width: 100%; } .reuniao-informacao { padding: 16px; } .reuniao-informacao header .linha { gap: 8px; } }
 .ata-titulo { text-align: center; font-weight: 700; }
 .ata-cabecalho { display: grid; grid-template-columns: 72px minmax(0, 1fr) 72px; gap: 16px; align-items: center; margin: 12px 0 24px; text-align: center; }
 .ata-cabecalho img { width: 72px; height: 90px; object-fit: contain; }
