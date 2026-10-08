@@ -1,4 +1,4 @@
-import { DIAS_SEM_MOVIMENTO, addDays, semaforo } from './logic.js';
+import { DIAS_SEM_MOVIMENTO, addDays, agora, atualizacaoPendente, semaforo } from './logic.js';
 import { porNecessidade as compararNecessidade } from '../public/js/regras.js';
 import { dataNoFuso, instante } from '../public/js/datas.js';
 
@@ -189,6 +189,7 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
     criticosMap.set(cId, (criticosMap.get(cId) ?? 0) + Number(row.n));
   }
 
+  const now = agora();
   return centros.map((c) => {
     const st  = statsMap.get(c.id)   ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0, paradas: 0 };
     const at  = atMap.get(c.id)      ?? null;
@@ -196,11 +197,13 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
     // Crítico = impedimento crítico aberto em ação em curso. A marca do relato semanal antigo ainda vale
     // enquanto o relato da semana a trouxer (transição: some quando a tela do relato deixar de oferecê-la).
     const critico = impedimentosCriticos > 0 || arvores.get(c.id).some(id => atMap.get(id)?.critico);
-    const cor = semaforo({ enviada: !!at, atrasadas: st.atrasadas, vencendo: st.vencendo, critico });
+    const pendente = atualizacaoPendente(!!at, semana, now);
+    const cor = semaforo({ pendente, atrasadas: st.atrasadas, vencendo: st.vencendo, critico });
     return {
       secao: { id: c.id, nome: c.nome, sigla: c.sigla, tipo: c.tipo, chefe_nome: c.chefe_nome, na_reuniao: !!c.na_reuniao },
       cor,
       enviada:            !!at,
+      atualizacao_pendente: pendente,
       enviada_em:         at?.enviada_em ?? null,
       critico,
       impedimentos_criticos: impedimentosCriticos,

@@ -51,10 +51,28 @@ test('a semana da reunião é a terça seguinte ao sábado', async () => {
 test('painel: semáforo por Centro segue as regras do plano', async () => {
   const p = await call(DIRETOR, 'GET', `/painel?semana=${SEMANA}`);
   const cor = Object.fromEntries(p.data.itens.map((i) => [i.secao.sigla, i.cor]));
-  assert.deepEqual(cor, { CPE: 'amarelo', COF: 'vermelho', CGP: 'vermelho', CIG: 'verde', CCP: 'vermelho', CPR: 'amarelo' });
+  assert.deepEqual(cor, { CPE: 'amarelo', COF: 'vermelho', CGP: 'vermelho', CIG: 'verde', CCP: 'vermelho', CPR: 'verde' });
+  const cpr = p.data.itens.find((i) => i.secao.sigla === 'CPR');
+  assert.equal(cpr.enviada, false);
+  assert.equal(cpr.atualizacao_pendente, false);
   const cgp = p.data.itens.find((i) => i.secao.sigla === 'CGP');
   assert.equal(cgp.atrasadas_internas, 1, 'ação interna atrasada de subseção conta no resumo');
   assert.equal((await call(DIRETOR, 'GET', '/painel?semana=2026-09-23')).status, 400);
+});
+
+test('painel: falta de envio gera aviso e amarelo após o fechamento', async () => {
+  const anterior = process.env.SGC_NOW;
+  try {
+    process.env.SGC_NOW = '2026-09-21T18:00:01';
+    const p = await call(DIRETOR, 'GET', `/painel?semana=${SEMANA}`);
+    const cpr = p.data.itens.find((i) => i.secao.sigla === 'CPR');
+    assert.equal(cpr.enviada, false);
+    assert.equal(cpr.atualizacao_pendente, true);
+    assert.equal(cpr.cor, 'amarelo');
+    assert.ok(p.data.itens.filter((i) => i.enviada).every((i) => !i.atualizacao_pendente));
+  } finally {
+    process.env.SGC_NOW = anterior;
+  }
 });
 
 test('privacidade: o Diretor não vê ações internas de subseções, o chefe do Centro vê', async () => {

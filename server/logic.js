@@ -57,9 +57,12 @@ export function refTerca(now = agora()) {
 export const fechamentoDe = (semana) => `${addDays(semana, -1)}T${pad(HORA_FECHAMENTO)}:00:00`;
 
 /** Semáforo (regra 5 do plano; limiares a validar com o Diretor). */
-export function semaforo({ enviada, atrasadas, vencendo, critico }) {
+export const atualizacaoPendente = (enviada, semana, now = agora()) =>
+  !enviada && now > instante(fechamentoDe(semana));
+
+export function semaforo({ enviada, pendente = !enviada, atrasadas, vencendo, critico }) {
   if (atrasadas > 0 || critico) return 'vermelho';
-  if (!enviada || vencendo > 0) return 'amarelo';
+  if (pendente || vencendo > 0) return 'amarelo';
   return 'verde';
 }
 export const FREQUENCIAS = ['sempre', 'primeira_do_mes', 'quando_mudarem'];

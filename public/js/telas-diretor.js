@@ -64,7 +64,7 @@ export async function painel(raiz, { q }) {
     <div class="espaco"></div>
     <div class="grade">${itens.map((i) => {
       const fatos = [
-        i.enviada ? `<span>Atualização enviada em ${dataHora(i.enviada_em)}</span>` : '<span class="atencao">Atualização pendente</span>',
+        i.enviada ? `<span>Atualização enviada em ${dataHora(i.enviada_em)}</span>` : i.atualizacao_pendente ? '<span class="atencao">Atualização pendente</span>' : '',
         i.impedimentos_criticos ? `<span class="ruim">${plural(i.impedimentos_criticos, 'impedimento crítico aberto', 'impedimentos críticos abertos')}</span>`
           : i.critico ? '<span class="ruim">Impedimento crítico informado</span>' : '',
         i.atrasadas ? `<span class="ruim">${plural(i.atrasadas, 'ação atrasada', 'ações atrasadas')}</span>` : '',

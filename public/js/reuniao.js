@@ -98,7 +98,7 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
 
   const resumoSecao = (c) => {
     const f = [];
-    if (!c.enviada) f.push('Atualização pendente');
+    if (c.atualizacao_pendente) f.push('Atualização pendente');
     if (c.critico) f.push('Impedimento crítico');
     if (c.atrasadas) f.push(plural(c.atrasadas, 'ação atrasada', 'ações atrasadas'));
     if (c.vencendo) f.push(`${plural(c.vencendo, 'vence', 'vencem')} em até 2 dias`);

@@ -1,9 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ehISO } from '../server/logic.js';
+import { atualizacaoPendente, ehISO, semaforo } from '../server/logic.js';
 import { refDiaReuniao } from '../server/logic.js';
 import { dataNoFuso, instante, somarDias } from '../public/js/datas.js';
 import { spawnSync } from 'node:child_process';
+
+test('atualização fica pendente somente após o fechamento no horário da Bahia', () => {
+  const semana = '2026-10-13';
+  for (const horario of ['2026-10-12T20:59:59Z', '2026-10-12T21:00:00Z']) {
+    const pendente = atualizacaoPendente(false, semana, new Date(horario));
+    assert.equal(pendente, false);
+    assert.equal(semaforo({ pendente, atrasadas: 0, vencendo: 0, critico: false }), 'verde');
+  }
+  const depois = new Date('2026-10-12T21:00:01Z');
+  const pendente = atualizacaoPendente(false, semana, depois);
+  assert.equal(pendente, true);
+  assert.equal(semaforo({ pendente, atrasadas: 0, vencendo: 0, critico: false }), 'amarelo');
+  assert.equal(atualizacaoPendente(true, semana, depois), false);
+  assert.equal(atualizacaoPendente(false, '2026-10-20', depois), false);
+  assert.equal(atualizacaoPendente(false, '2026-10-06', depois), true);
+  assert.equal(atualizacaoPendente(false, '2026-10-09', new Date('2026-10-08T21:00:01Z')), true);
+  assert.equal(semaforo({ pendente: false, atrasadas: 1, vencendo: 0, critico: false }), 'vermelho');
+  assert.equal(semaforo({ pendente: false, atrasadas: 0, vencendo: 1, critico: false }), 'amarelo');
+});
 
 test('datas: rejeita normalização de dias e meses inexistentes', () => {
   for (const valor of ['2026-02-31', '2026-02-29', '2026-04-31', '2026-13-01', '2026-00-00', '2026-01-00', '1900-02-29', '2026-1-01', '', null, 20260922]) {
