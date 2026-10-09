@@ -21,10 +21,10 @@
   --green-bg: #e6f2eb;
 
   /* Semáforo — idêntico à imagem */
-  --verde:       #2e7a4a;
+  --verde:       #02911F;
   --verde-bg:    #e6f2eb;
   --amarelo:     #a07800;
-  --amarelo-bg:  #fdf3d0;
+  --amarelo-bg:  #F6F66A;
   --vermelho:    #b83b2e;
   --vermelho-bg: #fadfdb;
 
@@ -461,7 +461,7 @@ tr.clicavel:hover td { background: var(--green-bg); }
 .regua { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: var(--line); margin: 10px 0 8px; }
 .regua i { display: block; }
 .regua .r-verde   { background: var(--verde); }
-.regua .r-amarelo { background: var(--amarelo); }
+.regua .r-amarelo { background: var(--amarelo-bg); }
 .regua .r-vermelho{ background: var(--vermelho); }
 .legenda { display: flex; gap: 8px 18px; flex-wrap: wrap; font-size: 0.87rem; }
 .progresso { height: 6px; background: var(--line); border-radius: 6px; overflow: hidden; min-width: 90px; }
@@ -476,7 +476,7 @@ tr.clicavel:hover td { background: var(--green-bg); }
   border-radius: 11px 11px 11px 8px;
 }
 .centro.cor-vermelho { border-left-color: var(--vermelho); }
-.centro.cor-amarelo  { border-left-color: var(--amarelo);  }
+.centro.cor-amarelo  { border-left-color: var(--amarelo-bg);  }
 .centro.cor-verde    { border-left-color: var(--verde);    }
 .centro h3 { margin: 0; }
 .centro .meta { color: var(--muted); font-size: 0.84rem; }
