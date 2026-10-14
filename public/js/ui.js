@@ -35,8 +35,10 @@ export const PRIO = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 export const COR = { verde: 'Em dia', amarelo: 'Atenção', vermelho: 'Crítico' };
 
 export const sem = (cor) => `<span class="sem sem-${cor}">${COR[cor]}</span>`;
+// `nova`: ação recebida que quem consulta ainda não abriu (o servidor só marca para quem a recebeu).
+export const seloNova = (a) => (a.nova ? '<span class="pilula nova" title="Recebida e ainda não aberta por você">● Nova</span> ' : '');
 export const pilulaStatus = (a) =>
-  `<span class="pilula st-${a.status}">${STATUS[a.status]}</span>` +
+  `${seloNova(a)}<span class="pilula st-${a.status}">${STATUS[a.status]}</span>` +
   (a.atrasada ? ' <span class="pilula atraso">Atrasada</span>' : '') +
   (a.impedimento_critico ? ' <span class="pilula atraso">Impedimento crítico</span>' : a.impedimentos_abertos ? ' <span class="pilula st-bloqueada">Impedimento aberto</span>' : '') +
   (a.checklist_total ? ` <span class="pilula" title="Checklist">☑ ${a.checklist_feitos}/${a.checklist_total}</span>` : '') +

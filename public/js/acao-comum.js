@@ -2,6 +2,9 @@
 import { del, get, patch, post } from './api.js';
 import { ehAdmin, ehDiretor, est, podeOperar } from './estado.js';
 import { abrirForm, br, confirmar, dataHora, esc, fmtMin, on, pilulaStatus, PRIO, toast } from './ui.js';
+
+/** Avisa a casca que as contagens dos selos do menu mudaram (ex.: ação nova aberta). */
+export const selosMudaram = () => window.dispatchEvent(new Event('sgc:selos'));
 import { DIRETORIA_ADJUNTA } from './regras.js';
 
 // ---------- Impedimentos (formulários usados também pela atualização semanal e por Minhas ações) ----------
@@ -165,8 +168,17 @@ async function abrirRedirecionar(a, aoConcluir) {
   });
 }
 
+// Ação que chegou à seção: quando chegou e quem dela já tomou ciência (abrindo o detalhe).
+const cienciaHTML = (a) => {
+  if (!a.recebida_em) return '';
+  const quem = [...a.vistas.map((v) => `${esc(v.usuario_nome)} em ${dataHora(v.vista_em)}`), ...(a.nova ? ['você, agora'] : [])];
+  return `<p class="pequeno suave">Recebida pela seção em ${dataHora(a.recebida_em)}. ${quem.length ? `Aberta por ${quem.join('; ')}.` : 'Ainda não foi aberta por quem a recebeu.'}</p>`;
+};
+
 export async function abrirAcao(id, aoMudar) {
   const a = await get(`/acoes/${id}`);
+  // Ação recebida e ainda não aberta por quem a abre agora: registra a ciência e atualiza a lista e os selos.
+  if (a.nova) post(`/acoes/${a.id}/vista`).then(() => { selosMudaram(); aoMudar?.(); }).catch(() => { /* fica nova; registra na próxima abertura */ });
   const diretor = ehDiretor();
   const prazoAlterado = a.prazo !== a.prazo_original;
   const corpo = `
@@ -196,6 +208,7 @@ export async function abrirAcao(id, aoMudar) {
         <option value="baixa" ${a.prioridade === 'baixa' ? 'selected' : ''}>Baixa</option>
       </select>
     </div>` : ''}
+    ${cienciaHTML(a)}
     <p><b>Prazo:</b> <span class="num">${br(a.prazo)}</span>${prazoAlterado ? ` <span class="suave pequeno">(original: ${br(a.prazo_original)})</span>` : ''}</p>
     ${a.prazos?.length ? `<details class="pequeno" style="margin:-4px 0 10px"><summary class="suave">Histórico de prazos (${a.prazos.length})</summary><ul class="suave" style="margin:6px 0 0;padding-left:18px">${a.prazos.map((h) =>
       `<li class="num">${br(h.prazo_anterior)} → <b>${br(h.prazo_novo)}</b> · ${h.origem === 'pedido' ? 'pedido aprovado' : 'alterado'}${h.alterado_por_nome ? ` por ${esc(h.alterado_por_nome)}` : ''} em ${dataHora(h.alterado_em)}</li>`).join('')}</ul></details>` : ''}

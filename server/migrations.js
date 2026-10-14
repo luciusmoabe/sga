@@ -253,6 +253,23 @@ const MIGRACOES = [
       }
     },
   },
+  {
+    id: 18, nome: 'acoes_recebidas_e_vistas',
+    async aplicar(db) {
+      // recebida_em: quando a ação chegou à seção atual vinda de fora (direcionamento ou redirecionamento).
+      // As ações existentes ficam sem data: não aparecem como novas para ninguém.
+      const colunas = db.isPg
+        ? await db.prepare("select column_name as nome from information_schema.columns where table_schema=current_schema() and table_name='acoes'").all()
+        : (await db.prepare('pragma table_info(acoes)').all()).map(c => ({ nome: c.name }));
+      if (!colunas.some(c => c.nome === 'recebida_em')) await db.exec('alter table acoes add column recebida_em text');
+      await db.exec(`create table if not exists acao_vistas (
+        acao_id integer not null references acoes(id), usuario_id integer not null references usuarios(id),
+        vista_em text not null, primary key (acao_id, usuario_id)
+      );
+      create index if not exists idx_acao_vistas_usuario on acao_vistas(usuario_id);`);
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
 ];
 
 async function registros(db) {

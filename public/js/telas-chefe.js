@@ -2,7 +2,7 @@
 import { del, get, patch, post } from './api.js';
 import { est } from './estado.js';
 import {
-  $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, STATUS, toast, vazio,
+  $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, seloNova, STATUS, toast, vazio,
 } from './ui.js';
 import { abrirAcao, abrirEditarAcao, abrirNovoImpedimento, aceitaImpedimento } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
@@ -85,6 +85,22 @@ function ligarAtencao(raiz, acoes, aoMudar) {
   on(raiz, 'click', '[data-rapido-abrir]', (el) => abrirAcao(acaoDe(el).id, aoMudar).catch((e) => toast(e.message, 'erro')));
 }
 
+// ---------- Chegaram para você ----------
+/** Ações direcionadas ou redirecionadas para a seção que esta pessoa ainda não abriu. Some ao abrir cada uma. */
+function quadroNovasHTML(abertas) {
+  const novas = abertas.filter((a) => a.nova).sort((x, y) => y.recebida_em.localeCompare(x.recebida_em));
+  if (!novas.length) return '';
+  return `<section class="cartao novas-quadro" aria-labelledby="novas-titulo">
+    <div class="linha entre"><h2 id="novas-titulo">Chegaram para você</h2><span class="pilula nova">${plural(novas.length, 'ação nova', 'ações novas')}</span></div>
+    <p class="suave pequeno" style="margin:2px 0 10px">Ações direcionadas à seção que você ainda não abriu. Abra cada uma para ver o que foi pedido; quem direcionou fica sabendo que você já viu.</p>
+    <ul class="novas-lista">${novas.map((a) => `<li><button type="button" class="novas-item" data-acao="${a.id}">
+      <span class="novas-item-titulo">${esc(a.titulo)}</span>
+      <span class="pequeno suave">${a.secao_id !== est.user.secao_id ? `${esc(a.secao_sigla)} · ` : ''}Recebida em ${dataHora(a.recebida_em)}${a.demandado_por_nome ? ` · de ${esc(a.demandado_por_nome)}` : ''} · prazo <span class="num">${br(a.prazo)}</span></span>
+    </button></li>`).join('')}</ul>
+  </section>
+  <div class="espaco"></div>`;
+}
+
 // ---------- Início ----------
 export async function inicio(raiz, { refresh }) {
   if (!est.user.secao_id) return semSecao(raiz);
@@ -99,6 +115,7 @@ export async function inicio(raiz, { refresh }) {
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>${esc(est.boot.secao?.nome || 'Minha seção')}</h1><div class="sub">Olá, ${esc(est.user.nome)}. Aqui está o que precisa da sua atenção.</div></div></div>
     ${aviso ? `<div class="aviso-banner"><p class="aviso-banner-tag">Aviso</p><p class="aviso-banner-texto">${esc(aviso.texto)}</p></div>` : ''}
+    ${quadroNovasHTML(abertas)}
     <div class="inicio-grade"><div class="inicio-principal">
     <div class="cartao"><div class="linha entre"><div>
       <h2>Sua atualização desta semana</h2>
@@ -121,7 +138,7 @@ export async function inicio(raiz, { refresh }) {
     </div>${quadroAtencaoHTML(abertas, semana)}</div>`;
   ligarAtencao(raiz, abertas, refresh);
   const abrir = (el) => abrirAcao(el.dataset.acao, refresh).catch((e) => toast(e.message, 'erro'));
-  on(raiz, 'click', 'tr[data-acao]', abrir);
+  on(raiz, 'click', 'tr[data-acao], .novas-item[data-acao]', abrir);
   on(raiz, 'keydown', 'tr[data-acao]', (el, ev) => { if (ev.key === 'Enter') abrir(el); });
 }
 
@@ -171,6 +188,7 @@ export async function minhasAcoes(raiz) {
             <div class="acao-meta">Prazo <b class="num">${br(a.prazo)}</b> · ${esc(a.secao_sigla)}${a.interna ? ' · ação interna' : ''}${a.demandada_diretor ? ` · demandada em ${br(a.demandado_em || a.criada_em)}` : ''}</div>
           </div>
           <div class="acao-selos">
+            ${seloNova(a)}
             ${a.atrasada ? '<span class="pilula atraso">Atrasada</span>' : ''}
             ${seloParada(a)}
             ${a.demandada_diretor ? '<span class="pilula diretor" title="Ações demandadas pelo Diretor não podem ser arquivadas nem excluídas pela seção">Demandada pelo Diretor</span>' : ''}

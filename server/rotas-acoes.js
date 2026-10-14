@@ -17,7 +17,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   const movimentou = (id) => run('update acoes set movimentada_em = ? where id = ?', agoraISO(), id);
   app.use('/api/acoes/:id', (req, res, next) => {
     const id = Number(req.params.id);
-    if (req.method === 'GET' || !Number.isSafeInteger(id)) return next();
+    // Abrir o detalhe (ciência de ação recebida) não é andamento da ação.
+    if (req.method === 'GET' || req.path === '/vista' || !Number.isSafeInteger(id)) return next();
     const enviar = res.json.bind(res);
     res.json = (corpo) => {
       if (res.statusCode >= 400) return enviar(corpo);
@@ -27,6 +28,40 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     next();
   });
   const limiteParada = () => addDays(hoje(), -(DIAS_SEM_MOVIMENTO - 1)); // movimentada antes deste dia = parada há 7+ dias
+
+  // ---------- Ações recebidas e ciência (acoes.recebida_em, acao_vistas) ----------
+  // A ação "chega" à seção quando vem de fora: direcionada pela gestão (diretriz, seção acrescentada, ação criada
+  // para a seção) ou redirecionada. Quem a recebe são os chefes que enxergam a seção (titular e suplente, também
+  // os do Centro acima) e, na Diretoria Adjunta, os membros dela. Para cada um, ela é nova até ele abrir o detalhe.
+  const secoesRecebidas = async (user) => {
+    if (user.perfil === 'chefe' || (user.perfil === 'administrador' && user.secao_id)) return user.secao_id ? subarvore(db, user.secao_id) : [];
+    return [];
+  };
+  const emCurso = (a) => a.status !== 'concluida' && !a.encerrada && !a.arquivada;
+  /** Acrescenta `nova` a cada ação da lista, para quem consulta. */
+  const marcarNovas = async (user, lista) => {
+    const recebidas = lista.filter((a) => a.recebida_em && emCurso(a)); // sem nenhuma, nem consulta a árvore
+    const secoes = recebidas.length ? await secoesRecebidas(user) : [];
+    const candidatas = recebidas.filter((a) => secoes.includes(a.secao_id)).map((a) => a.id);
+    const vistas = candidatas.length
+      ? new Map((await q(`select acao_id, vista_em from acao_vistas where usuario_id = ? and acao_id in (${marks(candidatas)})`, user.id, ...candidatas))
+        .map((v) => [Number(v.acao_id), v.vista_em]))
+      : new Map();
+    return lista.map((a) => ({ ...a, nova: candidatas.includes(a.id) && !(vistas.get(a.id) >= a.recebida_em) }));
+  };
+  /** Registra que `user` tomou ciência da ação, se ela chegou para ele. Guarda a primeira vez depois da chegada. */
+  const registrarVista = async (user, a) => {
+    if (!a.recebida_em || !(await secoesRecebidas(user)).includes(a.secao_id)) return false;
+    await run(`insert into acao_vistas (acao_id, usuario_id, vista_em) values (?,?,?)
+      on conflict (acao_id, usuario_id) do update set vista_em = excluded.vista_em where acao_vistas.vista_em < ?`,
+    a.id, user.id, agoraISO(), a.recebida_em);
+    return true;
+  };
+  /** Quem já tomou ciência da ação desde que ela chegou à seção atual. */
+  const vistasDa = (a) => (a.recebida_em
+    ? q(`select v.usuario_id, u.nome as usuario_nome, v.vista_em from acao_vistas v join usuarios u on u.id = v.usuario_id
+        where v.acao_id = ? and v.vista_em >= ? order by v.vista_em, v.usuario_id`, a.id, a.recebida_em)
+    : []);
 
   const SELECT_ACAO = `select a.*, s.nome as secao_nome, s.sigla as secao_sigla,
       ua.perfil as autor_perfil,
@@ -151,9 +186,10 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         titulo, detalhe, destino, b.prazo, prioridade, user.id, agoraISO(), reuniaoId,
       )).lastInsertRowid;
       for (const s of alvos) {
+        const quando = agoraISO();
         const aId = (await run(
-          `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em, criado_por) values (?,?,?,?,?,?,?,?,?)`,
-          d, s, titulo, detalhe, b.prazo, b.prazo, prioridade, agoraISO(), user.id,
+          `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em, criado_por, recebida_em) values (?,?,?,?,?,?,?,?,?,?)`,
+          d, s, titulo, detalhe, b.prazo, b.prazo, prioridade, quando, user.id, quando,
         )).lastInsertRowid;
         await run(
           `insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)`,
@@ -176,11 +212,16 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     if (!lista.length) return lista;
     // Seções que têm hoje a ação de cada diretriz (uma ação redirecionada aparece na seção de destino).
     const ids = lista.map((d) => d.id);
-    const secoes = await q(`select a.diretriz_id, s.id, s.sigla, s.nome from acoes a join secoes s on s.id = a.secao_id
+    // Com cada seção, a primeira ciência desde que a ação chegou a ela (recebida_em vazio: ação anterior ao registro).
+    const secoes = await q(`select a.diretriz_id, s.id, s.sigla, s.nome, a.recebida_em,
+        (select v.vista_em from acao_vistas v where v.acao_id = a.id and v.vista_em >= a.recebida_em order by v.vista_em limit 1) as vista_em,
+        (select u.nome from acao_vistas v join usuarios u on u.id = v.usuario_id
+          where v.acao_id = a.id and v.vista_em >= a.recebida_em order by v.vista_em limit 1) as vista_por
+      from acoes a join secoes s on s.id = a.secao_id
       where a.diretriz_id in (${marks(ids)}) order by s.ordem, s.id`, ...ids);
     return lista.map((d) => ({
       ...d,
-      secoes: secoes.filter((s) => s.diretriz_id === d.id).map(({ id, sigla, nome }) => ({ id, sigla, nome })),
+      secoes: secoes.filter((s) => s.diretriz_id === d.id).map(({ id, sigla, nome, recebida_em, vista_em, vista_por }) => ({ id, sigla, nome, recebida_em, vista_em, vista_por })),
     }));
   }));
 
@@ -209,9 +250,10 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       const jaTem = (await q(`select secao_id from acoes where diretriz_id = ? and secao_id in (${marks(ids)})`, id, ...ids)).map((r) => r.secao_id);
       if (jaTem.length) throw falha(409, 'Alguma das seções escolhidas já recebeu esta ação. Atualize a tela e escolha outras.');
       for (const s of ids) {
+        const quando = agoraISO();
         const aId = (await run(
-          `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em, criado_por) values (?,?,?,?,?,?,?,?,?)`,
-          d.id, s, d.titulo, d.detalhe, prazo, prazo, d.prioridade, agoraISO(), req.user.id,
+          `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em, criado_por, recebida_em) values (?,?,?,?,?,?,?,?,?,?)`,
+          d.id, s, d.titulo, d.detalhe, prazo, prazo, d.prioridade, quando, req.user.id, quando,
         )).lastInsertRowid;
         await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
           aId, req.user.id, 'Ação demandada pelo Diretor (seção acrescentada ao direcionamento).', agoraISO());
@@ -249,10 +291,10 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       else if (sit === 'encerradas') where.push('a.encerrada = 1');
     }
     if (f.q) { where.push('(a.titulo like ? or a.detalhe like ?)'); params.push(`%${f.q}%`, `%${f.q}%`); }
-    return (await q(`${SELECT_ACAO} where ${where.join(' and ')}
+    return marcarNovas(req.user, (await q(`${SELECT_ACAO} where ${where.join(' and ')}
               order by a.encerrada, case a.status when 'concluida' then 1 else 0 end,
                        case when a.status != 'concluida' and a.prazo < '${hoje()}' then 0 else 1 end, a.prazo, a.id`, ...params))
-      .map((a) => ({ ...acaoOut(a), ...permissoes(req.user, a) }));
+      .map((a) => ({ ...acaoOut(a), ...permissoes(req.user, a) })));
   }));
 
   app.post('/api/acoes', permit('chefe', 'diretor', 'apoio', 'administrador'), h(async (req, res) => {
@@ -272,10 +314,13 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const demanda = b.demanda_diretor === true ? 1 : 0;
     if (demanda && interna) throw falha(400, 'Uma demanda do Diretor deve ser visível na pauta. Desmarque ação interna.');
     res.status(201);
+    // Criada por quem não é da seção (Diretor, Apoio, Administrador sem vínculo com ela): chega como nova.
+    const quando = agoraISO();
+    const recebida = req.user.perfil !== 'chefe' && req.user.secao_id !== secaoId ? quando : null;
     const id = (await run(
-      `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, interna, criada_em, criado_por, demanda_diretor)
-       values (null, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      secaoId, titulo, detalhe, b.prazo, b.prazo, prioridade, interna, agoraISO(), req.user.id, demanda,
+      `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, interna, criada_em, criado_por, demanda_diretor, recebida_em)
+       values (null, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      secaoId, titulo, detalhe, b.prazo, b.prazo, prioridade, interna, quando, req.user.id, demanda, recebida,
     )).lastInsertRowid;
     await run(
       'insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
@@ -298,6 +343,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         await run('delete from acao_checklist where acao_id = ?', a.id);
         await run('delete from acao_prazos where acao_id = ?', a.id);
         await run('delete from pedidos_prazo where acao_id = ?', a.id);
+        await run('delete from acao_vistas where acao_id = ?', a.id);
         await run('delete from acoes where id = ?', a.id);
         return { ok: true, id: a.id };
       });
@@ -333,9 +379,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
 
   app.get('/api/acoes/:id', h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
-    // Cinco consultas independentes: em série custariam uma ida ao banco cada (o maior custo desta tela
+    // Consultas independentes: em série custariam uma ida ao banco cada (o maior custo desta tela
     // é a rede, não o SQL). As permissões não consultam nada (ver permissoes).
-    const [comentarios, lancamentos, pedidos, impedimentos, checklist, prazos] = await Promise.all([
+    const [comentarios, lancamentos, pedidos, impedimentos, checklist, prazos, vistas, [{ nova }]] = await Promise.all([
       q(`select c.*, u.nome as usuario_nome from acao_comentarios c left join usuarios u on u.id = c.usuario_id where c.acao_id = ? order by c.id`, a.id),
       q(`select t.*, u.nome as usuario_nome from tempo t left join usuarios u on u.id = t.usuario_id where t.acao_id = ? order by t.data desc, t.id desc`, a.id),
       q('select * from pedidos_prazo where acao_id = ? order by id desc', a.id),
@@ -345,10 +391,14 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       q('select * from acao_checklist where acao_id = ? order by ordem, id', a.id),
       q(`select h.*, u.nome as alterado_por_nome from acao_prazos h left join usuarios u on u.id = h.alterado_por
         where h.acao_id = ? order by h.alterado_em, h.id`, a.id),
+      vistasDa(a),
+      marcarNovas(req.user, [a]),
     ]);
     return {
       ...acaoOut(a),
       ...permissoes(req.user, a),
+      nova,
+      vistas,
       prazos,
       comentarios,
       lancamentos,
@@ -356,6 +406,13 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       impedimentos: impedimentos.map(impedimentoOut),
       checklist: checklist.map(checklistOut),
     };
+  }));
+
+  // Ciência de ação recebida: o detalhe chama esta rota quando a ação é nova para quem o abriu. Para quem não
+  // recebe a ação (Diretor, Apoio, Administrador sem vínculo com a seção), nada é registrado.
+  app.post('/api/acoes/:id/vista', h(async (req) => {
+    const a = await acaoVisivel(req.user, Number(req.params.id));
+    return { ok: true, registrada: await registrarVista(req.user, a) };
   }));
 
   app.patch('/api/acoes/:id', h(async (req) => {
@@ -620,7 +677,10 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       if (a.diretriz_id && await q1('select 1 from acoes where diretriz_id = ? and secao_id = ? and id != ?', a.diretriz_id, destino.id, a.id)) {
         throw falha(409, 'A seção escolhida já recebeu esta mesma demanda do Diretor.');
       }
-      await run('update acoes set secao_id = ? where id = ?', destino.id, a.id);
+      // Chega à nova seção como nova; quem redireciona dentro da própria árvore já está ciente.
+      const quando = agoraISO();
+      await run('update acoes set secao_id = ?, recebida_em = ? where id = ?', destino.id, quando, a.id);
+      await registrarVista(req.user, { ...a, secao_id: destino.id, recebida_em: quando });
       await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id,
         `Ação redirecionada de ${a.secao_sigla || a.secao_nome} para ${destino.sigla || destino.nome}${motivo ? `. Motivo: ${motivo}` : '.'}`, agoraISO());
       return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id));

@@ -127,6 +127,14 @@ export async function centro(raiz, { id, q, refresh }) {
 }
 
 // ---------- Direcionar ação ----------
+/** Ciência de cada seção: se alguém da seção já abriu a ação direcionada (só as registradas desde que existe a marcação). */
+const cienciaSecoes = (x) => {
+  const comRegistro = (x.secoes || []).filter((c) => c.recebida_em);
+  if (!comRegistro.length) return '';
+  return `<div class="ciencia-lista">${comRegistro.map((c) => (c.vista_em
+    ? `<span class="ciencia vista" title="Aberta por ${esc(c.vista_por || '')} em ${dataHora(c.vista_em)}">✓ ${esc(c.sigla || c.nome)} viu em ${dataHora(c.vista_em)}</span>`
+    : `<span class="ciencia" title="Ninguém da seção abriu a ação ainda">○ ${esc(c.sigla || c.nome)} ainda não viu</span>`)).join('')}</div>`;
+};
 export async function direcionar(raiz, { refresh }) {
   const [secoes, dirs] = await Promise.all([get('/secoes'), get('/diretrizes')]);
   // O Diretor Adjunto não direciona ações para a própria seção: as dela ele cria em "Minhas ações".
@@ -152,6 +160,7 @@ export async function direcionar(raiz, { refresh }) {
       <div class="cartao"><h2>Últimas ações direcionadas</h2>
         ${dirs.length ? dirs.slice(0, 8).map((x) => `<div style="margin-bottom:14px"><div class="linha entre" style="flex-wrap:nowrap;align-items:flex-start;gap:12px"><b>${esc(x.titulo)}</b><span class="pilula prio-${x.prioridade}" style="flex-shrink:0">${PRIO[x.prioridade]}</span></div>
           <div class="suave pequeno">${x.destino === 'todos' ? 'Todos os Centros' : x.secoes?.length ? `Para ${esc(x.secoes.map((c) => c.sigla || c.nome).join(', '))}` : 'Nenhuma seção (ações excluídas)'} · prazo ${br(x.prazo)} · criada por ${esc(x.criado_por_nome || '')}</div>
+          ${cienciaSecoes(x)}
           <div class="linha"><div class="progresso" style="flex:1"><i style="width:${x.total ? (x.concluidas / x.total) * 100 : 0}%"></i></div><span class="pequeno num">${x.concluidas}/${x.total} concluídas</span></div>
           <button type="button" class="btn btn-fantasma btn-mini" data-acrescentar="${x.id}">Acrescentar seções</button></div>`).join('')
           : vazio('Nenhuma ação direcionada ainda', 'Use o formulário ao lado para criar a primeira.')}

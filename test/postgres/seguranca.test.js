@@ -41,7 +41,7 @@ test('PostgreSQL: permissões públicas e importação segura', { timeout: 12000
       }
     }
     assert.equal((await db.prepare("select count(*) n from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity").get()).n, 0);
-    assert.equal((await db.prepare('select count(*) n from usuarios').get()).n, 9);
+    assert.equal((await db.prepare('select count(*) n from usuarios').get()).n, 10);
     await db.exec(sqlSeguranca()); // Aplicação manual também é idempotente.
     const gerado = await readFile(new URL('../../server/seguranca-supabase.sql', import.meta.url), 'utf8');
     assert.ok(gerado.endsWith(sqlSeguranca()));

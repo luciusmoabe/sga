@@ -47,6 +47,7 @@ O migrador não utiliza `DATABASE_URL` como destino implícito. Não registre a 
 | 15 | `quadro_de_avisos` | Cria `avisos` (texto, `data_inicio`, `data_fim`, `ativo` e autoria) para o aviso do Diretor/Administrador na tela Início; reaplica RLS e revogações em PostgreSQL/public. Não altera nem apaga dados existentes |
 | 16 | `registros_e_revisao_de_reuniao` | Adiciona `acoes.demanda_diretor` (origem declarada pela seção, sem alterar autoria). Cria informações da reunião, presença individual de titulares/suplentes, sugestões de revisão com resposta e versões publicadas da ata. Reaplica RLS e revogações em PostgreSQL/public. Preserva os registros existentes; reuniões antigas não recebem presença presumida |
 | 17 | `ordem_participantes_reuniao` | Adiciona `reuniao_participantes.ordem` para preservar a sequência de seleção. Presenças existentes recebem a ordem alfabética anteriormente exibida, sem presumir a ordem dos cliques. Não cria tabelas nem altera permissões |
+| 18 | `acoes_recebidas_e_vistas` | Adiciona `acoes.recebida_em` (vazio nas ações existentes: nenhuma aparece como nova) e cria `acao_vistas` (ciência de cada pessoa que recebeu a ação, chave `acao_id` + `usuario_id`). Reaplica RLS e revogações em PostgreSQL/public, agora incluindo `acao_vistas`. Não altera nem apaga dados existentes |
 
 A unicidade das versões semanais já faz parte do esquema base (`secao_id`, `semana`, `versao`). Os destinos e as regras de exclusão/atualização de todas as FKs do esquema migrado são comparados automaticamente entre SQLite e PostgreSQL.
 

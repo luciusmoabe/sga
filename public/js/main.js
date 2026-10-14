@@ -69,7 +69,7 @@ const MENU_GESTAO = [
   ['#Ações'],
   ['direcionar', 'Direcionar ação'],
   ['acoes', 'Ações'],
-  ['prazos', 'Pedidos de prazo', 'selo'],
+  ['prazos', 'Pedidos de prazo'],
   ['#Reunião'],
   ['combinados', 'Combinados'],
   ['reunioes', 'Reuniões e atas'],
@@ -92,6 +92,10 @@ const MENU_CHEFE = [
 // O Administrador tem acesso total às abas de Configuração.
 const MENU_ADMIN = MENU_GESTAO.map((m) => (m[0] === '#Organização' ? ['#Administração'] : m[0] === 'estrutura' ? ['estrutura', 'Configuração'] : m[0] === 'avisos' ? ['avisos', 'Avisos'] : m));
 const PERFIL = ROTULO_PERFIL;
+// Selos do menu, com a contagem que vem no bootstrap: pedidos de prazo pendentes (gestão) e ações recebidas
+// que a pessoa ainda não abriu (chefe e Diretoria Adjunta).
+const SELOS = { prazos: ['pedidos_pendentes', 'pedidos de prazo pendentes'], 'minhas-acoes': ['acoes_novas', 'ações novas'] };
+const selo = (rota) => (SELOS[rota] ? `<span class="selo oculto" data-selo="${rota}" title="${SELOS[rota][1]}"></span>` : '');
 const app = document.getElementById('app');
 
 function lerRota() {
@@ -229,7 +233,7 @@ function casca() {
     <div class="marca"><img src="/imagens/logo-agilis.png" alt="Agilis" class="marca-logo"></div>
     <nav class="menu" aria-label="Principal">${menu.map((m) => m[0].startsWith('#')
       ? `<div class="grupo"><b>${esc(m[0].slice(1))}</b></div>`
-      : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}"><span class="menu-rotulo">${ICONES[m[0]] || ''}${esc(m[1])}</span>${m[2] === 'selo' ? '<span class="selo oculto" id="selo-prazos"></span>' : ''}</a>`).join('')}</nav>
+      : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}"><span class="menu-rotulo">${ICONES[m[0]] || ''}${esc(m[1])}</span>${selo(m[0])}</a>`).join('')}</nav>
     <div class="usuario"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}${est.boot?.secao?.tipo === DIRETORIA_ADJUNTA ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}<br><span class="usuario-acoes">${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
       <button class="btn btn-fantasma btn-mini oculto" id="instalar-app" style="margin-top:6px">Instalar aplicativo</button></div></aside>
     <main class="principal"><div id="trilho"></div><div id="conteudo"></div></main>
@@ -268,7 +272,7 @@ function cascaMovel(u, menu) {
       <button type="button" class="topo-movel-conta" data-abrir-mais aria-label="Conta e mais opções">${esc(iniciais(u.nome))}</button>
     </header>
     <nav class="abas-movel" aria-label="Navegação principal">
-      ${abas.map(([rota, rotulo]) => `<a href="#/${rota}" data-rota="${rota}">${ICONES[rota] || ''}<span>${rotulo}</span>${rota === 'prazos' ? '<span class="selo oculto selo-prazos"></span>' : ''}</a>`).join('')}
+      ${abas.map(([rota, rotulo]) => `<a href="#/${rota}" data-rota="${rota}">${ICONES[rota] || ''}<span>${rotulo}</span>${selo(rota)}</a>`).join('')}
       <button type="button" data-abrir-mais data-aba-mais>${ICONE_MAIS}<span>Mais</span></button>
     </nav>
     <dialog class="folha-mais" aria-label="Mais opções">
@@ -277,7 +281,7 @@ function cascaMovel(u, menu) {
         <div><b>${esc(u.nome)}</b><div class="suave pequeno">${rotuloPerfil}</div></div></div>
       <nav class="folha-menu" aria-label="Todas as telas">${menu.map((m) => m[0].startsWith('#')
         ? `<div class="folha-grupo">${esc(m[0].slice(1))}</div>`
-        : `<a href="#/${m[0]}" data-rota="${m[0]}">${ICONES[m[0]] || ''}<span>${esc(m[1])}</span></a>`).join('')}</nav>
+        : `<a href="#/${m[0]}" data-rota="${m[0]}">${ICONES[m[0]] || ''}<span>${esc(m[1])}</span>${selo(m[0])}</a>`).join('')}</nav>
       <div class="folha-acoes">
         ${sessao.modo === 'demo' ? '' : '<button type="button" class="btn btn-sec" data-conta="senha">Alterar senha</button>'}
         <button type="button" class="btn btn-sec oculto" data-conta="instalar">Instalar aplicativo</button>
@@ -306,11 +310,13 @@ function ligarCascaMovel() {
   on(folha, 'click', '[data-conta="sair"]', () => { fechar(); $('#sair').click(); });
 }
 
-// A contagem vem no bootstrap: não há requisição própria para o selo.
+// As contagens vêm no bootstrap: não há requisição própria para os selos.
 function atualizarSelo() {
-  if (est.user.perfil === 'chefe') return;
-  const n = est.boot?.pedidos_pendentes ?? 0;
-  for (const s of document.querySelectorAll('#selo-prazos, .selo-prazos')) { s.textContent = n; s.classList.toggle('oculto', !n); }
+  for (const s of document.querySelectorAll('[data-selo]')) {
+    const n = est.boot?.[SELOS[s.dataset.selo][0]] ?? 0;
+    s.textContent = n;
+    s.classList.toggle('oculto', !n);
+  }
 }
 
 let gen = 0;
@@ -373,5 +379,7 @@ async function renderizar() {
 }
 
 window.addEventListener('hashchange', () => render());
+// Uma tela que só recarrega os próprios dados (sem render) também mantém os selos do menu em dia.
+window.addEventListener('sgc:selos', () => { if (est.user) carregarSessao().then(atualizarSelo).catch(() => { /* fica para a próxima tela */ }); });
 render();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => { /* segue sem instalação; a navegação comum continua funcionando */ });

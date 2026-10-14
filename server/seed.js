@@ -93,6 +93,8 @@ export async function seed(db) {
       [6, 'concluida', 25, 0],
     ]);
     await diretriz('Publicar o painel de indicadores do mês', 'Painel validado com a Seção de Indicadores.', 'especificos', 5, 'media', [[4, 'em_andamento', 120]]);
+    // As direcionadas ainda não iniciadas chegam como novas: o chefe ainda não abriu o detalhe.
+    await db.prepare("update acoes set recebida_em = criada_em where diretriz_id is not null and status = 'a_fazer'").run();
 
     // Ações internas de subseções: contam no semáforo do Centro, mas o Diretor só vê o resumo.
     await insA.run(null, 7, 'Padronizar as fichas de indicadores', 'Ação interna do Centro de Planejamento.', 'em_andamento', addDays(hoje, 1), addDays(hoje, 1), 'media', 1, 0, null, ts(ant));

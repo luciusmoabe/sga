@@ -856,6 +856,18 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 .atencao-quadro .ruim { color: var(--vermelho); font-weight: 600; }
 .atencao-quadro .atencao { color: var(--amarelo); font-weight: 600; }
 .pilula.atencao-selo { background: var(--amarelo-bg); color: var(--amarelo); }
+
+/* ---------- Ações recebidas: "Chegaram para você", selo "Nova" e ciência por seção ---------- */
+.pilula.nova { background: var(--green); color: #fff; font-weight: 700; }
+.novas-quadro { border-left: 4px solid var(--green); }
+.novas-quadro h2 { margin: 0; }
+.novas-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.novas-item { display: grid; gap: 2px; width: 100%; min-height: 44px; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--pale); color: var(--ink); font: inherit; cursor: pointer; }
+.novas-item:hover, .novas-item:focus-visible { background: var(--green-bg); border-color: var(--line-str); }
+.novas-item-titulo { font-weight: 650; overflow-wrap: anywhere; }
+.ciencia-lista { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+.ciencia { font-size: .76rem; padding: 2px 8px; border-radius: 999px; background: var(--pale); color: var(--ink); border: 1px solid var(--line-str); font-weight: 600; }
+.ciencia.vista { background: var(--verde-bg); color: var(--verde); border-color: transparent; }
 @media (max-width: 900px) {
   .inicio-grade { grid-template-columns: 1fr; }
   .atencao-quadro { order: -1; position: static; }
@@ -1092,6 +1104,7 @@ body.carregando::before {
   .folha-grupo { padding: 14px 10px 4px; font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
   .folha-menu a { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 10px; border-radius: 10px; color: var(--ink); text-decoration: none; font-weight: 500; }
   .folha-menu a[aria-current="page"] { background: var(--green-bg); color: var(--ink-2); font-weight: 650; }
+  .folha-menu a .selo { margin-left: auto; }
   .folha-acoes { display: grid; gap: 8px; margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--line); }
   .folha-acoes .btn { min-height: 48px; justify-content: center; }
 

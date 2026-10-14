@@ -58,6 +58,7 @@ export async function excluirCadastro(db, tabela, id) {
           ['ata_sugestoes','usuario_id','sugestões de revisão de ata'],
           ['ata_sugestoes','respondida_por','respostas a sugestões de ata'],
           ['ata_revisoes','criado_por','versões publicadas de ata'],
+          ['acao_vistas','usuario_id','ciência de ações recebidas'],
         ];
         const historico=[];
         for (const [origem,coluna,rotulo] of referencias) {
