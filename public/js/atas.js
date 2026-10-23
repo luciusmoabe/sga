@@ -48,7 +48,7 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
   raiz.innerHTML = `
     <div class="cabeca"><div><a href="#/reunioes" class="pequeno nao-imprimir">← Reuniões e atas</a><h1>Reunião de ${br(r.data)}</h1>
       <div class="sub"><span class="pilula ${cls[r.status]}">${ST[r.status]}</span> · iniciada em ${dataHora(r.iniciada_em)}${r.encerrada_em ? ` · encerrada em ${dataHora(r.encerrada_em)}` : ''}</div></div>
-      ${r.status === 'em_andamento' && podeOperar() ? `<div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao/${r.id}">Voltar ao Modo Reunião</a>${podeExcluirTeste ? '<button type="button" class="btn btn-perigo" id="excluir-reuniao-teste">Excluir reunião de teste</button>' : ''}</div>` : ''}</div>
+      ${r.status === 'em_andamento' && podeOperar() ? `<div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao/${r.id}">Voltar ao Modo Reunião</a>${podeExcluirTeste ? '<button type="button" class="btn btn-perigo" id="excluir-reuniao-teste">Excluir reunião</button>' : ''}</div>` : ''}</div>
     <div class="dois reuniao-registros nao-imprimir" style="align-items:start">
       <div class="cartao" data-presenca-historica><h2>Participantes</h2>${lista(r.participantes, (p) => `${esc(p.nome)}${p.secao_nome ? ` · ${esc(p.secao_nome)}` : ''}`)}</div>
       <div class="cartao"><h2>Decisões</h2>${lista(r.decisoes, (d) => `<b>${esc(d.secao_sigla || 'Geral')}</b> · ${esc(d.texto)}`)}</div>
@@ -78,7 +78,7 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
   ligarRegistrosHistoricos(raiz, r, { editor, atualizarRevisao });
   raiz.querySelector('#excluir-reuniao-teste')?.addEventListener('click', async () => {
     try {
-      if (!await confirmar({ titulo: `Excluir a reunião de ${br(r.data)}`, texto: `Excluir a reunião de ${br(r.data)}? Esta operação não poderá ser desfeita. A exclusão só é permitida enquanto a reunião estiver sem registros.`, rotulo: 'Excluir reunião de teste', perigo: true })) return;
+      if (!await confirmar({ titulo: `Excluir a reunião de ${br(r.data)}`, texto: `Excluir a reunião de ${br(r.data)}? Esta operação não poderá ser desfeita. A exclusão só é permitida enquanto a reunião estiver sem registros.`, rotulo: 'Excluir reunião', perigo: true })) return;
       await del(`/reunioes/${id}`, { excluir_teste: true });
       toast('Reunião de teste excluída.'); location.hash = '#/reunioes';
     } catch (e) { toast(e.message, 'erro'); }
