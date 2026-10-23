@@ -4,11 +4,33 @@ import { DIAS_SEM_MOVIMENTO, PRIORIDADES, STATUS, TRANSICOES, addDays, br, ehISO
 import { falha, h, marks, permit, texto } from './helpers.js';
 
 export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
+  // Ações com que a pessoa trabalha (e altera, conforme o perfil). O chefe, a própria árvore; a gestão e a Consulta,
+  // as que o Diretor vê; o Administrador, todas. Rotas que gravam usam sempre este escopo.
   const visiveisAcoes = async (user) => {
     if (user.perfil === 'administrador') return { where: '1 = 1', params: [] }; // o Administrador consulta tudo, inclusive ações internas
     if (user.perfil !== 'chefe') return { where: '(a.interna = 0 or a.compartilhada = 1)', params: [] };
     const ids = user.secao_id ? await subarvore(db, user.secao_id) : [-1];
     return { where: `a.secao_id in (${marks(ids)})`, params: ids };
+  };
+  // Leitura ampliada: o chefe com usuarios.ver_outros_centros também lê, sem alterar, as ações dos outros Centros
+  // que o Diretor vê (sem as internas). Vale só para a lista com escopo=todos e para o detalhe.
+  const visiveisLeitura = async (user) => {
+    const v = await visiveisAcoes(user);
+    if (user.perfil !== 'chefe' || !user.ver_outros_centros) return v;
+    return { where: `(${v.where} or a.interna = 0 or a.compartilhada = 1)`, params: v.params };
+  };
+  /** Ação que a pessoa só pode ler: tudo para a Consulta; para o chefe, as de fora da própria árvore. */
+  const soLeitura = async (user, lista) => {
+    if (user.perfil === 'consulta') return new Set(lista.map((a) => a.id));
+    if (user.perfil !== 'chefe' || !user.ver_outros_centros) return new Set();
+    const arvore = user.secao_id ? await subarvore(db, user.secao_id) : [];
+    return new Set(lista.filter((a) => !arvore.includes(a.secao_id)).map((a) => a.id));
+  };
+  const SEM_PERMISSOES = { pode_editar: false, pode_mudar_prazo: false, pode_mudar_demanda: false, pode_excluir: false };
+  /** Marca `somente_leitura` e tira as permissões de autoria das ações que a pessoa só lê. */
+  const marcarLeitura = async (user, lista) => {
+    const ler = await soLeitura(user, lista);
+    return lista.map((a) => (ler.has(a.id) ? { ...a, ...SEM_PERMISSOES, somente_leitura: true } : { ...a, somente_leitura: false }));
   };
 
   // Última movimentação da ação (acoes.movimentada_em): toda gravação bem-sucedida em /api/acoes/:id/... conta
@@ -109,8 +131,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   });
   const impedimentoOut = (i) => ({ ...i, critico: !!i.critico, aberto: !i.resolvido_em });
   const checklistOut = (c) => ({ ...c, concluido: !!c.concluido });
-  const acaoVisivel = async (user, id) => {
-    const v = await visiveisAcoes(user);
+  const acaoVisivel = async (user, id, { leitura = false } = {}) => {
+    const v = leitura ? await visiveisLeitura(user) : await visiveisAcoes(user);
     const a = await q1(`${SELECT_ACAO} where a.id = ? and ${v.where}`, id, ...v.params);
     if (!a) throw falha(404, 'Ação não encontrada.');
     return a;
@@ -269,7 +291,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   const STATUS_OK = new Set(STATUS);
 
   app.get('/api/acoes', h(async (req) => {
-    const v = await visiveisAcoes(req.user);
+    const v = req.query.escopo === 'todos' ? await visiveisLeitura(req.user) : await visiveisAcoes(req.user);
     const where = [v.where];
     const params = [...v.params];
     const f = req.query;
@@ -291,10 +313,10 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       else if (sit === 'encerradas') where.push('a.encerrada = 1');
     }
     if (f.q) { where.push('(a.titulo like ? or a.detalhe like ?)'); params.push(`%${f.q}%`, `%${f.q}%`); }
-    return marcarNovas(req.user, (await q(`${SELECT_ACAO} where ${where.join(' and ')}
+    return marcarLeitura(req.user, await marcarNovas(req.user, (await q(`${SELECT_ACAO} where ${where.join(' and ')}
               order by a.encerrada, case a.status when 'concluida' then 1 else 0 end,
                        case when a.status != 'concluida' and a.prazo < '${hoje()}' then 0 else 1 end, a.prazo, a.id`, ...params))
-      .map((a) => ({ ...acaoOut(a), ...permissoes(req.user, a) })));
+      .map((a) => ({ ...acaoOut(a), ...permissoes(req.user, a) }))));
   }));
 
   app.post('/api/acoes', permit('chefe', 'diretor', 'apoio', 'administrador'), h(async (req, res) => {
@@ -378,7 +400,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   }));
 
   app.get('/api/acoes/:id', h(async (req) => {
-    const a = await acaoVisivel(req.user, Number(req.params.id));
+    const a = await acaoVisivel(req.user, Number(req.params.id), { leitura: true });
     // Consultas independentes: em série custariam uma ida ao banco cada (o maior custo desta tela
     // é a rede, não o SQL). As permissões não consultam nada (ver permissoes).
     const [comentarios, lancamentos, pedidos, impedimentos, checklist, prazos, vistas, [{ nova }]] = await Promise.all([
@@ -394,9 +416,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       vistasDa(a),
       marcarNovas(req.user, [a]),
     ]);
+    const [acao] = await marcarLeitura(req.user, [{ ...acaoOut(a), ...permissoes(req.user, a) }]);
     return {
-      ...acaoOut(a),
-      ...permissoes(req.user, a),
+      ...acao,
       nova,
       vistas,
       prazos,
@@ -510,7 +532,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id));
   }));
 
-  app.post('/api/acoes/:id/comentarios', h(async (req, res) => {
+  app.post('/api/acoes/:id/comentarios', permit('chefe', 'diretor', 'apoio', 'administrador'), h(async (req, res) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     const t = texto(req.body?.texto, 1000);
     if (!t) throw falha(400, 'Escreva o comentário.');

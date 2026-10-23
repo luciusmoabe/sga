@@ -40,6 +40,13 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   // API administrativa do Supabase (criação de contas e troca de senha); só existe no modo institucional.
   const contas = adminAuth || (auth.mode === 'supabase' ? administradorAuth(auth) : null);
   instalarAuth(app, db, auth, provedor, contas);
+  // Perfil Consulta: só lê as ações. Lista fechada, para que nenhuma rota, atual ou futura, fique aberta a ele por
+  // descuido. Entrar, sair e trocar a senha são atendidos antes, em instalarAuth.
+  const LEITURA_CONSULTA = [/^\/bootstrap$/, /^\/acoes$/, /^\/acoes\/\d+$/];
+  app.use('/api', (req, res, next) => {
+    if (req.user?.perfil !== 'consulta' || (req.method === 'GET' && LEITURA_CONSULTA.some((r) => r.test(req.path)))) return next();
+    next(falha(403, 'O perfil Consulta só permite ler as ações dos Centros.'));
+  });
 
   rotasEstrutura(app, { ...ctx, auth, adminAuth: contas });
   const { criarDiretriz, SELECT_ACAO, acaoOut } = rotasAcoes(app, ctx);

@@ -12,6 +12,7 @@ import { configuracaoAta } from './ata-cabecalho.js';
 import { atas, reuniaoDetalhe, reunioes } from './atas.js';
 import { inicioReuniao, viewReuniao } from './reuniao.js';
 import { avisos } from './avisos.js';
+import { acoesDosCentros, lePorTodosOsCentros } from './consulta.js';
 import { DIRETORIA_ADJUNTA, ROTULO_PERFIL } from './regras.js';
 import { abrirTrocaSenha, telaTrocaSenha } from './senha.js';
 
@@ -33,7 +34,9 @@ const ROTAS = {
   // Sem id: tela comum de início (nada é criado ao abrir a rota). Com id: Modo Reunião em tela cheia.
   reuniao: { f: (r, p) => (p.id ? viewReuniao(r, p) : inicioReuniao(r, p)), perfis: GESTAO, tv: (p) => !!p.id, titulo: 'Modo Reunião' },
   inicio: { f: inicio, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Início' },
-  agenda: { f: agenda, perfis: TODOS, trilho: true, titulo: 'Agenda' },
+  agenda: { f: agenda, perfis: [...TODOS, 'consulta'], trilho: true, titulo: 'Agenda' },
+  // Leitura das ações de todos os Centros: perfil Consulta e chefe com a permissão (a tela confere a permissão).
+  'acoes-centros': { f: acoesDosCentros, perfis: ['consulta', 'chefe'], titulo: 'Ações dos Centros' },
   // O Administrador da Diretoria Adjunta envia o relato da própria seção, como um chefe.
   atualizacao: { f: atualizacao, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Minha atualização' },
   'minhas-acoes': { f: minhasAcoes, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Minhas ações' },
@@ -48,6 +51,7 @@ const ICONES = {
   agenda: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="4" width="15" height="13" rx="1.5"/><line x1="2.5" y1="8" x2="17.5" y2="8"/><line x1="6" y1="2" x2="6" y2="5.5"/><line x1="14" y1="2" x2="14" y2="5.5"/></svg>',
   reuniao: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3.5" width="16" height="10.5" rx="1.5"/><line x1="7" y1="17.5" x2="13" y2="17.5"/><line x1="10" y1="14" x2="10" y2="17.5"/><path d="M8.3 6.3v5l4.4-2.5-4.4-2.5z" fill="currentColor" stroke="none"/></svg>',
   direcionar: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="10" x2="16" y2="10"/><polyline points="11,5 16,10 11,15"/></svg>',
+  'acoes-centros': '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 10s3-5.5 8.5-5.5S18.5 10 18.5 10s-3 5.5-8.5 5.5S1.5 10 1.5 10z"/><circle cx="10" cy="10" r="2.5"/></svg>',
   acoes: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5,5 4,6.5 6.5,3.5"/><line x1="9" y1="5" x2="17.5" y2="5"/><polyline points="2.5,11 4,12.5 6.5,9.5"/><line x1="9" y1="11" x2="17.5" y2="11"/><line x1="2.5" y1="16" x2="17.5" y2="16"/></svg>',
   prazos: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10.5" r="7"/><polyline points="10,6.5 10,10.5 13,12.5"/></svg>',
   combinados: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="2.5" x2="5" y2="17.5"/><path d="M5 3.5h9l-2.3 3 2.3 3H5"/></svg>',
@@ -89,6 +93,8 @@ const MENU_CHEFE = [
   ['combinados', 'Combinados'],
   ['atas', 'Atas'],
 ];
+// Consulta: só lê as ações dos Centros.
+const MENU_CONSULTA = [['#Consulta'], ['acoes-centros', 'Ações dos Centros'], ['agenda', 'Agenda']];
 // O Administrador tem acesso total às abas de Configuração.
 const MENU_ADMIN = MENU_GESTAO.map((m) => (m[0] === '#Organização' ? ['#Administração'] : m[0] === 'estrutura' ? ['estrutura', 'Configuração'] : m[0] === 'avisos' ? ['avisos', 'Avisos'] : m));
 const PERFIL = ROTULO_PERFIL;
@@ -105,7 +111,8 @@ function lerRota() {
   return { rota, id, q: new URLSearchParams(qs || '') };
 }
 // Início da seção também é a tela de entrada do Administrador da Diretoria Adjunta (mesma tela do chefe).
-const casaDe = () => (est.user.perfil === 'chefe' || (est.user.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA) ? '#/inicio' : '#/painel');
+const casaDe = () => (est.user.perfil === 'consulta' ? '#/acoes-centros'
+  : est.user.perfil === 'chefe' || (est.user.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA) ? '#/inicio' : '#/painel');
 
 
 // O bootstrap (usuário, semana, selo) muda pouco: reaproveitá-lo poupa uma ida ao servidor a cada troca de tela.
@@ -226,7 +233,9 @@ function casca() {
   const u = est.user;
   // Quem é da Diretoria Adjunta (Administrador vinculado a ela) cria e acompanha as ações da seção e envia o relato semanal.
   const daDiretoriaAdjunta = u.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA;
-  const base = u.perfil === 'chefe' ? MENU_CHEFE : u.perfil === 'administrador' ? MENU_ADMIN : MENU_GESTAO;
+  // O chefe com a permissão do Diretor ganha "Ações dos Centros", logo abaixo das próprias ações.
+  const chefe = lePorTodosOsCentros() ? MENU_CHEFE.flatMap((m) => (m[0] === 'minhas-acoes' ? [m, ['acoes-centros', 'Ações dos Centros']] : [m])) : MENU_CHEFE;
+  const base = u.perfil === 'chefe' ? chefe : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? MENU_CONSULTA : MENU_GESTAO;
   const menu = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['atualizacao', 'Minha atualização']] : []), ...base]
     .filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
   app.innerHTML = `<div class="app"><aside class="lateral">
@@ -253,6 +262,7 @@ function casca() {
 const ABAS_MOVEL = {
   chefe: [['inicio', 'Início'], ['minhas-acoes', 'Ações'], ['atualizacao', 'Atualização'], ['agenda', 'Agenda']],
   gestao: [['painel', 'Painel'], ['agenda', 'Agenda'], ['acoes', 'Ações'], ['prazos', 'Prazos']],
+  consulta: [['acoes-centros', 'Ações'], ['agenda', 'Agenda']],
 };
 const ICONE_MAIS = '<svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.5" cy="10" r="1.2"/><circle cx="10" cy="10" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/></svg>';
 // Iniciais do primeiro e do último nome, sem parênteses, partículas nem posto/graduação
@@ -265,7 +275,7 @@ const iniciais = (nome) => {
 };
 
 function cascaMovel(u, menu) {
-  const abas = u.perfil === 'chefe' ? ABAS_MOVEL.chefe : ABAS_MOVEL.gestao;
+  const abas = ABAS_MOVEL[u.perfil === 'chefe' || u.perfil === 'consulta' ? u.perfil : 'gestao'];
   const rotuloPerfil = `${PERFIL[u.perfil]}${est.boot?.secao ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}`;
   return `<header class="topo-movel">
       <img src="/imagens/logo-agilis.png" alt="Agilis" class="topo-movel-logo">
@@ -348,7 +358,9 @@ async function renderizar() {
       return;
     }
     document.body.classList.remove('tv');
-    if (!$('.app') || $('.app')?.dataset.perfil !== est.user.perfil) { casca(); $('.app').dataset.perfil = est.user.perfil; }
+    // A casca muda com o perfil e com a consulta aos outros Centros (o menu ganha "Ações dos Centros").
+    const chaveCasca = `${est.user.perfil}:${lePorTodosOsCentros() ? 1 : 0}`;
+    if (!$('.app') || $('.app')?.dataset.perfil !== chaveCasca) { casca(); $('.app').dataset.perfil = chaveCasca; }
     for (const a of document.querySelectorAll('.menu a, .abas-movel a, .folha-menu a')) {
       const ativa = a.dataset.rota === rota || (rota === 'centro' && a.dataset.rota === 'painel') || (rota === 'pauta' && a.dataset.rota === 'painel');
       if (ativa) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');

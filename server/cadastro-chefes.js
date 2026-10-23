@@ -38,7 +38,7 @@ export function administradorAuth(config, { env = process.env, fetchImpl = fetch
 // `secaoAdministrador` só vem do comando do servidor: vincula o novo Administrador à Diretoria Adjunta.
 export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe', { permitidos = ['chefe', 'apoio'], suplente = false, secaoAdministrador = null } = {}) {
   if (!permitidos.includes(perfil)) {
-    throw falha(400, permitidos.includes('diretor') ? 'Escolha Diretor, Apoio do Diretor ou Chefe de seção.' : 'Escolha Chefe ou Apoio.');
+    throw falha(400, permitidos.includes('diretor') ? 'Escolha Diretor, Apoio do Diretor, Chefe de seção ou Consulta.' : 'Escolha Chefe, Apoio ou Consulta.');
   }
   if (suplente && perfil !== 'chefe') throw falha(400, 'Suplente só se aplica ao perfil Chefe de seção.');
   const nome = typeof dados.nome === 'string' ? dados.nome.trim() : '';

@@ -46,12 +46,12 @@ export function abrirResolverImpedimento(a, imp, aoConcluir) {
   });
 }
 
-const impedimentoHTML = (i) => `<div class="impedimento ${i.aberto ? '' : 'resolvido'}">
+const impedimentoHTML = (i, podeResolver = true) => `<div class="impedimento ${i.aberto ? '' : 'resolvido'}">
   <div class="linha" style="gap:6px;flex-wrap:wrap;align-items:center">
     <span class="pilula ${i.aberto ? 'st-bloqueada' : 'st-concluida'}">${i.aberto ? 'Aberto' : 'Resolvido'}</span>
     ${i.critico ? '<span class="pilula atraso">Crítico</span>' : ''}
     <span class="suave pequeno">${dataHora(i.criado_em)} · ${esc(i.criado_por_nome || '')}</span>
-    ${i.aberto ? `<button type="button" class="btn btn-fantasma btn-mini" data-resolver-imp="${i.id}" style="margin-left:auto">Resolver</button>` : ''}
+    ${i.aberto && podeResolver ? `<button type="button" class="btn btn-fantasma btn-mini" data-resolver-imp="${i.id}" style="margin-left:auto">Resolver</button>` : ''}
   </div>
   <div>${esc(i.descricao)}</div>
   ${i.apoio ? `<div class="pequeno"><b>Apoio solicitado:</b> ${esc(i.apoio)}</div>` : ''}
@@ -60,7 +60,7 @@ const impedimentoHTML = (i) => `<div class="impedimento ${i.aberto ? '' : 'resol
 
 // ---------- Checklist (apoio visual; quem registra tempo e muda status também mexe aqui) ----------
 /** Mesma regra de quem gerencia tempo e status: o chefe da seção (se enxerga a ação, é da sua árvore) e o Administrador. */
-const gereChecklist = () => est.user?.perfil === 'chefe' || ehAdmin();
+const gereChecklist = (a) => (est.user?.perfil === 'chefe' || ehAdmin()) && !a.encerrada && !a.somente_leitura;
 const checklistItemHTML = (it, editavel) => `<div class="item previsto" data-checklist-id="${it.id}">
   <input type="checkbox" aria-label="${it.concluido ? 'Reabrir' : 'Concluir'} item: ${esc(it.texto)}" data-marcar-check="${it.id}" ${it.concluido ? 'checked' : ''} ${editavel ? '' : 'disabled'}>
   ${editavel ? `<button type="button" class="checklist-texto" data-editar-check="${it.id}" title="Editar item" style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</button>` : `<span style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</span>`}
@@ -75,8 +75,8 @@ const badgesHTML = (a) => `${pilulaStatus(a)}
   <span class="suave pequeno">${esc(a.secao_sigla)} · ${esc(a.secao_nome)}</span>`;
 const checklistBlocoHTML = (a) => `
   <h3 style="margin:12px 0 6px">Checklist${a.checklist.length ? ` <span class="suave pequeno">(${a.checklist_feitos}/${a.checklist_total})</span>` : ''}</h3>
-  ${a.checklist.length ? `<div class="itens">${a.checklist.map((it) => checklistItemHTML(it, gereChecklist() && !a.encerrada)).join('')}</div>` : '<p class="suave pequeno">Nenhum item no checklist.</p>'}
-  ${gereChecklist() && !a.encerrada ? `<div class="add-linha"><input id="novo-check" placeholder="Novo item do checklist" maxlength="200" aria-label="Novo item do checklist"><button type="button" class="btn btn-sec" data-add-check>Adicionar</button></div>` : ''}`;
+  ${a.checklist.length ? `<div class="itens">${a.checklist.map((it) => checklistItemHTML(it, gereChecklist(a))).join('')}</div>` : '<p class="suave pequeno">Nenhum item no checklist.</p>'}
+  ${gereChecklist(a) ? `<div class="add-linha"><input id="novo-check" placeholder="Novo item do checklist" maxlength="200" aria-label="Novo item do checklist"><button type="button" class="btn btn-sec" data-add-check>Adicionar</button></div>` : ''}`;
 
 // ---------- Ao direcionar: ações já planejadas para o mesmo prazo ----------
 /** Antes de direcionar, mostra as ações em aberto com o mesmo prazo nas seções alvo (e nas subseções delas),
@@ -145,7 +145,7 @@ export function abrirEditarAcao(a, aoConcluir) {
 // ---------- Redirecionar para outra seção ----------
 /** Ação em aberto pode mudar de seção: Diretor, Apoio e Administrador para qualquer seção ativa;
  *  o chefe, dentro da própria árvore (o servidor confere; `/secoes` já devolve só a árvore dele). */
-const aceitaRedirecionar = (a) => !a.encerrada && !a.arquivada && a.status !== 'concluida'
+const aceitaRedirecionar = (a) => !a.encerrada && !a.arquivada && a.status !== 'concluida' && !a.somente_leitura
   && (podeOperar() || est.user?.perfil === 'chefe');
 
 async function abrirRedirecionar(a, aoConcluir) {
@@ -181,7 +181,10 @@ export async function abrirAcao(id, aoMudar) {
   if (a.nova) post(`/acoes/${a.id}/vista`).then(() => { selosMudaram(); aoMudar?.(); }).catch(() => { /* fica nova; registra na próxima abertura */ });
   const diretor = ehDiretor();
   const prazoAlterado = a.prazo !== a.prazo_original;
+  // Ação que a pessoa só lê (perfil Consulta, ou chefe vendo outra seção): nenhum controle, nem comentário.
+  const leitura = !!a.somente_leitura;
   const corpo = `
+    ${leitura ? '<div class="info">Somente leitura: você acompanha esta ação, mas quem a altera é a seção responsável.</div>' : ''}
     ${a.demandada_diretor ? `
       <div class="banner-origem diretor">
         <span class="banner-origem-icone">🎯</span>
@@ -200,7 +203,7 @@ export async function abrirAcao(id, aoMudar) {
       </div>` : '')}
     <p>${a.detalhe ? esc(a.detalhe) : '<span class="suave">Sem detalhamento.</span>'}</p>
     <div class="linha" id="acao-badges" style="margin-bottom:10px;align-items:center;flex-wrap:wrap;gap:8px">${badgesHTML(a)}</div>
-    ${est.user?.perfil === 'chefe' || ehAdmin() || a.pode_editar ? `    <div class="linha" style="margin-bottom:10px;align-items:center">
+    ${!leitura && (est.user?.perfil === 'chefe' || ehAdmin() || a.pode_editar) ? `    <div class="linha" style="margin-bottom:10px;align-items:center">
       <label for="sel-prio" class="suave pequeno" style="margin:0"><b>Alterar prioridade:</b></label>
       <select id="sel-prio" data-mudar-prio style="width:auto;padding:3px 8px;font-size:0.84rem;margin-left:6px">
         <option value="alta" ${a.prioridade === 'alta' ? 'selected' : ''}>Alta</option>
@@ -219,18 +222,18 @@ export async function abrirAcao(id, aoMudar) {
       ${br(p.prazo_atual)} → <b>${br(p.novo_prazo)}</b> · ${esc(p.status)} <br><span class="suave">${esc(p.justificativa)}</span></div>`).join('')}` : ''}
     <div id="acao-checklist-bloco">${checklistBlocoHTML(a)}</div>
     <h3 style="margin:12px 0 6px">Impedimentos</h3>
-    ${a.impedimentos.length ? a.impedimentos.map(impedimentoHTML).join('') : '<p class="suave pequeno">Nenhum impedimento registrado.</p>'}
-    ${aceitaImpedimento(a) ? '<button type="button" class="btn btn-sec btn-mini" data-novo-imp>Registrar impedimento</button>' : ''}
+    ${a.impedimentos.length ? a.impedimentos.map((i) => impedimentoHTML(i, !leitura)).join('') : '<p class="suave pequeno">Nenhum impedimento registrado.</p>'}
+    ${aceitaImpedimento(a) && !leitura ? '<button type="button" class="btn btn-sec btn-mini" data-novo-imp>Registrar impedimento</button>' : ''}
     <h3 style="margin:12px 0 6px">Comentários</h3>
     ${a.comentarios.length ? a.comentarios.map((c) => `<div class="comentario"><b>${esc(c.usuario_nome || '')}</b>
       <span class="suave pequeno"> · ${dataHora(c.criado_em)}</span><br>${esc(c.texto)}</div>`).join('') : '<p class="suave pequeno">Nenhum comentário ainda.</p>'}
-    ${`<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>`}
+    ${leitura ? '' : '<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>'}
     ${diretor && a.status === 'concluida' && !a.encerrada ? `<div class="linha"><button type="button" class="btn btn-ok" data-encerrar>Aceitar e encerrar</button>
       <button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>` : ''}
     ${a.pode_editar || a.pode_mudar_demanda ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Editar ação</button>'
       : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Alterar prazo</button>' : ''}
     ${aceitaRedirecionar(a) ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-redirecionar>Redirecionar para outra seção</button>' : ''}
-    ${!a.demandada_diretor || (a.demanda_diretor && !a.diretriz_id) || ehAdmin() ? `
+    ${leitura ? '' : !a.demandada_diretor || (a.demanda_diretor && !a.diretriz_id) || ehAdmin() ? `
       <div class="linha" style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line);align-items:center">
         ${a.arquivada
           ? `<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar ação</button>`
@@ -249,6 +252,7 @@ export async function abrirAcao(id, aoMudar) {
     corpo,
     rotulo: 'Comentar',
     cancelar: 'Fechar',
+    semEnvio: leitura,
     aoEnviar: async (d) => {
       await post(`/acoes/${a.id}/comentarios`, { texto: d.texto });
       toast('Comentário registrado.');

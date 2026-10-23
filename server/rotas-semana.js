@@ -13,7 +13,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     const [{ dia, hora, config }, secao, pedidos, novas] = await Promise.all([
       cfgReuniao(),
       req.user.secao_id ? q1('select id, nome, sigla, tipo from secoes where id = ?', req.user.secao_id) : null,
-      req.user.perfil === 'chefe' ? null : q1(
+      ['chefe', 'consulta'].includes(req.user.perfil) ? null : q1(
         `select count(*) n from pedidos_prazo p join acoes a on a.id = p.acao_id
          where p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and (${req.user.perfil === 'administrador' ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'})`),
       recebe ? subarvore(db, req.user.secao_id).then((ids) => q1(

@@ -147,10 +147,10 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     res.status(201);
     return usuario;
   }));
-  // Cria conta de login com senha inicial provisória. Diretor: Chefe e Apoio. Administrador: também Diretor.
+  // Cria conta de login com senha inicial provisória. Diretor: Chefe, Apoio e Consulta. Administrador: também Diretor.
   app.post('/api/usuarios/acesso', permit('diretor', 'administrador'), h(async(req,res)=>{
     if(auth.mode!=='supabase') throw falha(400,'Login requer Supabase Auth.');
-    const permitidos = req.user.perfil === 'administrador' ? ['diretor', 'apoio', 'chefe'] : ['chefe', 'apoio'];
+    const permitidos = req.user.perfil === 'administrador' ? ['diretor', 'apoio', 'chefe', 'consulta'] : ['chefe', 'apoio', 'consulta'];
     const u=await cadastrarChefe(db,auth,adminAuth || administradorAuth(auth),req.body || {},req.body?.perfil,{ permitidos, suplente: !!req.body?.suplente });
     res.status(201); return u;
   }));
@@ -191,7 +191,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     const b = req.body || {};
     const nome = texto(b.nome, 120);
     if (!nome) throw falha(400, 'Informe o nome.');
-    if (!['chefe', 'apoio'].includes(b.perfil)) throw falha(400, 'Escolha o perfil: Chefe ou Apoio.');
+    if (!['chefe', 'apoio', 'consulta'].includes(b.perfil)) throw falha(400, 'Escolha o perfil: Chefe, Apoio ou Consulta.');
     const id = (await run('insert into usuarios (nome, email, perfil) values (?,?,?)', nome, texto(b.email, 160) || null, b.perfil)).lastInsertRowid;
     res.status(201);
     return await q1('select * from usuarios where id = ?', id);
@@ -206,8 +206,12 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     if (u.perfil === 'administrador' && muda) throw falha(400, 'O perfil e o acesso do Administrador só mudam pelo servidor, para que o sistema nunca fique sem administrador.');
     if (u.perfil === 'diretor' && !porAdmin && muda) throw falha(400, 'Perfil e acesso do Diretor são protegidos: peça ao Administrador.');
     const perfil=b.perfil ?? u.perfil;
-    const permitidos = porAdmin ? ['diretor','chefe','apoio'] : ['chefe','apoio'];
-    if (perfil !== u.perfil && !permitidos.includes(perfil)) throw falha(400, porAdmin ? 'Escolha Diretor, Apoio do Diretor ou Chefe de seção.' : 'Escolha Chefe ou Apoio.');
+    const permitidos = porAdmin ? ['diretor','chefe','apoio','consulta'] : ['chefe','apoio','consulta'];
+    if (perfil !== u.perfil && !permitidos.includes(perfil)) throw falha(400, porAdmin ? 'Escolha Diretor, Apoio do Diretor, Chefe de seção ou Consulta.' : 'Escolha Chefe, Apoio ou Consulta.');
+    // Leitura das ações de todos os Centros: só faz sentido para o chefe (a gestão já vê tudo; a Consulta existe para isso).
+    if ('ver_outros_centros' in b && typeof b.ver_outros_centros !== 'boolean') throw falha(400, 'Informe se a pessoa pode consultar as ações de todos os Centros.');
+    if (b.ver_outros_centros === true && perfil !== 'chefe') throw falha(400, 'A consulta às ações de todos os Centros vale só para o perfil Chefe de seção.');
+    const verOutros = perfil === 'chefe' ? ('ver_outros_centros' in b ? Number(b.ver_outros_centros) : u.ver_outros_centros) : 0;
     if ('nome' in b) {
       const nome=texto(b.nome,120);
       if(!nome) throw falha(400,'Informe o nome.');
@@ -235,7 +239,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
       if(s.chefe_id && s.chefe_id!==id) throw falha(409,'A seção já possui outro chefe. Use o botão Chefe para substituir.');
     }
     await run('update secoes set chefe_id=null where chefe_id=?',id);
-    await run('update usuarios set perfil=?,ativo=?,secao_id=? where id=?',perfil,ativo,perfil==='chefe' && ativo ? secao : null,id);
+    await run('update usuarios set perfil=?,ativo=?,secao_id=?,ver_outros_centros=? where id=?',perfil,ativo,perfil==='chefe' && ativo ? secao : null,verOutros,id);
     if(perfil==='chefe' && ativo && secao) {
       const r=await run('update secoes set chefe_id=? where id=? and chefe_id is null and ativa=1',id,secao);
       if(r.changes!==1) throw falha(409,'Seção alterada por outra operação. Atualize a página.');

@@ -2,6 +2,7 @@
 // Uma falha desfaz todas as migrações pendentes desta execução. Nunca remove dados.
 import { alinharIntegridade } from './migration-integridade.js';
 import { aplicarPerfilAdministrador } from './migration-perfil-admin.js';
+import { aplicarPerfilConsulta } from './migration-perfil-consulta.js';
 import { aplicarDiretoriaAdjunta } from './migration-diretoria-adjunta.js';
 import { aplicarPrazosEReuniao } from './migration-prazos-reuniao.js';
 import { aplicarMovimentacao } from './migration-movimentacao.js';
@@ -267,6 +268,13 @@ const MIGRACOES = [
         vista_em text not null, primary key (acao_id, usuario_id)
       );
       create index if not exists idx_acao_vistas_usuario on acao_vistas(usuario_id);`);
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
+  {
+    id: 19, nome: 'perfil_consulta',
+    async aplicar(db) {
+      await aplicarPerfilConsulta(db);
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },

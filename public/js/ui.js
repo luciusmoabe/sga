@@ -55,11 +55,12 @@ export function toast(msg, tipo = 'ok') {
 }
 
 /** Abre um diálogo com formulário. `aoEnviar(dados, form)` pode lançar erro: a mensagem aparece no diálogo. */
-export function abrirForm({ titulo, corpo, rotulo = 'Salvar', cancelar = 'Cancelar', aoEnviar, perigo = false, aoAbrir, semRodape = false }) {
+// `semEnvio`: diálogo só para ler, com o rodapé reduzido ao botão de fechar.
+export function abrirForm({ titulo, corpo, rotulo = 'Salvar', cancelar = 'Cancelar', aoEnviar, perigo = false, aoAbrir, semRodape = false, semEnvio = false }) {
   const dlg = document.createElement('dialog');
   dlg.innerHTML = `<form class="dlg" novalidate><h2>${esc(titulo)}</h2><div class="erro-form oculto" role="alert"></div>${corpo}
     ${semRodape ? '' : `<div class="rodape"><button type="button" class="btn btn-sec" data-fechar>${esc(cancelar)}</button>
-    <button class="btn ${perigo ? 'btn-perigo' : 'btn-primario'}" type="submit">${esc(rotulo)}</button></div>`}</form>`;
+    ${semEnvio ? '' : `<button class="btn ${perigo ? 'btn-perigo' : 'btn-primario'}" type="submit">${esc(rotulo)}</button>`}</div>`}</form>`;
   document.body.append(dlg);
   dlg.addEventListener('close', () => dlg.remove());
   dlg.showModal();
