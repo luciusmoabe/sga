@@ -137,3 +137,51 @@ test('excluir usuário com itens de checklist registrados é recusado', async (t
   assert.equal(r.status, 409);
   assert.match(r.data.erro, /itens de checklist/);
 });
+
+test('tarefas têm data e responsável opcionais e saem ordenadas por data, as sem data no fim', async (t) => {
+  const { call, chefes, nova } = await demo(t);
+  const ana = chefes[0]; // CPE; a subseção IND tem a chefe Gabriela (9)
+  const GABRIELA_IND = 9;
+  const id = await nova(ana);
+
+  const resp = (await call(ana.id, 'GET', `/acoes/${id}/responsaveis`)).data;
+  assert.deepEqual(resp.map((u) => u.id).sort(), [ana.id, GABRIELA_IND].sort(), 'titular da seção e chefe da subseção');
+  assert.equal((await call(DIRETOR, 'GET', `/acoes/${id}/responsaveis`)).status, 403, 'só quem gere as tarefas');
+
+  const semData = await call(ana.id, 'POST', `/acoes/${id}/checklist`, { texto: 'Sem data' });
+  assert.equal(semData.status, 201);
+  assert.equal(semData.data.data, null);
+  assert.equal(semData.data.responsavel_id, null);
+  const depois = await call(ana.id, 'POST', `/acoes/${id}/checklist`, { texto: 'Depois', data: '2026-10-05', responsavel_id: GABRIELA_IND });
+  assert.equal(depois.data.responsavel_nome, 'Gabriela Sena');
+  const antes = await call(ana.id, 'POST', `/acoes/${id}/checklist`, { texto: 'Antes', data: '2026-09-15', responsavel_id: ana.id });
+  assert.equal(antes.data.atrasada, true, 'data passada e não feita');
+
+  assert.equal((await call(ana.id, 'POST', `/acoes/${id}/checklist`, { texto: 'X', data: '15/09/2026' })).status, 400);
+  assert.equal((await call(ana.id, 'POST', `/acoes/${id}/checklist`, { texto: 'X', responsavel_id: chefes[1].id })).status, 400, 'chefe de outro Centro');
+  assert.equal((await call(ana.id, 'POST', `/acoes/${id}/checklist`, { texto: 'X', responsavel_id: DIRETOR })).status, 400);
+
+  const ordem = async () => (await call(ana.id, 'GET', `/acoes/${id}`)).data.checklist.map((x) => x.texto);
+  assert.deepEqual(await ordem(), ['Antes', 'Depois', 'Sem data']);
+
+  // Mudar a data reordena; limpar data e responsável manda a tarefa para o fim.
+  await call(ana.id, 'PATCH', `/acoes/${id}/checklist/${semData.data.id}`, { data: '2026-09-01' });
+  assert.deepEqual(await ordem(), ['Sem data', 'Antes', 'Depois']);
+  const limpa = await call(ana.id, 'PATCH', `/acoes/${id}/checklist/${depois.data.id}`, { data: '', responsavel_id: null });
+  assert.equal(limpa.data.data, null);
+  assert.equal(limpa.data.responsavel_nome, null);
+  assert.deepEqual(await ordem(), ['Sem data', 'Antes', 'Depois']);
+
+  const feita = await call(ana.id, 'PATCH', `/acoes/${id}/checklist/${antes.data.id}`, { concluido: true });
+  assert.equal(feita.data.atrasada, false, 'feita não fica atrasada');
+  assert.equal((await call(ana.id, 'PATCH', `/acoes/${id}/checklist/${antes.data.id}`, { responsavel_id: chefes[1].id })).status, 400);
+});
+
+test('excluir usuário responsável por tarefa é recusado', async (t) => {
+  const { call, chefes, nova } = await demo(t);
+  const id = await nova(chefes[0]);
+  await call(chefes[0].id, 'POST', `/acoes/${id}/checklist`, { texto: 'Com a subseção', responsavel_id: 9 });
+  const r = await call(ADMIN, 'DELETE', '/usuarios/9');
+  assert.equal(r.status, 409);
+  assert.match(r.data.erro, /tarefas sob sua responsabilidade/);
+});

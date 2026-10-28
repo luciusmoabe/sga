@@ -45,6 +45,7 @@ export async function excluirCadastro(db, tabela, id) {
           ['impedimentos','resolvido_por','resoluções de impedimento'],
           ['acao_checklist','criado_por','itens de checklist criados'],
           ['acao_checklist','concluido_por','itens de checklist concluídos'],
+          ['acao_checklist','responsavel_id','tarefas sob sua responsabilidade'],
           ['acao_prazos','alterado_por','alterações de prazo'],
           ['tempo','usuario_id','lançamentos de tempo'],
           ['pedidos_prazo','usuario_id','pedidos de prazo'],

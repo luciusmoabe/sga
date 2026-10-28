@@ -1203,6 +1203,24 @@ body.carregando::before {
 .checklist-texto { flex: 1; min-width: 0; overflow-wrap: anywhere; text-align: left; background: transparent; border: 0; color: inherit; font: inherit; cursor: text; padding: 4px; }
 .checklist-texto:hover, .checklist-texto:focus-visible { background: var(--bg); text-decoration: underline; }
 .item.previsto [data-texto-check] { flex: 1; min-width: 0; width: 0; }
+/* Tarefas da ação: data e responsável abaixo do texto; formulário com texto, data, responsável e botão. */
+.item.tarefa { align-items: flex-start; }
+.item.tarefa > input[type=checkbox] { margin-top: 8px; }
+.tarefa-corpo { flex: 1; min-width: 0; }
+.tarefa-meta { display: flex; flex-wrap: wrap; gap: 4px 6px; padding: 0 4px 2px; font-size: .8rem; color: var(--muted); }
+.item .tarefa-meta span { flex: none; }
+.tarefa-atrasada { color: var(--vermelho); font-weight: 650; }
+.tarefa-form { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; flex: 1; min-width: 0; }
+.tarefa-form [data-texto-check] { grid-column: 1 / -1; }
+.item.tarefa-editando .tarefa-form { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.item.previsto .tarefa-form [data-texto-check], .tarefa-form [data-texto-check] { width: 100%; flex: none; }
+.tarefa-form input[type=date], .tarefa-form select { width: auto; }
+.item.tarefa-editando { padding: 8px; }
+@media (max-width: 760px) {
+  .tarefa-form, .item.tarefa-editando .tarefa-form { grid-template-columns: 1fr 1fr; }
+  .tarefa-form input[type=date], .tarefa-form select { width: 100%; }
+  .tarefa-form [data-add-check] { grid-column: 1 / -1; min-height: 44px; }
+}
 .tv-informacoes { width: 100%; max-height: 24vh; overflow-y: auto; }
 .ata-editor { margin: 12px 0; }
 .reuniao-registros [data-informacoes-historicas] { grid-column: 1 / -1; }

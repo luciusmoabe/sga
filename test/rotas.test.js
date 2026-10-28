@@ -12,6 +12,7 @@ const ESPERADAS = [
   'DELETE /api/usuarios/:id',
   'GET /api/acoes',
   'GET /api/acoes/:id',
+  'GET /api/acoes/:id/responsaveis',
   'GET /api/atualizacao',
   'GET /api/auth/config',
   'GET /api/avisos',

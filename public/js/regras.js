@@ -29,6 +29,9 @@ export const ROTULO_TIPO = { centro: 'Centro', coordenacao: 'Coordenação', sub
  *  de dias ou mais aparece como "sem atualização" para o chefe e na contagem do Diretor. Não muda o semáforo. */
 export const DIAS_SEM_MOVIMENTO = 7;
 
+/** Ordem das tarefas de uma ação: por data de execução, as sem data no fim; depois, pela ordem em que foram criadas. */
+export const porDataDaTarefa = (x, y) => (x.data ? 0 : 1) - (y.data ? 0 : 1) || (x.data || '').localeCompare(y.data || '') || x.ordem - y.ordem || x.id - y.id;
+
 /** Hora (no fuso de negócio) em que a semana fecha, no dia anterior à reunião. */
 export const HORA_FECHAMENTO = 18;
 

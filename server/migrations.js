@@ -278,6 +278,18 @@ const MIGRACOES = [
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },
+  {
+    id: 20, nome: 'tarefas_da_acao',
+    async aplicar(db) {
+      // O checklist vira lista de tarefas: data de execução e responsável, ambos opcionais. Itens existentes ficam sem os dois.
+      const colunas = db.isPg
+        ? await db.prepare("select column_name as nome from information_schema.columns where table_schema=current_schema() and table_name='acao_checklist'").all()
+        : (await db.prepare('pragma table_info(acao_checklist)').all()).map(c => ({ nome: c.name }));
+      if (!colunas.some(c => c.nome === 'data')) await db.exec('alter table acao_checklist add column data text');
+      if (!colunas.some(c => c.nome === 'responsavel_id')) await db.exec('alter table acao_checklist add column responsavel_id integer references usuarios(id)');
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
 ];
 
 async function registros(db) {

@@ -1,6 +1,6 @@
 // Rotas de diretrizes, ações e pedidos de novo prazo.
 import { subarvore } from './db.js';
-import { DIAS_SEM_MOVIMENTO, PRIORIDADES, STATUS, TRANSICOES, addDays, br, ehISO } from './logic.js';
+import { DIAS_SEM_MOVIMENTO, PRIORIDADES, STATUS, TRANSICOES, addDays, br, ehISO, porDataDaTarefa } from './logic.js';
 import { falha, h, marks, permit, texto } from './helpers.js';
 
 export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
@@ -130,7 +130,35 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     reuniao_semana: a.reuniao_semana,
   });
   const impedimentoOut = (i) => ({ ...i, critico: !!i.critico, aberto: !i.resolvido_em });
-  const checklistOut = (c) => ({ ...c, concluido: !!c.concluido });
+  // Tarefa (acao_checklist): data de execução e responsável opcionais; atrasada quando a data passou e não foi feita.
+  const checklistOut = (c) => ({ ...c, concluido: !!c.concluido, atrasada: !!c.data && !c.concluido && c.data < hoje() });
+  const SELECT_TAREFA = `select c.*, u.nome as responsavel_nome from acao_checklist c left join usuarios u on u.id = c.responsavel_id`;
+  const tarefa = async (iid) => checklistOut(await q1(`${SELECT_TAREFA} where c.id = ?`, iid));
+  /** Quem pode ser responsável por uma tarefa: as contas ativas vinculadas à seção da ação, às seções acima dela
+   *  (o chefe do Centro) e às subseções (titulares, suplentes e, na Diretoria Adjunta, os membros). */
+  const responsaveisDa = (a) => q(`with recursive acima(id, pai_id) as (
+        select id, pai_id from secoes where id = ? union all select s.id, s.pai_id from secoes s join acima on s.id = acima.pai_id
+      ), abaixo(id) as (
+        select cast(? as integer) union select s.id from secoes s join abaixo on s.pai_id = abaixo.id
+      )
+      select u.id, u.nome, s.sigla as secao_sigla from usuarios u join secoes s on s.id = u.secao_id
+      where u.ativo = 1 and u.secao_id in (select id from acima union select id from abaixo) order by u.nome, u.id`, a.secao_id, a.secao_id);
+  /** Lê data e responsável do corpo (só os campos enviados). `null` ou vazio limpa o campo. */
+  const camposDaTarefa = async (a, b) => {
+    const campos = {};
+    if ('data' in b) {
+      if (b.data && !ehISO(b.data)) throw falha(400, 'Informe a data da tarefa no formato AAAA-MM-DD.');
+      campos.data = b.data || null;
+    }
+    if ('responsavel_id' in b) {
+      const rid = b.responsavel_id === null || b.responsavel_id === '' ? null : Number(b.responsavel_id);
+      if (rid !== null && !(await responsaveisDa(a)).some((u) => u.id === rid)) {
+        throw falha(400, 'Escolha como responsável alguém da seção da ação (titular, suplente ou chefe de subseção).');
+      }
+      campos.responsavel_id = rid;
+    }
+    return campos;
+  };
   const acaoVisivel = async (user, id, { leitura = false } = {}) => {
     const v = leitura ? await visiveisLeitura(user) : await visiveisAcoes(user);
     const a = await q1(`${SELECT_ACAO} where a.id = ? and ${v.where}`, id, ...v.params);
@@ -410,7 +438,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       q(`select i.*, uc.nome as criado_por_nome, ur.nome as resolvido_por_nome from impedimentos i
         left join usuarios uc on uc.id = i.criado_por left join usuarios ur on ur.id = i.resolvido_por
         where i.acao_id = ? order by i.id desc`, a.id),
-      q('select * from acao_checklist where acao_id = ? order by ordem, id', a.id),
+      q(`${SELECT_TAREFA} where c.acao_id = ?`, a.id).then((l) => l.sort(porDataDaTarefa)),
       q(`select h.*, u.nome as alterado_por_nome from acao_prazos h left join usuarios u on u.id = h.alterado_por
         where h.acao_id = ? order by h.alterado_em, h.id`, a.id),
       vistasDa(a),
@@ -626,21 +654,29 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     });
   }));
 
-  // ---------- Checklist da ação ----------
-  // Apoio visual ao chefe: não muda o status nem afeta a regra de concluir (que continua exigindo tempo
-  // registrado). Diferente de impedimentos, itens podem ser editados e excluídos livremente.
+  // ---------- Tarefas da ação (tabela acao_checklist) ----------
+  // Apoio ao chefe: não mudam o status nem afetam a regra de concluir (que continua exigindo tempo registrado).
+  // Cada tarefa pode ter data de execução e responsável (da seção da ação); a lista sai ordenada por data, as sem
+  // data no fim. Diferente de impedimentos, podem ser editadas e excluídas livremente.
+  app.get('/api/acoes/:id/responsaveis', h(async (req) => {
+    const a = await acaoVisivel(req.user, Number(req.params.id));
+    await chefeGere(req.user, a);
+    return responsaveisDa(a);
+  }));
+
   app.post('/api/acoes/:id/checklist', h(async (req, res) => {
     const id = Number(req.params.id);
     const t = texto(req.body?.texto, 200);
-    if (!t) throw falha(400, 'Escreva o item do checklist.');
+    if (!t) throw falha(400, 'Escreva a tarefa.');
     const a = await acaoVisivel(req.user, id);
     await chefeGere(req.user, a);
     if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
+    const { data = null, responsavel_id: responsavel = null } = await camposDaTarefa(a, req.body || {});
     const ordem = (await q1('select coalesce(max(ordem), 0) + 1 o from acao_checklist where acao_id = ?', a.id)).o;
-    const iid = (await run('insert into acao_checklist (acao_id, texto, ordem, criado_em, criado_por) values (?,?,?,?,?)',
-      a.id, t, ordem, agoraISO(), req.user.id)).lastInsertRowid;
+    const iid = (await run('insert into acao_checklist (acao_id, texto, ordem, criado_em, criado_por, data, responsavel_id) values (?,?,?,?,?,?,?)',
+      a.id, t, ordem, agoraISO(), req.user.id, data, responsavel)).lastInsertRowid;
     res.status(201);
-    return checklistOut(await q1('select * from acao_checklist where id = ?', iid));
+    return tarefa(iid);
   }));
 
   app.patch('/api/acoes/:id/checklist/:iid', h(async (req) => {
@@ -650,19 +686,22 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     await chefeGere(req.user, a);
     if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
     const item = await q1('select * from acao_checklist where id = ? and acao_id = ?', iid, a.id);
-    if (!item) throw falha(404, 'Item não encontrado.');
+    if (!item) throw falha(404, 'Tarefa não encontrada.');
     const b = req.body || {};
     if ('texto' in b) {
       const t = texto(b.texto, 200);
-      if (!t) throw falha(400, 'O item não pode ficar vazio.');
+      if (!t) throw falha(400, 'A tarefa não pode ficar vazia.');
       await run('update acao_checklist set texto = ? where id = ?', t, iid);
     }
+    const campos = await camposDaTarefa(a, b);
+    if ('data' in campos) await run('update acao_checklist set data = ? where id = ?', campos.data, iid);
+    if ('responsavel_id' in campos) await run('update acao_checklist set responsavel_id = ? where id = ?', campos.responsavel_id, iid);
     if ('concluido' in b) {
       const c = !!b.concluido;
       await run('update acao_checklist set concluido = ?, concluido_em = ?, concluido_por = ? where id = ?',
         c ? 1 : 0, c ? agoraISO() : null, c ? req.user.id : null, iid);
     }
-    return checklistOut(await q1('select * from acao_checklist where id = ?', iid));
+    return tarefa(iid);
   }));
 
   app.delete('/api/acoes/:id/checklist/:iid', h(async (req) => {
@@ -672,7 +711,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     await chefeGere(req.user, a);
     if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
     const r = await run('delete from acao_checklist where id = ? and acao_id = ?', iid, a.id);
-    if (!r.changes) throw falha(404, 'Item não encontrado.');
+    if (!r.changes) throw falha(404, 'Tarefa não encontrada.');
     return { ok: true };
   }));
 

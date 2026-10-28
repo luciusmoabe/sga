@@ -5,7 +5,7 @@ import { abrirForm, br, confirmar, dataHora, esc, fmtMin, on, pilulaStatus, PRIO
 
 /** Avisa a casca que as contagens dos selos do menu mudaram (ex.: ação nova aberta). */
 export const selosMudaram = () => window.dispatchEvent(new Event('sgc:selos'));
-import { DIRETORIA_ADJUNTA } from './regras.js';
+import { DIRETORIA_ADJUNTA, porDataDaTarefa } from './regras.js';
 
 // ---------- Impedimentos (formulários usados também pela atualização semanal e por Minhas ações) ----------
 /** Ação em que ainda faz sentido registrar impedimento. */
@@ -58,25 +58,40 @@ const impedimentoHTML = (i, podeResolver = true) => `<div class="impedimento ${i
   ${!i.aberto ? `<div class="suave pequeno">Resolvido em ${dataHora(i.resolvido_em)}${i.resolvido_por_nome ? ` por ${esc(i.resolvido_por_nome)}` : ''}${i.resolucao ? `: ${esc(i.resolucao)}` : ''}</div>` : ''}
 </div>`;
 
-// ---------- Checklist (apoio visual; quem registra tempo e muda status também mexe aqui) ----------
+// ---------- Tarefas da ação (apoio ao chefe; quem registra tempo e muda status também mexe aqui) ----------
 /** Mesma regra de quem gerencia tempo e status: o chefe da seção (se enxerga a ação, é da sua árvore) e o Administrador. */
-const gereChecklist = (a) => (est.user?.perfil === 'chefe' || ehAdmin()) && !a.encerrada && !a.somente_leitura;
-const checklistItemHTML = (it, editavel) => `<div class="item previsto" data-checklist-id="${it.id}">
-  <input type="checkbox" aria-label="${it.concluido ? 'Reabrir' : 'Concluir'} item: ${esc(it.texto)}" data-marcar-check="${it.id}" ${it.concluido ? 'checked' : ''} ${editavel ? '' : 'disabled'}>
-  ${editavel ? `<button type="button" class="checklist-texto" data-editar-check="${it.id}" title="Editar item" style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</button>` : `<span style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</span>`}
-  ${editavel ? `<button type="button" class="btn btn-fantasma btn-mini" data-excluir-check="${it.id}" aria-label="Excluir item">Excluir</button>` : ''}
+const podeGerirTarefas = () => est.user?.perfil === 'chefe' || ehAdmin();
+const gereChecklist = (a) => podeGerirTarefas() && !a.encerrada && !a.somente_leitura;
+const opcoesResponsavel = (responsaveis, escolhido) => `<option value="">Sem responsável</option>${responsaveis.map((u) =>
+  `<option value="${u.id}" ${u.id === escolhido ? 'selected' : ''}>${esc(u.nome)}${u.secao_sigla ? ` (${esc(u.secao_sigla)})` : ''}</option>`).join('')}`;
+/** Data e responsável da tarefa, sempre em texto (não só cor): "Atrasada" quando a data passou e ela não foi feita. */
+const tarefaMetaHTML = (it) => `<div class="tarefa-meta">
+  ${it.data ? `<span class="${it.atrasada ? 'tarefa-atrasada' : ''}">${it.atrasada ? 'Atrasada · ' : ''}<span class="num">${br(it.data)}</span></span>` : '<span>Sem data</span>'}
+  <span aria-hidden="true">·</span><span>${it.responsavel_nome ? esc(it.responsavel_nome) : 'Sem responsável'}</span></div>`;
+const checklistItemHTML = (it, editavel) => `<div class="item previsto tarefa" data-checklist-id="${it.id}">
+  <input type="checkbox" aria-label="${it.concluido ? 'Reabrir' : 'Concluir'} tarefa: ${esc(it.texto)}" data-marcar-check="${it.id}" ${it.concluido ? 'checked' : ''} ${editavel ? '' : 'disabled'}>
+  <div class="tarefa-corpo">
+    ${editavel ? `<button type="button" class="checklist-texto" data-editar-check="${it.id}" title="Editar tarefa" style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</button>` : `<span style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</span>`}
+    ${tarefaMetaHTML(it)}
+  </div>
+  ${editavel ? `<button type="button" class="btn btn-fantasma btn-mini" data-excluir-check="${it.id}" aria-label="Excluir tarefa: ${esc(it.texto)}">Excluir</button>` : ''}
 </div>`;
-/** Badges do topo e bloco do checklist: extraídos para poder atualizar só essas partes do diálogo
- *  (marcar/adicionar/excluir item não fecha e reabre a tela toda). */
+/** Formulário de uma tarefa (nova ou em edição): texto, data de execução e responsável. */
+const tarefaCamposHTML = (responsaveis, it = {}) => `
+  <input data-texto-check maxlength="200" aria-label="Tarefa" placeholder="Nova tarefa" value="${esc(it.texto || '')}">
+  <input type="date" data-data-check aria-label="Data de execução" value="${esc(it.data || '')}">
+  <select data-resp-check aria-label="Responsável">${opcoesResponsavel(responsaveis, it.responsavel_id)}</select>`;
+/** Badges do topo e bloco das tarefas: extraídos para poder atualizar só essas partes do diálogo
+ *  (marcar/adicionar/excluir tarefa não fecha e reabre a tela toda). */
 const badgesHTML = (a) => `${pilulaStatus(a)}
   ${a.demandada_diretor ? '<span class="pilula diretor">Demandada pelo Diretor</span>' : ''}
   ${a.apresentada ? `<span class="pilula" title="Título e detalhamento não mudam mais; o prazo pode ser alterado">Apresentada em reunião (${br(a.apresentada_em)})</span>` : ''}
   <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade]}</span>
   <span class="suave pequeno">${esc(a.secao_sigla)} · ${esc(a.secao_nome)}</span>`;
-const checklistBlocoHTML = (a) => `
-  <h3 style="margin:12px 0 6px">Checklist${a.checklist.length ? ` <span class="suave pequeno">(${a.checklist_feitos}/${a.checklist_total})</span>` : ''}</h3>
-  ${a.checklist.length ? `<div class="itens">${a.checklist.map((it) => checklistItemHTML(it, gereChecklist(a))).join('')}</div>` : '<p class="suave pequeno">Nenhum item no checklist.</p>'}
-  ${gereChecklist(a) ? `<div class="add-linha"><input id="novo-check" placeholder="Novo item do checklist" maxlength="200" aria-label="Novo item do checklist"><button type="button" class="btn btn-sec" data-add-check>Adicionar</button></div>` : ''}`;
+const checklistBlocoHTML = (a, responsaveis) => `
+  <h3 style="margin:12px 0 6px">Tarefas${a.checklist.length ? ` <span class="suave pequeno">(${a.checklist_feitos}/${a.checklist_total} feitas)</span>` : ''}</h3>
+  ${a.checklist.length ? `<div class="itens">${a.checklist.map((it) => checklistItemHTML(it, gereChecklist(a))).join('')}</div>` : '<p class="suave pequeno">Nenhuma tarefa.</p>'}
+  ${gereChecklist(a) ? `<div class="tarefa-form" data-nova-tarefa>${tarefaCamposHTML(responsaveis)}<button type="button" class="btn btn-sec" data-add-check>Adicionar tarefa</button></div>` : ''}`;
 
 // ---------- Ao direcionar: ações já planejadas para o mesmo prazo ----------
 /** Antes de direcionar, mostra as ações em aberto com o mesmo prazo nas seções alvo (e nas subseções delas),
@@ -176,7 +191,8 @@ const cienciaHTML = (a) => {
 };
 
 export async function abrirAcao(id, aoMudar) {
-  const a = await get(`/acoes/${id}`);
+  // Quem gere as tarefas recebe junto a lista de responsáveis possíveis; para os demais (ou ação só de leitura), vazia.
+  const [a, responsaveis] = await Promise.all([get(`/acoes/${id}`), podeGerirTarefas() ? get(`/acoes/${id}/responsaveis`).catch(() => []) : []]);
   // Ação recebida e ainda não aberta por quem a abre agora: registra a ciência e atualiza a lista e os selos.
   if (a.nova) post(`/acoes/${a.id}/vista`).then(() => { selosMudaram(); aoMudar?.(); }).catch(() => { /* fica nova; registra na próxima abertura */ });
   const diretor = ehDiretor();
@@ -220,7 +236,7 @@ export async function abrirAcao(id, aoMudar) {
       `<li class="num">${br(t.data)} · ${fmtMin(t.minutos)} · ${esc(t.usuario_nome || '')}</li>`).join('')}</ul>` : ''}
     ${a.pedidos.length ? `<h3 style="margin:10px 0 6px">Pedidos de novo prazo</h3>${a.pedidos.map((p) => `<div class="comentario pequeno">
       ${br(p.prazo_atual)} → <b>${br(p.novo_prazo)}</b> · ${esc(p.status)} <br><span class="suave">${esc(p.justificativa)}</span></div>`).join('')}` : ''}
-    <div id="acao-checklist-bloco">${checklistBlocoHTML(a)}</div>
+    <div id="acao-checklist-bloco">${checklistBlocoHTML(a, responsaveis)}</div>
     <h3 style="margin:12px 0 6px">Impedimentos</h3>
     ${a.impedimentos.length ? a.impedimentos.map((i) => impedimentoHTML(i, !leitura)).join('') : '<p class="suave pequeno">Nenhum impedimento registrado.</p>'}
     ${aceitaImpedimento(a) && !leitura ? '<button type="button" class="btn btn-sec btn-mini" data-novo-imp>Registrar impedimento</button>' : ''}
@@ -261,50 +277,57 @@ export async function abrirAcao(id, aoMudar) {
     aoAbrir: (dlg) => {
       // Depois de registrar ou resolver, reabre o detalhe já com o histórico novo.
       const recarregar = async () => { dlg.close(); aoMudar?.(); await abrirAcao(a.id, aoMudar); };
-      // Atualiza só o topo (contador embutido no selo de status) e o bloco do checklist: marcar, adicionar
-      // ou excluir um item não fecha e reabre a tela toda (o resto do diálogo — comentários, impedimentos,
-      // rolagem — continua exatamente onde estava).
+      // Atualiza só o topo (contador embutido no selo de status) e o bloco das tarefas: marcar, adicionar,
+      // editar ou excluir uma tarefa não fecha e reabre a tela toda (o resto do diálogo — comentários,
+      // impedimentos, rolagem — continua exatamente onde estava). A lista volta à ordem por data.
       const atualizarChecklist = () => {
+        a.checklist.sort(porDataDaTarefa);
         dlg.querySelector('#acao-badges').innerHTML = badgesHTML(a);
-        dlg.querySelector('#acao-checklist-bloco').innerHTML = checklistBlocoHTML(a);
+        dlg.querySelector('#acao-checklist-bloco').innerHTML = checklistBlocoHTML(a, responsaveis);
         aoMudar?.(); // atualiza a lista de quem chamou (ex.: selo na tela de Minhas ações) em segundo plano
       };
+      /** Lê texto, data e responsável de um formulário de tarefa (a linha em edição ou o de nova tarefa). */
+      const camposDe = (caixa) => ({
+        texto: caixa.querySelector('[data-texto-check]').value.trim(),
+        data: caixa.querySelector('[data-data-check]').value || null,
+        responsavel_id: Number(caixa.querySelector('[data-resp-check]').value) || null,
+      });
       on(dlg, 'click', '[data-editar-check]', (el) => {
         if (a.encerrada) return;
         const id = Number(el.dataset.editarCheck);
         const item = a.checklist.find((x) => x.id === id);
         const linha = el.closest('[data-checklist-id]');
-        linha.innerHTML = `<input data-texto-check maxlength="200" aria-label="Texto do item" value="${esc(item.texto)}"><button type="button" class="btn btn-sec btn-mini" data-salvar-check="${id}">Salvar</button><button type="button" class="btn btn-fantasma btn-mini" data-cancelar-check>Cancelar</button>`;
-        linha.querySelector('input').focus();
+        linha.classList.add('tarefa-editando');
+        linha.innerHTML = `<div class="tarefa-form">${tarefaCamposHTML(responsaveis, item)}
+          <button type="button" class="btn btn-sec btn-mini" data-salvar-check="${id}">Salvar</button><button type="button" class="btn btn-fantasma btn-mini" data-cancelar-check>Cancelar</button></div>`;
+        linha.querySelector('[data-texto-check]').focus();
       });
       on(dlg, 'click', '[data-cancelar-check]', atualizarChecklist);
-      on(dlg, 'keydown', '[data-texto-check]', (el, ev) => {
-        if (ev.key === 'Enter') { ev.preventDefault(); el.parentElement.querySelector('[data-salvar-check]').click(); }
-        if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); atualizarChecklist(); }
+      // Enter salva (ou adiciona, no formulário de nova tarefa) sem enviar o diálogo; Esc cancela a edição.
+      on(dlg, 'keydown', '[data-texto-check], [data-data-check]', (el, ev) => {
+        const nova = el.closest('[data-nova-tarefa]');
+        if (ev.key === 'Enter') { ev.preventDefault(); (nova ? dlg.querySelector('[data-add-check]') : el.closest('.tarefa-form').querySelector('[data-salvar-check]')).click(); }
+        if (ev.key === 'Escape' && !nova) { ev.preventDefault(); ev.stopPropagation(); atualizarChecklist(); }
       });
       on(dlg, 'click', '[data-salvar-check]', async (el) => {
         const id = Number(el.dataset.salvarCheck);
         el.disabled = true;
         try {
-          const item = await patch(`/acoes/${a.id}/checklist/${id}`, { texto: el.parentElement.querySelector('input').value });
+          const item = await patch(`/acoes/${a.id}/checklist/${id}`, camposDe(el.closest('.tarefa-form')));
           a.checklist[a.checklist.findIndex((x) => x.id === id)] = item;
           atualizarChecklist();
         } catch (e) { el.disabled = false; toast(e.message, 'erro'); }
       });
-      on(dlg, 'click', '[data-add-check]', async () => {
-        const campo = dlg.querySelector('#novo-check');
-        const t = campo.value.trim();
-        if (!t) return;
+      on(dlg, 'click', '[data-add-check]', async (el) => {
+        const campos = camposDe(el.closest('[data-nova-tarefa]'));
+        if (!campos.texto) { dlg.querySelector('[data-nova-tarefa] [data-texto-check]').focus(); return; }
         try {
-          const item = await post(`/acoes/${a.id}/checklist`, { texto: t });
+          const item = await post(`/acoes/${a.id}/checklist`, campos);
           a.checklist.push(item);
           a.checklist_total++;
           atualizarChecklist();
-          dlg.querySelector('#novo-check')?.focus();
+          dlg.querySelector('[data-nova-tarefa] [data-texto-check]')?.focus();
         } catch (e) { toast(e.message, 'erro'); }
-      });
-      on(dlg, 'keydown', '#novo-check', (el, ev) => {
-        if (ev.key === 'Enter') { ev.preventDefault(); dlg.querySelector('[data-add-check]').click(); }
       });
       on(dlg, 'change', '[data-marcar-check]', async (el) => {
         const id = Number(el.dataset.marcarCheck);
