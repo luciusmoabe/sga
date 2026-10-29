@@ -1027,21 +1027,74 @@ body.carregando::before {
 .impedimento { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 6px 0; display: grid; gap: 4px; background: var(--card); }
 .impedimento.resolvido { opacity: .78; background: var(--pale); }
 
-/* Agenda do chefe: dias empilhados (padrão de agenda de telefone), não uma grade de semana. */
-.agenda-dias { display: grid; gap: 12px; }
-.agenda-dia { padding: 14px 16px; }
-.agenda-dia.agenda-hoje { border-color: var(--ink-2); box-shadow: 0 0 0 1px var(--ink-2) inset; }
-.agenda-dia-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
-.agenda-atrasadas h2 { margin: 0 0 10px; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
-.agenda-lista { display: grid; gap: 6px; }
-.agenda-item {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
-  width: 100%; text-align: left; background: var(--pale); border: 1px solid var(--line); border-radius: 8px;
-  padding: 8px 10px; font: inherit; color: inherit; cursor: pointer;
+/* ---------- Agenda: calendário do mês + painel do dia ---------- */
+.cal { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.cal-mes { padding: 20px; position: sticky; top: 16px; }
+.cal-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
+.cal-topo h2 { margin: 0; font-family: var(--head); font-size: 1.15rem; text-align: center; flex: 1; }
+.cal-nav { width: 44px; height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--ink-2); font-size: 2.2rem; font-weight: 700; line-height: 1; cursor: pointer; padding-bottom: 4px; }
+.cal-nav:hover, .cal-nav:focus-visible { background: var(--green-bg); }
+.cal-semana, .cal-grade { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.cal-semana { margin-bottom: 6px; text-align: center; font-size: .78rem; color: var(--muted); }
+.cal-dia { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; aspect-ratio: 1 / 1; min-height: 44px;
+  border: 0; border-radius: 12px; background: var(--pale); color: var(--ink); font: inherit; cursor: pointer; padding: 0; }
+.cal-dia:hover { background: var(--green-bg); }
+.cal-numero { font-size: .98rem; line-height: 1; }
+.cal-marcas { display: flex; gap: 4px; align-items: center; height: 7px; }
+.cal-marca { display: inline-block; width: 7px; height: 7px; background: var(--ink-2); }
+.cal-marca-acao { border-radius: 50%; }
+.cal-marca-tarefa { border-radius: 1.5px; background: transparent; border: 2px solid var(--ink-2); width: 8px; height: 8px; }
+.cal-marca-acao.cal-m-atraso { background: var(--vermelho); }
+.cal-marca-tarefa.cal-m-atraso { border-color: var(--vermelho); }
+.cal-marca-atraso { border-radius: 50%; background: var(--vermelho); }
+.cal-hoje { box-shadow: inset 0 0 0 2px var(--green); font-weight: 700; }
+.cal-dia.cal-escolhido { background: var(--green); color: #fff; }
+.cal-escolhido .cal-marca-acao { background: #fff; }
+.cal-escolhido .cal-marca-tarefa { border-color: #fff; }
+.cal-escolhido .cal-marca-acao.cal-m-atraso { background: #ffd0dc; }
+.cal-escolhido .cal-marca-tarefa.cal-m-atraso { border-color: #ffd0dc; }
+.cal-dia:focus-visible, .cal-item:focus-visible, .cal-aviso:focus-visible { outline: 3px solid var(--ink-2); outline-offset: 2px; }
+.cal-rodape { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.cal-legenda { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); flex-wrap: wrap; }
+.cal-legenda .cal-marca { margin-left: 6px; }
+.cal-legenda .cal-marca:first-child { margin-left: 0; }
+.cal-filtros-wrap { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.cal-filtros-wrap > summary { display: none; }
+.cal-filtros { display: grid; gap: 12px; }
+.cal-filtros .segmento { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; }
+.cal-filtros .segmento button { flex: 1; min-height: 40px; }
+.cal-minhas { margin: 0; }
+.cal-painel { padding: 22px 24px; min-height: 320px; }
+.cal-painel-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.cal-painel-topo h2 { margin: 0; font-family: var(--head); font-size: 1.3rem; }
+.cal-aviso { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; margin-bottom: 14px; padding: 8px 14px; border: 1px solid var(--vermelho); border-radius: 10px;
+  background: var(--vermelho-bg); color: var(--vermelho); font: inherit; font-weight: 650; cursor: pointer; text-align: left; }
+.cal-aviso-ver { margin-left: auto; text-decoration: underline; }
+.cal-secao { margin: 18px 0 8px; font-size: .95rem; }
+.cal-lista { display: grid; gap: 8px; }
+.cal-item { display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 44px; text-align: left; padding: 10px 12px; font: inherit; color: inherit;
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+button.cal-item:hover { border-color: var(--line-str); background: var(--pale); }
+.cal-item-fechado { cursor: default; background: var(--pale); }
+.cal-tipo { flex: none; min-width: 52px; padding: 2px 8px; border-radius: 999px; font-size: .72rem; font-weight: 700; text-align: center; letter-spacing: .02em; }
+.cal-tipo-acao { background: var(--green-bg); color: var(--green); }
+.cal-tipo-tarefa { background: transparent; color: var(--ink-2); border: 1.5px solid var(--ink-2); padding: 0 7px; }
+.cal-item-corpo { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.cal-item-titulo { font-weight: 600; overflow-wrap: anywhere; }
+.cal-item-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: .82rem; color: var(--muted); }
+.cal-vermelho { color: var(--vermelho); font-weight: 650; }
+.cal-feita { text-decoration: line-through; color: var(--muted); }
+.cal-tarefa { display: flex; align-items: flex-start; gap: 10px; }
+.cal-tarefa > input[type=checkbox] { flex: none; width: 22px; height: 22px; margin-top: 12px; }
+.cal-tarefa .cal-item { flex: 1; min-width: 0; }
+.cal-concluida .cal-item { background: var(--pale); }
+.cal-semdata { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
+.cal-semdata > summary { cursor: pointer; font-weight: 650; min-height: 44px; display: flex; align-items: center; gap: 6px; }
+.cal-semdata .cal-lista { margin-top: 8px; }
+@media (max-width: 1000px) {
+  .cal { grid-template-columns: 1fr; }
+  .cal-mes { position: static; }
 }
-.agenda-item:hover { border-color: var(--line-str); }
-.agenda-item-titulo { font-weight: 600; }
-.agenda-item-selos { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* ---------- Celular (até 760 px): aplicativo instalável ----------
    No computador nada muda: a barra de topo, as abas e a folha "Mais" só aparecem aqui. Princípios: navegação ao
@@ -1156,11 +1209,16 @@ body.carregando::before {
   }
   .barra-acao .btn { width: 100%; min-height: 50px; justify-content: center; font-size: 1rem; }
 
-  /* Agenda: dia sem ação vira uma linha fina */
-  .agenda-dia-vazio { padding: 10px 14px; }
-  .agenda-dia-vazio > p { display: none; }
-  .agenda-dia-vazio .agenda-dia-cabeca { margin: 0; }
-  .agenda-dia-vazio .agenda-dia-cabeca::after { content: 'Nada previsto'; color: var(--muted); font-size: .8rem; }
+  /* Agenda: calendário compacto no alto, painel do dia embaixo */
+  .cal { gap: 12px; }
+  .cal-mes { padding: 14px; }
+  .cal-semana, .cal-grade { gap: 4px; }
+  .cal-dia { aspect-ratio: auto; min-height: 48px; border-radius: 10px; }
+  .cal-painel { padding: 16px; min-height: 0; }
+  .cal-filtros-wrap > summary { display: flex; align-items: center; justify-content: space-between; min-height: 44px; font-weight: 650; cursor: pointer; }
+  .cal-filtros-wrap[open] > summary { margin-bottom: 8px; }
+  .cal-filtros-wrap { margin-top: 8px; padding-top: 4px; }
+  .cal-item { padding: 12px; }
 }
 @keyframes folha-sobe { from { transform: translateY(28px); opacity: .6; } }
 @media (prefers-reduced-motion: reduce) { dialog { animation: none; } }

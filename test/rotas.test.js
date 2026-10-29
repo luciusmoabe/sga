@@ -26,6 +26,7 @@ const ESPERADAS = [
   'GET /api/pauta',
   'GET /api/pedidos-prazo',
   'GET /api/reunioes',
+  'GET /api/tarefas',
   'GET /api/reunioes/:id',
   'GET /api/reunioes/:id/cartoes',
   'GET /api/secoes',

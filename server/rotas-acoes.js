@@ -658,6 +658,21 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   // Apoio ao chefe: não mudam o status nem afetam a regra de concluir (que continua exigindo tempo registrado).
   // Cada tarefa pode ter data de execução e responsável (da seção da ação); a lista sai ordenada por data, as sem
   // data no fim. Diferente de impedimentos, podem ser editadas e excluídas livremente.
+  // Todas as tarefas para a agenda: as das ações que a pessoa enxerga (mesmo escopo de GET /api/acoes) e, além
+  // delas, as atribuídas a ela em ações de outra seção (`acao_visivel: false`: só informação, sem abrir a ação).
+  // Ações arquivadas ou encerradas ficam de fora. Só leitura; marcar como feita continua em PATCH .../checklist/:iid.
+  app.get('/api/tarefas', h(async (req) => {
+    const v = await visiveisAcoes(req.user);
+    const lista = await q(`select c.id, c.acao_id, c.texto, c.data, c.concluido, c.responsavel_id, u.nome as responsavel_nome,
+        a.titulo as acao_titulo, a.status as acao_status, a.secao_id, s.sigla as secao_sigla, s.nome as secao_nome,
+        (${v.where}) as acao_visivel
+      from acao_checklist c join acoes a on a.id = c.acao_id join secoes s on s.id = a.secao_id
+        left join usuarios u on u.id = c.responsavel_id
+      where a.arquivada = 0 and a.encerrada = 0 and ((${v.where}) or c.responsavel_id = ?)
+      order by c.acao_id, c.ordem, c.id`, ...v.params, ...v.params, req.user.id);
+    return lista.map((t) => ({ ...checklistOut(t), acao_visivel: !!t.acao_visivel })).sort(porDataDaTarefa);
+  }));
+
   app.get('/api/acoes/:id/responsaveis', h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     await chefeGere(req.user, a);
