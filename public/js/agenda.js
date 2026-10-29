@@ -27,6 +27,7 @@ export async function agenda(raiz) {
   }
   const hoje = est.boot.hoje;
   const podeSerResponsavel = ['chefe', 'administrador'].includes(est.user.perfil);
+  const minhaSecao = est.user.secao_id; // quem não tem seção (ex.: Administrador sem vínculo) não tem o filtro "Só meu"
   const podeMarcar = (t) => podeSerResponsavel && t.acao_visivel; // quem gere a ação marca a tarefa como feita
 
   // Estado da tela (só em memória: ao sair e voltar, a agenda abre de novo em hoje).
@@ -47,7 +48,8 @@ export async function agenda(raiz) {
   await carregar();
 
   // ---------- Filtros e índice por data ----------
-  const doFiltroAcao = (a) => mostrar !== 'tarefas' && (!secao || String(a.secao_id) === secao);
+  // "Só meu": as tarefas atribuídas a mim (em qualquer ação) e as ações da minha seção (a própria seção, não as de fora).
+  const doFiltroAcao = (a) => mostrar !== 'tarefas' && (!soMinhas || a.secao_id === minhaSecao) && (!secao || String(a.secao_id) === secao);
   const doFiltroTarefa = (t) => mostrar !== 'acoes' && (!soMinhas || t.responsavel_id === est.user.id) && (!secao || String(t.secao_id) === secao);
   const visiveis = () => ({ as: acoes.filter(doFiltroAcao), ts: tarefas.filter(doFiltroTarefa) });
   const indice = () => {
@@ -85,7 +87,7 @@ export async function agenda(raiz) {
             <button type="button" data-mostrar="acoes" aria-pressed="false">Ações</button>
             <button type="button" data-mostrar="tarefas" aria-pressed="false">Tarefas</button>
           </div>
-          ${podeSerResponsavel ? '<label class="escolha cal-minhas"><input type="checkbox" id="cal-minhas"> Só tarefas atribuídas a mim</label>' : ''}
+          ${podeSerResponsavel && minhaSecao ? '<label class="escolha cal-minhas"><input type="checkbox" id="cal-minhas"> Só o que é meu: tarefas atribuídas a mim e ações da minha seção</label>' : ''}
           ${gestao && secoes.length > 1 ? `<div class="campo"><label for="cal-secao">Seção</label><select id="cal-secao"><option value="">Todas</option>${secoes.map(([id, nome]) => `<option value="${id}">${esc(nome)}</option>`).join('')}</select></div>` : ''}
           </div>
         </details>
