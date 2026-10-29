@@ -27,7 +27,8 @@ export async function agenda(raiz) {
   }
   const hoje = est.boot.hoje;
   const podeSerResponsavel = ['chefe', 'administrador'].includes(est.user.perfil);
-  const minhaSecao = est.user.secao_id; // quem não tem seção (ex.: Administrador sem vínculo) não tem o filtro "Só meu"
+  const minhaSecao = est.user.secao_id; // quem não tem seção (ex.: Administrador sem vínculo) não tem o filtro "Só o que é meu"
+  const temEscopo = podeSerResponsavel && !!minhaSecao;
   const podeMarcar = (t) => podeSerResponsavel && t.acao_visivel; // quem gere a ação marca a tarefa como feita
 
   // Estado da tela (só em memória: ao sair e voltar, a agenda abre de novo em hoje).
@@ -80,15 +81,26 @@ export async function agenda(raiz) {
           <span class="cal-legenda"><i class="cal-marca cal-marca-acao"></i> Ação <i class="cal-marca cal-marca-tarefa"></i> Tarefa <i class="cal-marca cal-marca-atraso"></i> Atrasada</span>
         </div>
         <details class="cal-filtros-wrap" open>
-          <summary>Filtros</summary>
+          <summary>Filtros <span class="cal-filtros-ativos" id="cal-ativos"></span></summary>
           <div class="cal-filtros">
-          <div class="segmento" role="group" aria-label="O que mostrar">
-            <button type="button" data-mostrar="tudo" aria-pressed="true">Tudo</button>
-            <button type="button" data-mostrar="acoes" aria-pressed="false">Ações</button>
-            <button type="button" data-mostrar="tarefas" aria-pressed="false">Tarefas</button>
-          </div>
-          ${podeSerResponsavel && minhaSecao ? '<label class="escolha cal-minhas"><input type="checkbox" id="cal-minhas"> Só o que é meu: tarefas atribuídas a mim e ações da minha seção</label>' : ''}
-          ${gestao && secoes.length > 1 ? `<div class="campo"><label for="cal-secao">Seção</label><select id="cal-secao"><option value="">Todas</option>${secoes.map(([id, nome]) => `<option value="${id}">${esc(nome)}</option>`).join('')}</select></div>` : ''}
+            <div class="cal-filtro" role="group" aria-labelledby="cal-f-mostrar">
+              <span class="cal-filtro-rotulo" id="cal-f-mostrar">Mostrar</span>
+              <div class="segmento">
+                <button type="button" data-mostrar="tudo" aria-pressed="true">Tudo</button>
+                <button type="button" data-mostrar="acoes" aria-pressed="false">Ações</button>
+                <button type="button" data-mostrar="tarefas" aria-pressed="false">Tarefas</button>
+              </div>
+            </div>
+            ${temEscopo ? `<div class="cal-filtro" role="group" aria-labelledby="cal-f-escopo">
+              <span class="cal-filtro-rotulo" id="cal-f-escopo">De quem</span>
+              <div class="segmento">
+                <button type="button" data-escopo="tudo" aria-pressed="true">Tudo</button>
+                <button type="button" data-escopo="meu" aria-pressed="false">Só o que é meu</button>
+              </div>
+              <p class="cal-filtro-dica" id="cal-dica-escopo"></p>
+            </div>` : ''}
+            ${gestao && secoes.length > 1 ? `<div class="cal-filtro"><label class="cal-filtro-rotulo" for="cal-secao">Seção</label>
+              <select id="cal-secao"><option value="">Todas as seções</option>${secoes.map(([id, nome]) => `<option value="${id}">${esc(nome)}</option>`).join('')}</select></div>` : ''}
           </div>
         </details>
       </section>
@@ -184,7 +196,17 @@ export async function agenda(raiz) {
     $('#cal-painel', raiz).innerHTML = `<div class="cal-painel-topo">${cabeca}</div>${aviso}${corpo}${rodape}`;
   };
 
-  const desenhar = () => { desenharCalendario(); desenharPainel(); };
+  // Os filtros se explicam e se resumem: a dica diz o que "De quem" está valendo, o botão recolhido (celular) conta
+  // quantos filtros estão ativos e, com "Só o que é meu" ligado, o filtro de seção sai de cena (o meu já é uma seção).
+  const atualizarFiltros = () => {
+    const dica = $('#cal-dica-escopo', raiz);
+    if (dica) dica.textContent = soMinhas ? 'Suas tarefas e as ações da sua seção.' : (gestao ? 'Tudo o que você enxerga, de todas as seções.' : 'Tudo da sua seção e subseções.');
+    const sel = $('#cal-secao', raiz);
+    if (sel) { sel.disabled = soMinhas; if (soMinhas) { sel.value = ''; secao = ''; } sel.title = soMinhas ? 'Com "Só o que é meu", a seção já é a sua.' : ''; }
+    const ativos = (mostrar !== 'tudo' ? 1 : 0) + (soMinhas ? 1 : 0) + (secao ? 1 : 0);
+    $('#cal-ativos', raiz).textContent = ativos ? `· ${plural(ativos, 'ativo', 'ativos')}` : '';
+  };
+  const desenhar = () => { atualizarFiltros(); desenharCalendario(); desenharPainel(); };
   const irPara = (iso, { foco = false } = {}) => {
     dia = iso;
     mes = iso.slice(0, 7);
@@ -219,7 +241,11 @@ export async function agenda(raiz) {
     for (const b of raiz.querySelectorAll('[data-mostrar]')) b.setAttribute('aria-pressed', String(b === el));
     desenhar();
   });
-  $('#cal-minhas', raiz)?.addEventListener('change', (ev) => { soMinhas = ev.target.checked; desenhar(); });
+  on(raiz, 'click', '[data-escopo]', (el) => {
+    soMinhas = el.dataset.escopo === 'meu';
+    for (const b of raiz.querySelectorAll('[data-escopo]')) b.setAttribute('aria-pressed', String(b === el));
+    desenhar();
+  });
   $('#cal-secao', raiz)?.addEventListener('change', (ev) => { secao = ev.target.value; desenhar(); });
 
   // Recarrega só os dados (ação ou tarefa mudou): o mês, o dia e os filtros escolhidos continuam como estavam.

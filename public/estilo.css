@@ -1060,10 +1060,14 @@ body.carregando::before {
 .cal-legenda .cal-marca:first-child { margin-left: 0; }
 .cal-filtros-wrap { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .cal-filtros-wrap > summary { display: none; }
-.cal-filtros { display: grid; gap: 12px; }
-.cal-filtros .segmento { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; }
-.cal-filtros .segmento button { flex: 1; min-height: 40px; }
-.cal-minhas { margin: 0; }
+.cal-filtros { display: grid; gap: 16px; }
+.cal-filtro { display: grid; gap: 6px; }
+.cal-filtro-rotulo { font-size: .8rem; font-weight: 650; color: var(--muted); margin: 0; }
+.cal-filtro-dica { margin: 0; font-size: .8rem; color: var(--muted); }
+.cal-filtros .segmento { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; width: 100%; }
+.cal-filtros .segmento button { min-height: 40px; }
+.cal-filtros select { width: 100%; }
+.cal-filtros-ativos { font-weight: 500; color: var(--green); }
 .cal-painel { padding: 22px 24px; min-height: 320px; }
 .cal-painel-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .cal-painel-topo h2 { margin: 0; font-family: var(--head); font-size: 1.3rem; }
