@@ -14,7 +14,7 @@ O Agilis nasceu para um órgão só. Este documento registra o plano para atende
 ### A escolha da empresa na entrada
 - A tela de entrada traz um seletor de empresa (com busca), lembra a última escolha e aceita `?empresa=slug` no endereço. Depois de escolher, mostra o nome e o logo da empresa.
 - `GET /api/auth/empresas` é público e lista só as empresas ativas com `listada_no_login = 1`. A empresa que não quiser aparecer na lista deixa o campo em 0 e entra pelo link com o `slug`.
-- O login envia `{ empresa, e-mail, senha }`. **O servidor confere** que a conta pertence àquela empresa; a escolha nunca é confiada ao cliente. Erro genérico ("E-mail, senha ou empresa incorretos"), para não revelar a que empresa um e-mail pertence. O limite de tentativas passa a considerar a empresa.
+- O login envia `{ empresa, e-mail, senha }`. **O servidor confere** que a conta pertence àquela empresa; a escolha nunca é confiada ao cliente. Erro genérico ("E-mail, senha ou órgão incorretos"), para não revelar a que empresa um e-mail pertence. O limite de tentativas passa a considerar a empresa.
 - Como cada e-mail pertence a uma só empresa, a escolha também é uma segunda conferência e já prepara o futuro "uma pessoa em várias empresas".
 
 ## Fases (cada uma publicada separada)

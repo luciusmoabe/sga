@@ -143,7 +143,7 @@ async function carregarSessao() {
 // Tela para onde voltar depois de um novo login causado por sessão expirada.
 let retorno = null;
 
-/** Empresa escolhida na entrada: a do endereço (`?empresa=slug`), a lembrada do último acesso ou a única que existe. */
+/** Empresa escolhida na demonstração: a do endereço (`?empresa=slug`), a lembrada do último acesso ou a única que existe. */
 const empresaDoEndereco = () => (new URLSearchParams(location.search).get('empresa') || '').trim().toLowerCase().slice(0, 60);
 function escolherEmpresa({ empresas, escolhida }) {
   const pedida = empresaDoEndereco();
@@ -153,20 +153,22 @@ function escolherEmpresa({ empresas, escolhida }) {
   return empresas.length === 1 ? empresas[0].slug : '';
 }
 
-/** Campo "Empresa" da entrada. Com uma só empresa (ou vinda do endereço, fora da lista) mostra o nome; com várias, um seletor
- *  com busca (a partir de 7 empresas). O servidor sempre confere se a conta pertence à empresa escolhida. */
+/** Rótulo do órgão nas listas: a sigla (ou o nome, se ainda não tiver sigla). */
+const rotuloOrgao = (e) => e.sigla || e.nome;
+
+/** Campo "Órgão" da entrada: caixa de seleção que começa vazia, com a sigla de cada órgão (busca a partir de 7). Quem chega por
+ *  um endereço com `?empresa=slug` já vem com o órgão escolhido; se ele não consta da lista, aparece só o nome dele. O servidor
+ *  sempre confere se a conta pertence ao órgão escolhido. */
 function campoEmpresa({ empresas: lista, escolhida }, atual) {
-  const empresas = [...lista].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  const doEndereco = escolhida && !empresas.some((e) => e.slug === escolhida.slug);
-  if (doEndereco || empresas.length === 1) {
-    const e = doEndereco ? escolhida : empresas[0];
-    return `<div class="campo empresa-fixa"><span class="rotulo-campo">Empresa</span><b>${esc(e.nome)}</b><input type="hidden" name="empresa" value="${esc(e.slug)}">${empresas.length > 1 || doEndereco ? '<a href="/">Não é a sua? Escolher outra</a>' : ''}</div>`;
+  const empresas = [...lista].sort((a, b) => rotuloOrgao(a).localeCompare(rotuloOrgao(b), 'pt-BR'));
+  if (escolhida && !empresas.some((e) => e.slug === escolhida.slug)) {
+    return `<div class="campo empresa-fixa"><span class="rotulo-campo">Órgão</span><b>${esc(rotuloOrgao(escolhida))}</b><input type="hidden" name="empresa" value="${esc(escolhida.slug)}"><a href="/">Não é o seu? Escolher outro</a></div>`;
   }
-  return `<div class="campo"><label for="login-empresa">Empresa</label>
-    ${empresas.length > 6 ? '<input id="login-empresa-busca" type="search" placeholder="Buscar empresa" aria-label="Buscar empresa" autocomplete="off">' : ''}
+  return `<div class="campo"><label for="login-empresa">Órgão</label>
+    ${empresas.length > 6 ? '<input id="login-empresa-busca" type="search" placeholder="Buscar órgão" aria-label="Buscar órgão" autocomplete="off">' : ''}
     <select id="login-empresa" name="empresa" required>
-      <option value="">Escolha a sua empresa</option>
-      ${empresas.map((e) => `<option value="${esc(e.slug)}"${e.slug === atual ? ' selected' : ''}>${esc(e.nome)}</option>`).join('')}
+      <option value=""></option>
+      ${empresas.map((e) => `<option value="${esc(e.slug)}" title="${esc(e.nome)}"${e.slug === atual ? ' selected' : ''}>${esc(rotuloOrgao(e))}</option>`).join('')}
     </select></div>`;
 }
 
@@ -177,7 +179,9 @@ async function telaEntrada({ expirada = false } = {}) {
     let lista;
     try { lista = await empresasDaEntrada(empresaDoEndereco()); }
     catch { lista = { empresas: [], escolhida: null }; }
-    const atual = escolherEmpresa(lista);
+    // A caixa começa vazia; só um endereço com ?empresa=slug a deixa preenchida.
+    const pedida = empresaDoEndereco();
+    const atual = lista.empresas.some((e) => e.slug === pedida) ? pedida : '';
     app.innerHTML = `<div class="entrada"><div class="entrada-caixa estreita">
       <img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo">
       <p class="entrada-tag">Acompanhamento semanal</p>
@@ -219,7 +223,7 @@ async function telaEntrada({ expirada = false } = {}) {
       erro.textContent = '';
       try {
         const empresa = form.elements.empresa?.value || '';
-        if (!empresa && lista.empresas.length !== 1) throw new Error('Escolha a sua empresa.');
+        if (!empresa) throw new Error('Escolha o órgão.');
         await entrarSenha(form.elements.email.value, form.elements.senha.value, empresa);
         if (empresa) lembrarEmpresa(empresa);
         form.elements.senha.value = '';

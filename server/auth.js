@@ -52,7 +52,7 @@ export function criarProvedorSupabase(config, { fetchImpl = fetch } = {}) {
     } catch { throw falha(503, 'Login indisponível no momento. Tente novamente mais tarde.'); }
     if (resposta.status === 429) throw falha(429, 'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.');
     if (resposta.status >= 500) throw falha(503, 'Login indisponível no momento. Tente novamente mais tarde.');
-    if (!resposta.ok) throw falha(401, 'E-mail, senha ou empresa incorretos.');
+    if (!resposta.ok) throw falha(401, 'E-mail, senha ou órgão incorretos.');
     try { return await resposta.json(); } catch { throw falha(503, 'Login indisponível no momento.'); }
   };
   return {
@@ -63,7 +63,7 @@ export function criarProvedorSupabase(config, { fetchImpl = fetch } = {}) {
       }
       const user = await consultar('/user', { headers: { authorization: `Bearer ${dados.access_token}` } });
       if (!GUID.test(user.id) || user.is_anonymous || !user.email_confirmed_at || user.id !== dados.user?.id) {
-        throw falha(401, 'E-mail, senha ou empresa incorretos.');
+        throw falha(401, 'E-mail, senha ou órgão incorretos.');
       }
       // Tokens e senha são descartados. Só emitimos nossa própria sessão opaca.
       return { subject: user.id.toLowerCase(), expires: segundos() + Math.min(dados.expires_in, 3600) };
@@ -147,7 +147,7 @@ export function instalarAuth(app, db, config, provedor, contas) {
     const { email, senha, empresa } = req.body || {};
     if (typeof email !== 'string' || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
       || typeof senha !== 'string' || !senha.length || senha.length > 1024) throw falha(400, 'Informe e-mail e senha válidos.');
-    if (empresa !== undefined && (typeof empresa !== 'string' || empresa.length > 60)) throw falha(400, 'Escolha a empresa.');
+    if (empresa !== undefined && (typeof empresa !== 'string' || empresa.length > 60)) throw falha(400, 'Escolha o órgão.');
     const normalizado = email.trim().toLowerCase();
     const slug = (empresa || '').trim().toLowerCase();
     // A empresa vem do cliente só como escolha na tela: quem confere que a conta pertence a ela é este servidor. Sem escolha,
@@ -156,7 +156,7 @@ export function instalarAuth(app, db, config, provedor, contas) {
     if (slug) alvo = await q1('select id from empresas where slug = ? and ativa = 1', slug);
     else {
       const ativas = await db.prepare('select id from empresas where ativa = 1').all();
-      if (ativas.length > 1) throw falha(400, 'Escolha a sua empresa.');
+      if (ativas.length > 1) throw falha(400, 'Escolha o órgão.');
       alvo = ativas[0];
     }
     await limitarTentativas(db, normalizado, req.ip || 'desconhecido', slug);
@@ -164,11 +164,11 @@ export function instalarAuth(app, db, config, provedor, contas) {
     try { identidade = await supabase.autenticar(normalizado, senha); }
     catch (err) {
       if (err.status === 429) throw falha(429, 'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.');
-      if (err.status === 401) throw falha(401, 'E-mail, senha ou empresa incorretos.');
+      if (err.status === 401) throw falha(401, 'E-mail, senha ou órgão incorretos.');
       throw falha(503, 'Login indisponível no momento. Tente novamente mais tarde.');
     }
     if (!GUID.test(identidade.subject) || !Number.isFinite(identidade.expires) || identidade.expires <= segundos()) {
-      throw falha(401, 'E-mail, senha ou empresa incorretos.');
+      throw falha(401, 'E-mail, senha ou órgão incorretos.');
     }
     const token = aleatorio(), csrf = aleatorio();
     const expira = Math.min(identidade.expires, segundos() + SESSAO_OCIOSA);
@@ -176,7 +176,7 @@ export function instalarAuth(app, db, config, provedor, contas) {
       // Empresa desconhecida ou conta de outra empresa: a mesma resposta, para não revelar a que empresa o e-mail pertence.
       const vinculo = alvo ? await q1(`select c.id from auth_contas c join usuarios u on u.id = c.usuario_id join empresas e on e.id = u.empresa_id
         where c.projeto = ? and c.subject = ? and u.ativo = 1 and u.empresa_id = ? and e.ativa = 1`, config.supabaseUrl, identidade.subject, alvo.id) : null;
-      if (!vinculo) throw falha(401, 'E-mail, senha ou empresa incorretos.');
+      if (!vinculo) throw falha(401, 'E-mail, senha ou órgão incorretos.');
       await run('delete from auth_sessoes_senha where expira_em <= ?', segundos());
       const anterior = cookie(req, sessaoCookie);
       if (anterior) await run('delete from auth_sessoes_senha where id = ?', hash(anterior));

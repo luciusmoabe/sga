@@ -15,7 +15,7 @@ const CONTAS = {
   'ana@a.invalid': { subject: '33333333-3333-4333-8333-333333333333' },
   'bia@zb.invalid': { subject: '44444444-4444-4444-8444-444444444444' },
 };
-const MSG = 'E-mail, senha ou empresa incorretos.';
+const MSG = 'E-mail, senha ou órgão incorretos.';
 
 async function ambiente(t) {
   const db = openDb(':memory:');
@@ -53,7 +53,7 @@ test('com mais de uma empresa ativa é preciso escolher; a conta só entra na em
   const { call, login } = await ambiente(t);
   const faltando = await login({ email: 'ana@a.invalid', senha: SENHA });
   assert.equal(faltando.status, 400);
-  assert.match((await faltando.json()).erro, /empresa/i);
+  assert.match((await faltando.json()).erro, /órgão/i);
 
   const certa = await login({ empresa: 'dpog', email: 'ana@a.invalid', senha: SENHA });
   assert.equal(certa.status, 200);
