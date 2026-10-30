@@ -149,7 +149,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     const [a, b] = await cluster.banco();
     await assert.rejects(verificarMigracoes(a), /Migrações pendentes/);
     const resultados = await Promise.all([aplicarMigracoes(a), aplicarMigracoes(b)]);
-    assert.deepEqual(resultados.flat().sort((x, y) => x - y), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    assert.deepEqual(resultados.flat().sort((x, y) => x - y), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
     await verificarMigracoes(b);
     assert.deepEqual(await aplicarMigracoes(a), []);
   });
@@ -164,7 +164,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     assert.equal((await db.prepare("select to_regclass('uq_pedido_pendente_acao') as nome").get()).nome, null);
     assert.equal((await db.prepare("select count(*) n from information_schema.columns where table_name = 'acoes' and column_name = 'arquivada'").get()).n, 0);
     await db.exec('drop table uq_reuniao_em_andamento');
-    assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
   });
 
   await t.test('versão 11 recria a restrição de tipo e aceita a Diretoria Adjunta sem perder seções', async () => {
@@ -362,5 +362,21 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
 
     const externa = (await call('POST', '/acoes', { titulo: 'Responder ofício', prazo: '2026-12-31', demandante_externo: 'Tribunal de Contas' }, ANA)).data;
     assert.ok((await call('GET', '/acoes?origem=externa', undefined, DIRETOR)).data.some(a => a.id === externa.id));
+  });
+  await t.test('multi-empresa: Empresa 1 com todos os dados, padrão 1 para a versão anterior e próxima empresa com o número 2', async t => {
+    const [db] = await cluster.banco(t);
+    await seed(db);
+    assert.equal((await db.prepare('select count(*) n from empresas').get()).n, 1);
+    for (const tabela of ['secoes', 'usuarios', 'diretrizes', 'acoes', 'combinados', 'avisos', 'reunioes', 'atualizacoes', 'config']) {
+      assert.equal((await db.prepare(`select count(*) n from ${tabela} where empresa_id <> 1`).get()).n, 0, tabela);
+    }
+    // O código anterior insere sem empresa e faz upsert por chave: os dois continuam valendo.
+    await db.prepare("insert into config (chave, valor) values ('reuniao_hora', '10:00') on conflict(chave) do update set valor = excluded.valor").run();
+    await db.prepare("insert into config (chave, valor) values ('reuniao_hora', '09:00') on conflict(chave) do update set valor = excluded.valor").run();
+    assert.equal((await db.prepare("select valor, empresa_id from config where chave = 'reuniao_hora'").get()).empresa_id, 1);
+    await db.prepare("insert into empresas (nome, slug, criada_em) values ('Empresa B', 'empresa-b', '2026-02-01')").run();
+    assert.equal(Number((await db.prepare("select id from empresas where slug = 'empresa-b'").get()).id), 2);
+    await assert.rejects(db.prepare("insert into secoes (nome, sigla, tipo, ordem, criada_em, empresa_id) values ('X', 'X', 'centro', 1, '2026-02-01', 99)").run(), { code: '23503' });
+    await assert.rejects(db.prepare("insert into empresas (nome, slug, criada_em) values ('Repetida', 'empresa-b', '2026-02-01')").run(), { code: '23505' });
   });
 });

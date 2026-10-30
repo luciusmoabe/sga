@@ -28,12 +28,15 @@ set constraints all deferred;
 `;
   sql += `lock table ${TABELAS_APP.join(', ')} in access exclusive mode;
 `;
+  // `empresas` fica de fora da conferência: a migração do destino já cria a Empresa 1. Como as demais tabelas estão vazias
+  // (conferido abaixo), nada a referencia ainda, e a linha é trocada pelas empresas da origem, que trazem o mesmo número.
   sql += `do $carga$ declare tabela text; ocupado boolean; begin
-    foreach tabela in array array[${TABELAS_APP.map(t => `'${t}'`).join(', ')}] loop
+    foreach tabela in array array[${TABELAS_APP.filter(t => t !== 'empresas').map(t => `'${t}'`).join(', ')}] loop
       execute format('select exists(select 1 from %I)', tabela) into ocupado;
       if ocupado then raise exception 'Carga exige destino vazio: %', tabela; end if;
     end loop;
   end $carga$;
+delete from empresas;
 `;
   for (const tabela of TABELAS_APP) {
     let rows = db.prepare(`select * from ${tabela}`).all();

@@ -4,6 +4,7 @@ import { alinharIntegridade } from './migration-integridade.js';
 import { aplicarPerfilAdministrador } from './migration-perfil-admin.js';
 import { aplicarPerfilConsulta } from './migration-perfil-consulta.js';
 import { aplicarMembros } from './migration-membros.js';
+import { aplicarEmpresas } from './migration-empresas.js';
 import { aplicarDiretoriaAdjunta } from './migration-diretoria-adjunta.js';
 import { aplicarPrazosEReuniao } from './migration-prazos-reuniao.js';
 import { aplicarMovimentacao } from './migration-movimentacao.js';
@@ -298,6 +299,13 @@ const MIGRACOES = [
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },
+  {
+    id: 22, nome: 'empresas',
+    async aplicar(db) {
+      await aplicarEmpresas(db);
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
 ];
 
 async function registros(db) {
@@ -318,7 +326,8 @@ function conferir(aplicadas, { toleraNovas = false } = {}) {
   return novas;
 }
 
-export async function aplicarMigracoes(db) {
+/** `ate` limita a execução às versões até esse número: serve aos testes, para montar o banco como ele era antes de uma migração. */
+export async function aplicarMigracoes(db, { ate = Infinity } = {}) {
   return db.transaction(async () => {
     // Chave exclusiva da evolução do esquema; liberada no commit/rollback.
     if (db.isPg) await db.prepare('select pg_advisory_xact_lock(7319, 1)').get();
@@ -327,7 +336,7 @@ export async function aplicarMigracoes(db) {
     conferir(aplicadas);
     const novas = [];
     for (const migracao of MIGRACOES) {
-      if (aplicadas.some(m => m.id === migracao.id)) continue;
+      if (aplicadas.some(m => m.id === migracao.id) || migracao.id > ate) continue;
       await migracao.aplicar(db);
       await db.prepare('insert into schema_migrations (id, nome, aplicada_em) values (?, ?, ?)')
         .run(migracao.id, migracao.nome, new Date().toISOString());

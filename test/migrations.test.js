@@ -20,9 +20,9 @@ test('migrações: aplicação concorrente é idempotente e registra a versão',
   t.after(() => db.close());
   await assert.rejects(verificarMigracoes(db), /Migrações pendentes/);
   const resultados = await Promise.all([aplicarMigracoes(db), aplicarMigracoes(db)]);
-  assert.deepEqual(resultados, [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], []]);
+  assert.deepEqual(resultados, [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22], []]);
   await verificarMigracoes(db);
-  assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 21);
+  assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 22);
 });
 
 test('migrações: esquema antigo recebe arquivamento sem perder ações existentes', async (t) => {
@@ -31,7 +31,7 @@ test('migrações: esquema antigo recebe arquivamento sem perder ações existen
   await seed(db);
   const antes = await db.prepare('select id, titulo from acoes order by id').all();
   await db.exec('drop index uq_pedido_pendente_acao; drop index uq_reuniao_em_andamento; drop table schema_migrations; alter table acoes drop column arquivada');
-  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
   assert.deepEqual(await db.prepare('select id, titulo from acoes order by id').all(), antes);
   assert.ok((await db.prepare('select arquivada from acoes').all()).every(a => a.arquivada === 0));
 });
@@ -40,7 +40,7 @@ test('migrações: pedidos duplicados interrompem a atualização sem excluir re
   const db = openDb(':memory:');
   t.after(() => db.close());
   await seed(db);
-  await db.exec('drop index uq_pedido_pendente_acao; drop index uq_reuniao_em_andamento; delete from schema_migrations where id >= 2');
+  await db.exec('drop index uq_pedido_pendente_acao; drop index uq_reuniao_em_andamento; drop index uq_reuniao_em_andamento_empresa; delete from schema_migrations where id >= 2');
   await db.exec(`insert into pedidos_prazo (acao_id, prazo_atual, novo_prazo, justificativa, criado_em)
     select acao_id, prazo_atual, novo_prazo, justificativa, criado_em from pedidos_prazo limit 1`);
   const antes = await db.prepare('select * from pedidos_prazo order by id').all();
@@ -53,7 +53,7 @@ test('migrações: reuniões duplicadas interrompem atualização sem escolher u
   const db = openDb(':memory:');
   t.after(() => db.close());
   await seed(db);
-  await db.exec('drop index uq_pedido_pendente_acao; drop index uq_reuniao_em_andamento; delete from schema_migrations where id >= 2');
+  await db.exec('drop index uq_pedido_pendente_acao; drop index uq_reuniao_em_andamento; drop index uq_reuniao_em_andamento_empresa; delete from schema_migrations where id >= 2');
   for (let i = 0; i < 2; i++) {
     await db.prepare('insert into reunioes (data, semana, iniciada_em) values (?, ?, ?)').run('2026-09-22', '2026-09-22', '2026-09-22T10:00:00Z');
   }
@@ -72,7 +72,7 @@ test('migrações: erro de DDL desfaz índices e registro da migração', async 
   await assert.rejects(aplicarMigracoes(db), /Falha de DDL/);
   assert.deepEqual(await db.prepare("select name from sqlite_master where name in ('schema_migrations','uq_pedido_pendente_acao')").all(), []);
   db.exec = executar;
-  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+  assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
 });
 
 test('migrações: índices impedem duplicidades até em escritas diretas', async (t) => {

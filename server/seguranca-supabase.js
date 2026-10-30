@@ -1,4 +1,4 @@
-export const TABELAS_APP = ['secoes', 'usuarios', 'diretrizes', 'acoes', 'acao_comentarios', 'tempo',
+export const TABELAS_APP = ['empresas', 'secoes', 'usuarios', 'diretrizes', 'acoes', 'acao_comentarios', 'tempo',
   'pedidos_prazo', 'atualizacoes', 'combinados', 'config', 'reunioes', 'decisoes', 'impedimentos', 'acao_checklist', 'acao_prazos', 'avisos',
   'reuniao_informacoes', 'reuniao_participantes', 'ata_sugestoes', 'ata_revisoes', 'acao_vistas'];
 
