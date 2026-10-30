@@ -5,6 +5,7 @@
 // pesar o carregamento do app para quem não usa o recurso.
 import { blocosDaAta, segmentosInline, segmentosDaLinhaAta, ehTituloAta } from './ata-marcacao.js';
 import { br } from './ui.js';
+import { brasaoEsquerdo } from './ata-cabecalho.js';
 
 const MARGEM_ESQ = 25; // mm (2,5 cm), pedido do Diretor
 const MARGEM = 20;     // mm (2 cm nas demais margens)
@@ -83,9 +84,12 @@ export async function baixarPdfAta(ataTexto, { dataReuniao, cabecalho = {} } = {
   doc.setFontSize(TAM_TEXTO);
   doc.setTextColor(20, 30, 24);
   let y = MARGEM;
-  const pmba = new Image(); pmba.src = '/imagens/brasao_PMBA.png';
-  await pmba.decode();
-  const brasoes = [{ imagem: pmba, x: MARGEM_ESQ }];
+  const brasoes = [];
+  const esq = brasaoEsquerdo(cabecalho);
+  if (esq) {
+    const esquerda = new Image(); esquerda.src = esq; await esquerda.decode();
+    brasoes.push({ imagem: esquerda, x: MARGEM_ESQ });
+  }
   if (cabecalho.ata_brasao) {
     const direita = new Image(); direita.src = cabecalho.ata_brasao; await direita.decode();
     brasoes.push({ imagem: direita, x: larguraPagina - MARGEM - 22 });

@@ -95,6 +95,7 @@ button { cursor: pointer; border: 0; }
 /* Marca */
 .marca { padding: 4px 8px 14px; }
 .marca-logo { display: block; width: 100%; max-width: 140px; height: auto; }
+.marca-empresa { margin-top: 6px; font-size: 0.78rem; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; overflow-wrap: anywhere; }
 
 /* Menu de navegação */
 .menu { display: flex; flex-direction: column; gap: 2px; flex: 1; }

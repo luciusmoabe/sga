@@ -25,7 +25,7 @@ O Agilis nasceu para um órgão só. Este documento registra o plano para atende
 | 1 | **Banco, só acrescenta** (migração 22): tabela `empresas`, Empresa 1, `empresa_id` nas tabelas raiz, chaves únicas por empresa ao lado das globais | publicada |
 | 2 | **Servidor:** todo SQL filtra pela empresa de quem está logado; login com escolha da empresa; **testes de isolamento** (duas empresas, toda rota provada contra acesso cruzado) | pronta e testada localmente (sem migração nova); ainda não publicada |
 | 3 | Plataforma: `npm run empresa:criar` (empresa + primeiro Diretor) e depois a tela "Empresas" | comando pronto e testado (SQLite e PostgreSQL); a tela depende de um perfil novo (migração 23) e ainda não existe |
-| 4 | Identidade: seletor na entrada, nome e logo na barra, ata por empresa | a fazer |
+| 4 | Identidade: seletor na entrada, nome na barra e no título da aba, ata por empresa (cabeçalho e os dois brasões) | pronta (sem migração); logo da empresa na barra fica para depois |
 | 5 | **Contração:** remove o padrão 1 de `empresa_id`, troca as chaves únicas globais pelas por empresa. **Só depois disso pode existir a 2ª empresa.** | a fazer |
 
 ## Regras para não perder dados nem derrubar o sistema

@@ -234,6 +234,7 @@ async function telaEntrada({ expirada = false } = {}) {
   const demo = await fetch(`/api/usuarios-demo${pedidaDemo ? `?empresa=${encodeURIComponent(pedidaDemo)}` : ''}`).then((r) => r.json());
   const us = demo.usuarios;
   const slugDemo = demo.empresa || pedidaDemo;
+  const nomeDemo = lista.empresas.find((e) => e.slug === slugDemo)?.nome || lista.escolhida?.nome || '';
   const trocaEmpresa = lista.empresas.length > 1
     ? `<div class="grupo-titulo">Empresa</div><div class="perfis">${[...lista.empresas].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map((e) => `<button class="perfil${e.slug === slugDemo ? ' ativo' : ''}" data-empresa="${esc(e.slug)}" aria-pressed="${e.slug === slugDemo}"><b>${esc(e.nome)}</b></button>`).join('')}</div>` : '';
   const card = (u) => `<button class="perfil" data-u="${u.id}"><b>${esc(u.nome)}</b><span>${['chefe', 'membro'].includes(u.perfil) ? esc(u.secao_nome || 'Sem seção atribuída') : PERFIL[u.perfil]}</span></button>`;
@@ -241,7 +242,7 @@ async function telaEntrada({ expirada = false } = {}) {
     <img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo">
     <p class="entrada-tag">Protótipo de demonstração</p>
     <h1>Bem-vindo ao Agilis</h1>
-    <p class="lema">Acompanhamento semanal dos Centros do Departamento de Planejamento, Orçamento e Gestão.</p>
+    <p class="lema">Acompanhamento semanal dos Centros${nomeDemo ? ` — ${esc(nomeDemo)}` : ''}.</p>
     <div class="info">Protótipo com dados fictícios. Escolha um perfil para explorar; não há senha nesta versão.</div>
     ${trocaEmpresa}
     ${us.length ? '' : '<div class="info">Esta empresa ainda não tem usuários cadastrados.</div>'}
@@ -300,7 +301,7 @@ function casca() {
   const menu = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['equipe', 'Minha equipe'], ['atualizacao', 'Minha atualização']] : []), ...base]
     .filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
   app.innerHTML = `<div class="app"><aside class="lateral">
-    <div class="marca"><img src="/imagens/logo-agilis.png" alt="Agilis" class="marca-logo"></div>
+    <div class="marca"><img src="/imagens/logo-agilis.png" alt="Agilis" class="marca-logo">${est.boot?.empresa ? `<div class="marca-empresa" title="${esc(est.boot.empresa.nome)}">${esc(est.boot.empresa.sigla || est.boot.empresa.nome)}</div>` : ''}</div>
     <nav class="menu" aria-label="Principal">${menu.map((m) => m[0].startsWith('#')
       ? `<div class="grupo"><b>${esc(m[0].slice(1))}</b></div>`
       : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}"><span class="menu-rotulo">${ICONES[m[0]] || ''}${esc(m[1])}</span>${selo(m[0])}</a>`).join('')}</nav>
@@ -309,6 +310,7 @@ function casca() {
     <main class="principal"><div id="trilho"></div><div id="conteudo"></div></main>
     ${cascaMovel(u, menu)}</div>`;
   atualizarBotaoInstalar();
+  document.title = est.boot?.empresa ? `Agilis · ${est.boot.empresa.sigla || est.boot.empresa.nome}` : 'Agilis';
   $('#alterar-senha')?.addEventListener('click', () => abrirTrocaSenha());
   $('#sair').addEventListener('click', async () => {
     try { await sair(); est.user = null; est.boot = null; location.hash = '#/'; render(); }

@@ -281,3 +281,20 @@ test('a rede de segurança acusa consulta a tabela raiz sem empresa', async () =
   assert.equal(semFiltroDeEmpresa("select id /*global*/ from usuarios where lower(email) = ?"), null);
   assert.equal(semFiltroDeEmpresa("select 'from acoes' x from tempo"), null, 'texto entre aspas não conta');
 });
+
+test('o brasão da esquerda da ata é opcional e próprio de cada empresa', async (t) => {
+  const { call, ok, A, B } = await duasEmpresas(t);
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  const antesA = (await call(A.diretor, 'GET', '/config')).data;
+  assert.equal(antesA.ata_brasao_esq, undefined, 'a Empresa 1 ainda não escolheu (o cliente usa o brasão antigo)');
+  await ok(await call(B.diretor, 'PUT', '/config/ata', { ata_cabecalho: 'ZB', ata_brasao: '', ata_brasao_esq: PNG }));
+  assert.equal((await call(B.diretor, 'GET', '/config')).data.ata_brasao_esq, PNG);
+  assert.equal((await call(A.diretor, 'GET', '/config')).data.ata_brasao_esq, undefined);
+  // Sem informar o brasão da esquerda, o salvo não muda; vazio remove.
+  await ok(await call(B.diretor, 'PUT', '/config/ata', { ata_cabecalho: 'ZB 2', ata_brasao: '' }));
+  assert.equal((await call(B.diretor, 'GET', '/config')).data.ata_brasao_esq, PNG);
+  await ok(await call(B.diretor, 'PUT', '/config/ata', { ata_cabecalho: 'ZB 2', ata_brasao: '', ata_brasao_esq: '' }));
+  assert.equal((await call(B.diretor, 'GET', '/config')).data.ata_brasao_esq, '');
+  assert.equal((await call(B.diretor, 'PUT', '/config/ata', { ata_cabecalho: 'x', ata_brasao: '', ata_brasao_esq: 'data:image/png;base64,AAAA' })).status, 400);
+  assert.equal((await call(B.diretor, 'PUT', '/config/ata', { ata_cabecalho: 'x', ata_brasao: '', ata_brasao_esq: 5 })).status, 400);
+});
