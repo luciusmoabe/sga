@@ -26,14 +26,14 @@ O Agilis nasceu para um órgão só. Este documento registra o plano para atende
 | 2 | **Servidor:** todo SQL filtra pela empresa de quem está logado; login com escolha da empresa; **testes de isolamento** (duas empresas, toda rota provada contra acesso cruzado) | pronta e testada localmente (sem migração nova); ainda não publicada |
 | 3 | Plataforma: `npm run empresa:criar` (empresa + primeiro Diretor) e depois a tela "Empresas" | comando pronto e testado (SQLite e PostgreSQL); a tela depende de um perfil novo (migração 23) e ainda não existe |
 | 4 | Identidade: seletor na entrada, nome na barra e no título da aba, ata por empresa (cabeçalho e os dois brasões) | pronta (sem migração); logo da empresa na barra fica para depois |
-| 5 | **Contração:** remove o padrão 1 de `empresa_id`, troca as chaves únicas globais pelas por empresa. **Só depois disso pode existir a 2ª empresa.** | a fazer |
+| 5 | **Contração:** troca as chaves únicas globais pelas por empresa (migração 23). **Só depois disso pode existir a 2ª empresa.** Remover o padrão 1 de `empresa_id` fica como endurecimento à parte (exige que todo INSERT, o seed e os testes informem a empresa) | migração 23 pronta e testada (SQLite e PostgreSQL); falta aplicar em produção |
 
 ## Regras para não perder dados nem derrubar o sistema
 
 - Migração e publicação seguem **expandir → publicar → contrair**: cada passo é aditivo e a versão anterior do código continua funcionando com o banco já migrado (o servidor tolera banco mais novo, ver `MIGRACOES.md`).
 - **Tabelas raiz** (levam `empresa_id`): `secoes`, `usuarios`, `diretrizes`, `acoes`, `combinados`, `avisos`, `reunioes`, `atualizacoes`, `config`. As **filhas** (comentários, tempo, tarefas, prazos, pedidos, impedimentos, ciência, decisões, informações, presenças, sugestões e versões da ata) herdam a empresa da ação ou da reunião.
-- O padrão `empresa_id = 1` mantém a versão anterior funcionando, porque ela insere sem informar a empresa. Ele sai na Fase 5.
-- Duas chaves únicas globais continuam até a Fase 5, porque o código atual depende delas: `config.chave` (`on conflict(chave)`) e "uma reunião em andamento" (`uq_reuniao_em_andamento`). Ao lado delas já existem `uq_config_empresa_chave` e `uq_reuniao_em_andamento_empresa`.
+- O padrão `empresa_id = 1` ainda existe: o código atual sempre informa a empresa, mas ele protege inserts avulsos (seed, testes). Removê-lo é um endurecimento à parte, depois da Fase 5. Até lá, a defesa contra um insert esquecido é a rede de segurança (`SGC_LINT_EMPRESA`) e os testes de isolamento.
+- As duas chaves únicas globais (`config.chave` e "uma reunião em andamento", `uq_reuniao_em_andamento`) caem na migração 23, que só deve ser aplicada depois de publicado o código da fase 2 (ele já usa `on conflict(empresa_id, chave)` e a unicidade por empresa).
 - Antes de cada migração em produção: backup, ensaio numa cópia (um ramo do Supabase) e `node scripts/contagem-registros.js --postgres > antes.txt`; depois, `depois.txt` e `diff`. Nunca na terça da reunião.
 ## Como a Fase 2 isola as empresas
 

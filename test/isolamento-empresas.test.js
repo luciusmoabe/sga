@@ -12,20 +12,9 @@ import { createApp } from '../server/app.js';
 
 const PRAZO = '2026-12-31';
 
-/** O esquema da fase 5 (contração), que ainda não existe: sem a chave única global de config e de reunião em andamento,
- *  para poder existir a 2ª empresa. */
-async function contrair(db) {
-  await db.exec('drop index if exists uq_reuniao_em_andamento');
-  await db.exec(`create table config_nova (empresa_id integer not null references empresas(id), chave text not null, valor text not null, primary key (empresa_id, chave));
-    insert into config_nova (empresa_id, chave, valor) select empresa_id, chave, valor from config;
-    drop table config;
-    alter table config_nova rename to config;`);
-}
-
 async function duasEmpresas(t) {
   const db = openDb(':memory:');
   await seed(db);
-  await contrair(db);
   const A = { id: 1, diretor: 1, apoio: 2, chefeCpe: 3, chefeCof: 4, admin: 10, cpe: 1, cof: 2 };
   // Empresa B, com nomes que nenhum dado da A tem.
   await db.prepare("insert into empresas (nome, sigla, slug, criada_em) values ('Empresa ZB', 'ZB', 'zb', '2026-09-01')").run();

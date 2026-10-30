@@ -5,6 +5,7 @@ import { aplicarPerfilAdministrador } from './migration-perfil-admin.js';
 import { aplicarPerfilConsulta } from './migration-perfil-consulta.js';
 import { aplicarMembros } from './migration-membros.js';
 import { aplicarEmpresas } from './migration-empresas.js';
+import { aplicarContracao } from './migration-contracao.js';
 import { aplicarDiretoriaAdjunta } from './migration-diretoria-adjunta.js';
 import { aplicarPrazosEReuniao } from './migration-prazos-reuniao.js';
 import { aplicarMovimentacao } from './migration-movimentacao.js';
@@ -304,6 +305,12 @@ const MIGRACOES = [
     async aplicar(db) {
       await aplicarEmpresas(db);
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
+  {
+    id: 23, nome: 'contracao_multiempresa',
+    async aplicar(db) {
+      await aplicarContracao(db);
     },
   },
 ];

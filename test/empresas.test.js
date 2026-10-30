@@ -44,7 +44,7 @@ test('migração 22 mantém todos os dados do órgão atual, sem alterar nenhum,
   const antes = await fotografia(db);
   assert.ok(Object.values(antes).filter((l) => l.length).length >= 12, 'o cenário tem dados em várias tabelas');
 
-  assert.deepEqual(await aplicarMigracoes(db), [22]);
+  assert.deepEqual(await aplicarMigracoes(db), [22, 23]);
 
   const depois = await fotografia(db);
   assert.deepEqual(Object.keys(depois), Object.keys(antes), 'nenhuma tabela some');
@@ -67,26 +67,42 @@ test('migração 22 mantém todos os dados do órgão atual, sem alterar nenhum,
   assert.deepEqual(await db.prepare('pragma foreign_key_check').all(), []);
 });
 
-test('a versão anterior do código continua funcionando: o que ela insere sem informar a empresa entra na Empresa 1', async (t) => {
+test('o que se insere sem informar a empresa entra na Empresa 1 (o padrão só sai num endurecimento futuro)', async (t) => {
   const db = await bancoAntes(t);
   await aplicarMigracoes(db);
   const id = (await db.prepare("insert into secoes (nome, sigla, tipo, ordem, criada_em) values ('Nova', 'NV', 'centro', 9, '2026-02-01T00:00:00')").run()).lastInsertRowid;
   assert.equal((await db.prepare('select empresa_id from secoes where id = ?').get(id)).empresa_id, 1);
-  await db.prepare("insert into config (chave, valor) values ('reuniao_hora', '10:00') on conflict(chave) do update set valor = excluded.valor").run();
-  await db.prepare("insert into config (chave, valor) values ('reuniao_hora', '09:00') on conflict(chave) do update set valor = excluded.valor").run();
-  assert.equal((await db.prepare("select valor from config where chave = 'reuniao_hora'").get()).valor, '09:00', 'o upsert por chave segue valendo');
+  await db.prepare("insert into config (chave, valor, empresa_id) values ('reuniao_hora', '10:00', 1) on conflict(empresa_id, chave) do update set valor = excluded.valor").run();
+  await db.prepare("insert into config (chave, valor, empresa_id) values ('reuniao_hora', '09:00', 1) on conflict(empresa_id, chave) do update set valor = excluded.valor").run();
+  assert.equal((await db.prepare("select valor from config where chave = 'reuniao_hora'").get()).valor, '09:00', 'o upsert por empresa e chave vale');
   await assert.rejects(db.prepare("insert into secoes (nome, sigla, tipo, ordem, criada_em, empresa_id) values ('X', 'X', 'centro', 1, '2026-02-01T00:00:00', null)").run(), /NOT NULL/);
   await assert.rejects(db.prepare("insert into secoes (nome, sigla, tipo, ordem, criada_em, empresa_id) values ('X', 'X', 'centro', 1, '2026-02-01T00:00:00', 99)").run(), /FOREIGN KEY/, 'a empresa precisa existir');
 });
 
-test('chaves únicas por empresa existem ao lado das globais (as globais caem só na contração)', async (t) => {
+test('depois da contração só valem as chaves únicas por empresa, e os dados da Empresa 1 seguem intactos', async (t) => {
   const db = await bancoAntes(t);
-  await aplicarMigracoes(db);
+  await aplicarMigracoes(db, { ate: 22 });
+  const indices22 = (await db.prepare("select name from sqlite_master where type = 'index'").all()).map((i) => i.name);
+  for (const nome of ['uq_config_empresa_chave', 'uq_reuniao_em_andamento_empresa', 'uq_reuniao_em_andamento']) assert.ok(indices22.includes(nome), `${nome} existe na versão 22`);
+  const antes = { config: await db.prepare('select * from config order by chave').all(), reunioes: await db.prepare('select * from reunioes').all() };
+
+  assert.deepEqual(await aplicarMigracoes(db), [23]);
   const indices = (await db.prepare("select name from sqlite_master where type = 'index'").all()).map((i) => i.name);
-  for (const nome of ['uq_config_empresa_chave', 'uq_reuniao_em_andamento_empresa', 'uq_reuniao_em_andamento', ...RAIZES.map((r) => `idx_${r}_empresa`)]) assert.ok(indices.includes(nome), nome);
+  assert.ok(!indices.includes('uq_reuniao_em_andamento'), 'a chave global de reunião em andamento caiu');
+  assert.ok(indices.includes('uq_reuniao_em_andamento_empresa') && RAIZES.filter((r) => r !== 'config').every((r) => indices.includes(`idx_${r}_empresa`)));
+  assert.deepEqual(await db.prepare('select * from config order by chave').all(), antes.config, 'config: mesmos dados');
+  assert.deepEqual(await db.prepare('select * from reunioes').all(), antes.reunioes);
+  assert.deepEqual((await db.prepare('pragma table_info(config)').all()).filter((c) => c.pk > 0).map((c) => c.name), ['empresa_id', 'chave']);
+  assert.deepEqual(await aplicarMigracoes(db), [], 'rodar de novo não muda nada');
+
+  // Por empresa: a mesma chave e uma reunião em andamento em cada uma.
+  await db.prepare("insert into empresas (nome, slug, criada_em) values ('B', 'b', '2026-02-01')").run();
+  await db.prepare("insert into config (chave, valor, empresa_id) values ('reuniao_dia', '4', 2)").run();
   await db.prepare("update reunioes set status = 'em_andamento'").run();
-  await assert.rejects(db.prepare("insert into reunioes (data, semana, iniciada_em, status) values ('2026-09-29', '2026-09-29', '2026-09-29T10:00:00Z', 'em_andamento')").run(), /UNIQUE/, 'uma reunião em andamento por empresa');
-  await assert.rejects(db.prepare("insert into config (chave, valor) values ('reuniao_dia', '3')").run(), /UNIQUE/);
+  await db.prepare("insert into reunioes (data, semana, iniciada_em, status, empresa_id) values ('2026-09-29', '2026-09-29', '2026-09-29T10:00:00Z', 'em_andamento', 2)").run();
+  // Dentro de cada empresa continua único.
+  await assert.rejects(db.prepare("insert into config (chave, valor, empresa_id) values ('reuniao_dia', '5', 2)").run(), /UNIQUE/);
+  await assert.rejects(db.prepare("insert into reunioes (data, semana, iniciada_em, status, empresa_id) values ('2026-10-06', '2026-10-06', '2026-10-06T10:00:00Z', 'em_andamento', 2)").run(), /UNIQUE/, 'uma reunião em andamento por empresa');
 });
 
 test('empresas: o slug é único e a próxima empresa nasce com o número 2', async (t) => {

@@ -285,7 +285,7 @@ test('migração 16 mantém ações legadas e cria registros com integridade ref
   const antes = await db.prepare('select id, titulo, criado_por from acoes order by id').all();
   await db.exec(`drop table ata_sugestoes; drop table ata_revisoes; drop table reuniao_informacoes; drop table reuniao_participantes;
     alter table acoes drop column demanda_diretor; delete from schema_migrations where id >= 16;`);
-  assert.deepEqual(await aplicarMigracoes(db), [16, 17, 18, 19, 20, 21, 22]);
+  assert.deepEqual(await aplicarMigracoes(db), [16, 17, 18, 19, 20, 21, 22, 23]);
   assert.deepEqual(await db.prepare('select id, titulo, criado_por from acoes order by id').all(), antes);
   assert.equal((await db.prepare('select sum(demanda_diretor) n from acoes').get()).n, 0);
   await assert.rejects(db.prepare("insert into reuniao_informacoes (reuniao_id, texto, criado_em) values (999999, 'Órfã', 'x')").run(), /FOREIGN KEY/);

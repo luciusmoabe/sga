@@ -15,10 +15,11 @@ async function banco(t, { contraido = true } = {}) {
   const db = openDb(':memory:');
   t.after(() => db.close());
   await seed(db);
-  if (contraido) {
-    await db.exec('drop index if exists uq_reuniao_em_andamento');
-    await db.exec(`create table config_nova (empresa_id integer not null references empresas(id), chave text not null, valor text not null, primary key (empresa_id, chave));
-      insert into config_nova select empresa_id, chave, valor from config; drop table config; alter table config_nova rename to config;`);
+  if (!contraido) {
+    // O esquema anterior à versão 23: chaves únicas globais de config e de reunião em andamento.
+    await db.exec(`create unique index uq_reuniao_em_andamento on reunioes(status) where status = 'em_andamento';
+      create table config_antiga (chave text primary key, valor text not null, empresa_id integer not null default 1 references empresas(id));
+      insert into config_antiga select chave, valor, empresa_id from config; drop table config; alter table config_antiga rename to config;`);
   }
   const criadas = [];
   const admin = { async criar(email, senha) { criadas.push([email, senha]); return SUBJ(criadas.length); }, async remover(id) { criadas.push(['remover', id]); } };
