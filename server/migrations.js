@@ -3,6 +3,7 @@
 import { alinharIntegridade } from './migration-integridade.js';
 import { aplicarPerfilAdministrador } from './migration-perfil-admin.js';
 import { aplicarPerfilConsulta } from './migration-perfil-consulta.js';
+import { aplicarMembros } from './migration-membros.js';
 import { aplicarDiretoriaAdjunta } from './migration-diretoria-adjunta.js';
 import { aplicarPrazosEReuniao } from './migration-prazos-reuniao.js';
 import { aplicarMovimentacao } from './migration-movimentacao.js';
@@ -287,6 +288,13 @@ const MIGRACOES = [
         : (await db.prepare('pragma table_info(acao_checklist)').all()).map(c => ({ nome: c.name }));
       if (!colunas.some(c => c.nome === 'data')) await db.exec('alter table acao_checklist add column data text');
       if (!colunas.some(c => c.nome === 'responsavel_id')) await db.exec('alter table acao_checklist add column responsavel_id integer references usuarios(id)');
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
+  {
+    id: 21, nome: 'membros_e_validacao_de_acoes',
+    async aplicar(db) {
+      await aplicarMembros(db);
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },

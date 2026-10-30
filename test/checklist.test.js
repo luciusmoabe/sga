@@ -116,6 +116,7 @@ test('ação encerrada não aceita mais mudanças no checklist; excluir a ação
   await call(c.id, 'PATCH', `/acoes/${id}`, { status: 'em_andamento' });
   await call(c.id, 'POST', `/acoes/${id}/tempo`, { minutos: 5 });
   await call(c.id, 'PATCH', `/acoes/${id}`, { status: 'concluida' });
+  await db.prepare('update acoes set demanda_diretor = 1 where id = ?').run(id); // só a demanda do Diretor pede o aceite dele
   assert.equal((await call(DIRETOR, 'POST', `/acoes/${id}/encerrar`, {})).status, 200);
   assert.equal((await call(c.id, 'POST', `/acoes/${id}/checklist`, { texto: 'Tarde demais' })).status, 409);
   assert.equal((await call(c.id, 'PATCH', `/acoes/${id}/checklist/${item.data.id}`, { concluido: false })).status, 409);

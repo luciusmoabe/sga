@@ -4,7 +4,7 @@ import { est } from './estado.js';
 import {
   $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, seloNova, STATUS, toast, vazio,
 } from './ui.js';
-import { abrirAcao, abrirEditarAcao, abrirNovoImpedimento, aceitaImpedimento } from './acao-comum.js';
+import { abrirAcao, abrirEditarAcao, abrirNovoImpedimento, aceitaImpedimento, devolverAcao, lerOrigem, ligarOrigem, origemCamposHTML, validarAcao } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
 import { dataNoFuso, diasEntre, instante } from './datas.js';
 import { relatoHTML } from './telas-diretor.js';
@@ -101,14 +101,33 @@ function quadroNovasHTML(abertas) {
   <div class="espaco"></div>`;
 }
 
+// ---------- Aguardando sua validação ----------
+/** Ações que o chefe atribuiu a membros da equipe e eles concluíram: ele valida ou devolve para ajuste. */
+function quadroValidarHTML(lista) {
+  if (!lista.length) return '';
+  return `<section class="cartao novas-quadro validar-quadro" aria-labelledby="validar-titulo">
+    <div class="linha entre"><h2 id="validar-titulo">Aguardando sua validação</h2><span class="pilula validacao">${plural(lista.length, 'ação', 'ações')}</span></div>
+    <p class="suave pequeno" style="margin:2px 0 10px">Ações que você atribuiu a membros da equipe e que eles concluíram. Valide, ou devolva para ajuste dizendo o que falta.</p>
+    <ul class="novas-lista">${lista.map((a) => `<li data-validar-item="${a.id}"><div class="novas-item novas-item-estatico">
+      <span class="novas-item-titulo">${esc(a.titulo)}</span>
+      <span class="pequeno suave">Concluída por ${esc(a.responsavel_nome || 'um membro da equipe')}${a.concluida_em ? ` em ${dataHora(a.concluida_em)}` : ''} · prazo <span class="num">${br(a.prazo)}</span></span>
+      <span class="atencao-botoes"><button type="button" class="btn btn-ok btn-mini" data-validar-q>Validar</button>
+        <button type="button" class="btn btn-fantasma btn-mini" data-devolver-q>Devolver para ajuste</button>
+        <button type="button" class="btn btn-fantasma btn-mini" data-abrir-q>Abrir</button></span></div></li>`).join('')}</ul>
+  </section>
+  <div class="espaco"></div>`;
+}
+
 // ---------- Início ----------
 export async function inicio(raiz, { refresh }) {
   if (!est.user.secao_id) return semSecao(raiz);
   const semana = est.boot.semana;
   // Só a seção do usuário (e as subordinadas): para o Administrador da Diretoria Adjunta, restringe à própria seção.
-  const [up, abertas, { aviso }] = await Promise.all([
+  const [up, abertas, { aviso }, concluidas] = await Promise.all([
     get(`/atualizacao?semana=${semana}&resumo=1`), get(`/acoes?situacao=abertas&secao=${est.user.secao_id}`), get('/avisos/atual'),
+    est.boot.acoes_a_validar ? get(`/acoes?situacao=concluidas&secao=${est.user.secao_id}`) : [],
   ]);
+  const aValidar = concluidas.filter((a) => a.aguardando_validacao === 'chefe');
   const atrasadas = abertas.filter((a) => a.atrasada).length;
   const vencendo = abertas.filter((a) => !a.atrasada && a.prazo <= addDias(est.boot.hoje, 2)).length;
   const pedidos = abertas.filter((a) => a.pedido_pendente).length;
@@ -116,6 +135,7 @@ export async function inicio(raiz, { refresh }) {
     <div class="cabeca"><div><h1>${esc(est.boot.secao?.nome || 'Minha seção')}</h1><div class="sub">Olá, ${esc(est.user.nome)}. Aqui está o que precisa da sua atenção.</div></div></div>
     ${aviso ? `<div class="aviso-banner"><p class="aviso-banner-tag">Aviso</p><p class="aviso-banner-texto">${esc(aviso.texto)}</p></div>` : ''}
     ${quadroNovasHTML(abertas)}
+    ${quadroValidarHTML(aValidar)}
     <div class="inicio-grade"><div class="inicio-principal">
     <div class="cartao"><div class="linha entre"><div>
       <h2>Sua atualização desta semana</h2>
@@ -139,6 +159,10 @@ export async function inicio(raiz, { refresh }) {
   ligarAtencao(raiz, abertas, refresh);
   const abrir = (el) => abrirAcao(el.dataset.acao, refresh).catch((e) => toast(e.message, 'erro'));
   on(raiz, 'click', 'tr[data-acao], .novas-item[data-acao]', abrir);
+  const itemDe = (el) => aValidar.find((a) => a.id === Number(el.closest('[data-validar-item]').dataset.validarItem));
+  on(raiz, 'click', '[data-validar-q]', async (el) => { try { await validarAcao(itemDe(el).id); await refresh(); } catch (e) { toast(e.message, 'erro'); } });
+  on(raiz, 'click', '[data-devolver-q]', (el) => devolverAcao(itemDe(el), refresh));
+  on(raiz, 'click', '[data-abrir-q]', (el) => abrirAcao(itemDe(el).id, refresh).catch((e) => toast(e.message, 'erro')));
   on(raiz, 'keydown', 'tr[data-acao]', (el, ev) => { if (ev.key === 'Enter') abrir(el); });
 }
 
@@ -153,12 +177,17 @@ export async function minhasAcoes(raiz) {
     get(`/acoes?situacao=concluidas${daSecao}`),
     get(`/acoes?situacao=arquivadas${daSecao}`),
   ]);
-  let [abertas, concl, arq] = await buscar();
-
+  let [abertasT, conclT, arqT] = await buscar();
+  // O membro vê, na aba "Minhas", as ações atribuídas a ele ou criadas por ele (as que ele executa) e, em outra aba, as
+  // da seção só para leitura. O chefe vê todas as da seção.
+  const ehMembro = est.user.perfil === 'membro';
+  let escopo = 'minhas';
+  const doEscopo = (l) => (ehMembro ? l.filter((a) => (escopo === 'minhas') === !!a.pode_executar) : l);
+  const temMais = (a) => (ehMembro ? !!(a.pode_editar || a.pode_mudar_prazo || a.pode_excluir) : (!a.demandada_diretor || a.pode_editar || a.pode_mudar_prazo));
   let aba = 'ativas';
-  let todasAtivas = [...abertas, ...concl];
 
   const renderizar = () => {
+    const abertas = doEscopo(abertasT), concl = doEscopo(conclT), arq = doEscopo(arqT), todasAtivas = [...abertas, ...concl];
     // Guarda os minutos digitados e o foco, para que atualizar um cartão não apague o que está em outro.
     const digitado = new Map([...raiz.querySelectorAll('[data-min]')].filter((i) => i.value).map((i) => [i.closest('[data-id]').dataset.id, i.value]));
     const foco = raiz.contains(document.activeElement) ? document.activeElement.closest('[data-id]')?.dataset.id : null;
@@ -171,10 +200,13 @@ export async function minhasAcoes(raiz) {
       <div class="cabeca linha entre" style="align-items:flex-start">
         <div>
           <h1>Minhas ações</h1>
-          <div class="sub">${plural(abertas.length, 'ação aberta', 'ações abertas')}${concl.length ? ` · ${plural(concl.length, 'concluída aguardando aceite', 'concluídas aguardando aceite')}` : ''}${arq.length ? ` · ${plural(arq.length, 'arquivada', 'arquivadas')}` : ''}</div>
+          <div class="sub">${plural(abertas.length, 'ação aberta', 'ações abertas')}${concl.length ? ` · ${plural(concl.length, 'concluída', 'concluídas')}` : ''}${arq.length ? ` · ${plural(arq.length, 'arquivada', 'arquivadas')}` : ''}</div>
         </div>
         <button class="btn btn-primario" id="btn-nova-acao">+ Nova ação</button>
       </div>
+      ${ehMembro ? `<div class="segmento" role="group" aria-label="Quais ações" style="margin-top:10px">
+        <button type="button" data-escopo-ac="minhas" aria-pressed="${escopo === 'minhas'}">Minhas</button>
+        <button type="button" data-escopo-ac="secao" aria-pressed="${escopo === 'secao'}">Da seção (só leitura)</button></div>` : ''}
       <div class="linha abas-lista" style="margin:10px 0 16px;gap:8px;flex-wrap:wrap">
         <button type="button" class="btn ${aba === 'ativas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="ativas">Todas ativas (${todasAtivas.length})</button>
         <button type="button" class="btn ${aba === 'abertas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="abertas">Abertas (${abertas.length})</button>
@@ -196,13 +228,15 @@ export async function minhasAcoes(raiz) {
             ${a.pedido_pendente ? '<span class="pilula">Pedido de prazo enviado</span>' : ''}
             ${a.impedimento_critico ? '<span class="pilula atraso">Impedimento crítico</span>' : a.impedimentos_abertos ? '<span class="pilula st-bloqueada">Impedimento aberto</span>' : ''}
             ${a.checklist_total ? `<span class="pilula" title="Tarefas feitas">☑ ${a.checklist_feitos}/${a.checklist_total}</span>` : ''}
-            ${a.status === 'concluida' && !a.arquivada ? '<span class="pilula st-concluida">Aguardando aceite</span>' : ''}
+            ${a.responsavel_nome ? `<span class="pilula" title="Responsável pela execução">Responsável: ${esc(a.responsavel_nome)}</span>` : ''}
+            ${a.demandante_externo ? `<span class="pilula externa" title="Demanda de entidade fora da subordinação ao Diretor">Demanda externa: ${esc(a.demandante_externo)}</span>` : ''}
+            ${a.aguardando_validacao ? `<span class="pilula validacao">${a.aguardando_validacao === 'chefe' ? 'Aguardando validação do chefe' : 'Aguardando aceite do Diretor'}</span>` : ''}
             ${a.arquivada ? '<span class="pilula enc">Arquivada</span>' : ''}
             ${a.apresentada ? '<span class="pilula" title="Título e detalhamento não mudam mais; o prazo pode ser alterado">Apresentada em reunião</span>' : ''}
           </div>
         </header>
         ${a.detalhe ? `<p class="acao-detalhe">${esc(a.detalhe)}</p>` : ''}
-        ${!a.arquivada ? `
+        ${!a.arquivada && a.pode_executar ? `
           <div class="segmento" role="group" aria-label="Status da ação">${Object.entries(STATUS).map(([k, v]) =>
             `<button type="button" data-status="${k}" aria-pressed="${a.status === k}" ${a.status !== k && !TRANSICOES[a.status].includes(k) ? 'disabled' : ''}>${v}</button>`).join('')}</div>
           <div class="tempo-linha"><span>Tempo gasto <b class="num">${fmtMin(a.tempo_total)}</b></span>
@@ -211,24 +245,24 @@ export async function minhasAcoes(raiz) {
         ` : ''}
         <footer class="acao-rodape">
           <button type="button" class="btn btn-fantasma btn-mini" data-detalhe>Detalhes e histórico</button>
-          ${!a.arquivada && a.status !== 'concluida' && !a.pedido_pendente && !a.pode_mudar_prazo ? '<button type="button" class="btn btn-fantasma btn-mini" data-prazo>Pedir novo prazo</button>' : ''}
-          ${aceitaImpedimento(a) ? '<button type="button" class="btn btn-fantasma btn-mini" data-impedimento>Impedimento</button>' : ''}
-          ${!a.demandada_diretor || a.pode_editar || a.pode_mudar_prazo ? `<details class="mais"><summary class="btn btn-fantasma btn-mini">Mais</summary>
+          ${!ehMembro && !a.arquivada && a.status !== 'concluida' && !a.pedido_pendente && !a.pode_mudar_prazo ? '<button type="button" class="btn btn-fantasma btn-mini" data-prazo>Pedir novo prazo</button>' : ''}
+          ${aceitaImpedimento(a) && a.pode_executar ? '<button type="button" class="btn btn-fantasma btn-mini" data-impedimento>Impedimento</button>' : ''}
+          ${a.aguardando_validacao === 'chefe' && a.pode_executar && !ehMembro ? '<button type="button" class="btn btn-ok btn-mini" data-validar>Validar</button><button type="button" class="btn btn-fantasma btn-mini" data-devolver>Devolver</button>' : ''}
+          ${temMais(a) ? `<details class="mais"><summary class="btn btn-fantasma btn-mini">Mais</summary>
             <div class="mais-itens">
               ${a.pode_editar || a.pode_mudar_demanda ? '<button type="button" class="btn btn-sec btn-mini" data-editar>Editar</button>' : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" data-editar>Alterar prazo</button>' : ''}
-              ${a.demandada_diretor ? '' : a.arquivada ? '<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar</button>' : '<button type="button" class="btn btn-sec btn-mini" data-arquivar>Arquivar</button>'}
+              ${a.demandada_diretor || ehMembro ? '' : a.arquivada ? '<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar</button>' : '<button type="button" class="btn btn-sec btn-mini" data-arquivar>Arquivar</button>'}
               ${a.pode_excluir ? '<button type="button" class="btn btn-sec btn-mini perigo-texto" data-excluir>Excluir ação</button>' : ''}
             </div></details>` : ''}
         </footer>
-      </article>`).join('') : `<div class="cartao">${vazio('Nenhuma ação nesta visão', aba === 'arquivadas' ? 'Nenhuma ação arquivada.' : 'Quando o Diretor ou você criarem ações, elas aparecerão aqui.')}</div>`}`;
+      </article>`).join('') : `<div class="cartao">${vazio('Nenhuma ação nesta visão', aba === 'arquivadas' ? 'Nenhuma ação arquivada.' : ehMembro && escopo === 'minhas' ? 'Quando o chefe atribuir uma ação a você, ou você criar uma, ela aparecerá aqui.' : 'Quando o Diretor ou você criarem ações, elas aparecerão aqui.')}</div>`}`;
     for (const [id, v] of digitado) { const i = raiz.querySelector(`[data-id="${id}"] [data-min]`); if (i) i.value = v; }
     if (foco) raiz.querySelector(`[data-id="${foco}"] [data-min]`)?.focus({ preventScroll: true });
   };
 
   // Recarrega só os dados desta tela: a aba escolhida e os campos em edição continuam como estavam.
   const recarregar = async () => {
-    [abertas, concl, arq] = await buscar();
-    todasAtivas = [...abertas, ...concl];
+    [abertasT, conclT, arqT] = await buscar();
     renderizar();
   };
 
@@ -236,7 +270,7 @@ export async function minhasAcoes(raiz) {
 
   const acaoDe = (el) => {
     const id = Number(el.closest('[data-id]').dataset.id);
-    return [...todasAtivas, ...arq].find((a) => a.id === id);
+    return [...abertasT, ...conclT, ...arqT].find((a) => a.id === id);
   };
   const erro = (e) => toast(e.message, 'erro');
 
@@ -244,6 +278,9 @@ export async function minhasAcoes(raiz) {
     aba = el.dataset.aba;
     renderizar();
   });
+  on(raiz, 'click', '[data-escopo-ac]', (el) => { escopo = el.dataset.escopoAc; renderizar(); });
+  on(raiz, 'click', '[data-validar]', async (el) => { try { await validarAcao(acaoDe(el).id); await recarregar(); } catch (e) { erro(e); } });
+  on(raiz, 'click', '[data-devolver]', (el) => devolverAcao(acaoDe(el), recarregar));
 
   on(raiz, 'click', '[data-impedimento]', (el) => abrirNovoImpedimento(acaoDe(el), recarregar));
   on(raiz, 'click', '[data-editar]', (el) => abrirEditarAcao(acaoDe(el), recarregar));
@@ -281,7 +318,10 @@ export async function minhasAcoes(raiz) {
     } catch (e) { erro(e); }
   });
 
-  on(raiz, 'click', '#btn-nova-acao', () => {
+  on(raiz, 'click', '#btn-nova-acao', async () => {
+    // O chefe já cria a ação atribuída a um membro da equipe; o membro cria só para si.
+    const podeAtribuir = ['chefe', 'administrador'].includes(est.user.perfil);
+    const equipe = podeAtribuir ? (await get('/equipe').catch(() => [])).filter((m) => m.ativo) : [];
     abrirForm({
       titulo: 'Nova ação da seção',
       corpo: `
@@ -291,18 +331,24 @@ export async function minhasAcoes(raiz) {
           <div class="campo"><label for="na-prazo">Prazo</label><input id="na-prazo" type="date" name="prazo" required min="${est.boot.hoje}" value="${addDias(est.boot.hoje, 7)}"></div>
           <div class="campo"><label for="na-prio">Prioridade</label><select id="na-prio" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div>
         </div>
-        <div class="escolha"><label><input type="checkbox" name="demanda_diretor" value="1"> Demanda do Diretor</label></div>
+        ${equipe.length ? `<div class="campo"><label for="na-resp">Responsável pela execução</label>
+          <select id="na-resp" name="responsavel_id"><option value="">Eu mesmo (sem delegar)</option>${equipe.map((m) => `<option value="${m.id}">${esc(m.nome)}</option>`).join('')}</select>
+          <div class="dica">Ao concluir, a ação de um membro da equipe aguarda a sua validação.</div></div>` : ''}
+        <div class="campo"><label>De onde veio esta demanda?</label><div class="dica" style="margin-bottom:6px">Deixe em branco se foi uma decisão da própria seção.</div>${origemCamposHTML()}</div>
         ${est.user.perfil === 'chefe' ? '<div class="escolha" style="margin-top:8px"><label><input type="checkbox" name="interna" value="1"> Ação interna da subseção (não exibida na pauta executiva do Diretor)</label></div>' : ''}`,
       rotulo: 'Criar ação',
+      aoAbrir: (dlg) => ligarOrigem(dlg),
       aoEnviar: async (d) => {
+        const origem = lerOrigem(d);
         await post('/acoes', {
-          secao_id: est.user.secao_id, // o chefe sempre cria na própria seção; o Administrador informa qual
+          secao_id: est.user.secao_id, // o chefe e o membro sempre criam na própria seção; o Administrador informa qual
           titulo: d.titulo,
           detalhe: d.detalhe,
           prazo: d.prazo,
           prioridade: d.prioridade,
           interna: d.interna === '1',
-          demanda_diretor: d.demanda_diretor === '1',
+          ...origem,
+          ...(d.responsavel_id ? { responsavel_id: Number(d.responsavel_id) } : {}),
         });
         toast('Ação criada com sucesso.');
         recarregar().catch(erro);

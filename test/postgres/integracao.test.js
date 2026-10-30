@@ -149,7 +149,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     const [a, b] = await cluster.banco();
     await assert.rejects(verificarMigracoes(a), /Migrações pendentes/);
     const resultados = await Promise.all([aplicarMigracoes(a), aplicarMigracoes(b)]);
-    assert.deepEqual(resultados.flat().sort((x, y) => x - y), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+    assert.deepEqual(resultados.flat().sort((x, y) => x - y), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
     await verificarMigracoes(b);
     assert.deepEqual(await aplicarMigracoes(a), []);
   });
@@ -164,7 +164,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     assert.equal((await db.prepare("select to_regclass('uq_pedido_pendente_acao') as nome").get()).nome, null);
     assert.equal((await db.prepare("select count(*) n from information_schema.columns where table_name = 'acoes' and column_name = 'arquivada'").get()).n, 0);
     await db.exec('drop table uq_reuniao_em_andamento');
-    assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+    assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
   });
 
   await t.test('versão 11 recria a restrição de tipo e aceita a Diretoria Adjunta sem perder seções', async () => {
@@ -331,5 +331,36 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     assert.equal(envio.status, 200);
     assert.ok([200, 409].includes(edicao.status));
     assert.ok([envio.data.ata_texto, 'Revisão concorrente'].includes((await c[1]('GET', `/reunioes/${id}`)).data.ata_texto));
+  });
+  await t.test('membro da equipe: atribuição, execução e validação do chefe, e demanda externa, no PostgreSQL', async t => {
+    const [db] = await cluster.banco(t);
+    await seed(db);
+    await db.prepare("insert into usuarios (nome, email, perfil, secao_id) values ('Marta Lima', 'marta@exemplo.invalid', 'membro', 1)").run();
+    const marta = (await db.prepare("select id from usuarios where perfil = 'membro'").get()).id;
+    await assert.rejects(db.prepare("insert into usuarios (nome, perfil) values ('Fora', 'outro')").run(), { code: '23514' }, 'a restrição de perfil continua valendo');
+    const call = await servir(t, db);
+    const ANA = 3, DIRETOR = 1;
+
+    const acao = (await call('POST', '/acoes', { titulo: 'Mapear convênios', prazo: '2026-12-31', responsavel_id: marta }, ANA)).data;
+    assert.equal(acao.responsavel_id, marta);
+    assert.equal((await call('GET', '/bootstrap', undefined, marta)).data.acoes_novas, 1);
+    assert.equal((await call('GET', `/acoes/${acao.id}`, undefined, marta)).data.pode_executar, true);
+    assert.equal((await call('PATCH', `/acoes/${acao.id}`, { titulo: 'Outro' }, marta)).status, 403);
+    assert.equal((await call('PATCH', `/acoes/${acao.id}`, { status: 'em_andamento' }, marta)).status, 200);
+    assert.equal((await call('POST', `/acoes/${acao.id}/tempo`, { minutos: 30 }, marta)).status, 201);
+    const tarefa = (await call('POST', `/acoes/${acao.id}/checklist`, { texto: 'Levantar dados', data: '2026-10-01', responsavel_id: marta }, marta)).data;
+    assert.equal((await call('GET', '/tarefas', undefined, marta)).data.find(x => x.id === tarefa.id).pode_marcar, true);
+    assert.equal((await call('PATCH', `/acoes/${acao.id}`, { status: 'concluida' }, marta)).status, 200);
+
+    assert.equal((await call('GET', `/acoes/${acao.id}`, undefined, ANA)).data.aguardando_validacao, 'chefe');
+    assert.equal((await call('GET', '/bootstrap', undefined, ANA)).data.acoes_a_validar, 1);
+    assert.equal((await call('POST', `/acoes/${acao.id}/encerrar`, undefined, DIRETOR)).status, 409, 'não é demanda do Diretor');
+    assert.equal((await call('POST', `/acoes/${acao.id}/validar`, undefined, ANA)).status, 200);
+    assert.equal((await call('GET', `/acoes/${acao.id}`, undefined, ANA)).data.aguardando_validacao, null);
+    assert.equal((await call('GET', '/equipe', undefined, ANA)).data.length, 1);
+    assert.equal((await call('GET', '/reunioes', undefined, marta)).status, 403);
+
+    const externa = (await call('POST', '/acoes', { titulo: 'Responder ofício', prazo: '2026-12-31', demandante_externo: 'Tribunal de Contas' }, ANA)).data;
+    assert.ok((await call('GET', '/acoes?origem=externa', undefined, DIRETOR)).data.some(a => a.id === externa.id));
   });
 });

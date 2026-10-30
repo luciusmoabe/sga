@@ -12,6 +12,7 @@ import { configuracaoAta } from './ata-cabecalho.js';
 import { atas, reuniaoDetalhe, reunioes } from './atas.js';
 import { inicioReuniao, viewReuniao } from './reuniao.js';
 import { avisos } from './avisos.js';
+import { equipe } from './equipe.js';
 import { acoesDosCentros, lePorTodosOsCentros } from './consulta.js';
 import { DIRETORIA_ADJUNTA, ROTULO_PERFIL } from './regras.js';
 import { abrirTrocaSenha, telaTrocaSenha } from './senha.js';
@@ -34,12 +35,14 @@ const ROTAS = {
   // Sem id: tela comum de início (nada é criado ao abrir a rota). Com id: Modo Reunião em tela cheia.
   reuniao: { f: (r, p) => (p.id ? viewReuniao(r, p) : inicioReuniao(r, p)), perfis: GESTAO, tv: (p) => !!p.id, titulo: 'Modo Reunião' },
   inicio: { f: inicio, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Início' },
-  agenda: { f: agenda, perfis: [...TODOS, 'consulta'], trilho: true, titulo: 'Agenda' },
+  agenda: { f: agenda, perfis: [...TODOS, 'consulta', 'membro'], trilho: true, titulo: 'Agenda' },
   // Leitura das ações de todos os Centros: perfil Consulta e chefe com a permissão (a tela confere a permissão).
   'acoes-centros': { f: acoesDosCentros, perfis: ['consulta', 'chefe'], titulo: 'Ações dos Centros' },
   // O Administrador da Diretoria Adjunta envia o relato da própria seção, como um chefe.
   atualizacao: { f: atualizacao, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Minha atualização' },
-  'minhas-acoes': { f: minhasAcoes, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Minhas ações' },
+  'minhas-acoes': { f: minhasAcoes, perfis: ['chefe', 'administrador', 'membro'], trilho: true, titulo: 'Minhas ações' },
+  // O chefe (e o Administrador vinculado a uma seção) cadastra e desativa os membros da equipe da própria seção.
+  equipe: { f: equipe, perfis: ['chefe', 'administrador'], titulo: 'Minha equipe' },
   historico: { f: historico, perfis: ['chefe'], titulo: 'Histórico' },
   atas: { f: atas, perfis: ['chefe'], titulo: 'Atas' },
 };
@@ -52,6 +55,7 @@ const ICONES = {
   reuniao: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3.5" width="16" height="10.5" rx="1.5"/><line x1="7" y1="17.5" x2="13" y2="17.5"/><line x1="10" y1="14" x2="10" y2="17.5"/><path d="M8.3 6.3v5l4.4-2.5-4.4-2.5z" fill="currentColor" stroke="none"/></svg>',
   direcionar: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="10" x2="16" y2="10"/><polyline points="11,5 16,10 11,15"/></svg>',
   'acoes-centros': '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 10s3-5.5 8.5-5.5S18.5 10 18.5 10s-3 5.5-8.5 5.5S1.5 10 1.5 10z"/><circle cx="10" cy="10" r="2.5"/></svg>',
+  equipe: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="2.6"/><path d="M2 16.5c0-2.8 2.2-4.6 5-4.6s5 1.8 5 4.6"/><circle cx="14.2" cy="8" r="2"/><path d="M14.5 12c2 .2 3.5 1.6 3.5 3.8"/></svg>',
   acoes: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5,5 4,6.5 6.5,3.5"/><line x1="9" y1="5" x2="17.5" y2="5"/><polyline points="2.5,11 4,12.5 6.5,9.5"/><line x1="9" y1="11" x2="17.5" y2="11"/><line x1="2.5" y1="16" x2="17.5" y2="16"/></svg>',
   prazos: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10.5" r="7"/><polyline points="10,6.5 10,10.5 13,12.5"/></svg>',
   combinados: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="2.5" x2="5" y2="17.5"/><path d="M5 3.5h9l-2.3 3 2.3 3H5"/></svg>',
@@ -88,11 +92,14 @@ const MENU_CHEFE = [
   ['agenda', 'Agenda'],
   ['atualizacao', 'Minha atualização'],
   ['minhas-acoes', 'Minhas ações'],
+  ['equipe', 'Minha equipe'],
   ['historico', 'Histórico'],
   ['#Reunião'],
   ['combinados', 'Combinados'],
   ['atas', 'Atas'],
 ];
+// Membro da equipe: lê as ações da sua seção e executa as que o chefe atribuiu a ele (ou que ele criou).
+const MENU_MEMBRO = [['#Minha seção'], ['minhas-acoes', 'Minhas ações'], ['agenda', 'Agenda']];
 // Consulta: só lê as ações dos Centros.
 const MENU_CONSULTA = [['#Consulta'], ['acoes-centros', 'Ações dos Centros'], ['agenda', 'Agenda']];
 // O Administrador tem acesso total às abas de Configuração.
@@ -100,7 +107,7 @@ const MENU_ADMIN = MENU_GESTAO.map((m) => (m[0] === '#Organização' ? ['#Admini
 const PERFIL = ROTULO_PERFIL;
 // Selos do menu, com a contagem que vem no bootstrap: pedidos de prazo pendentes (gestão) e ações recebidas
 // que a pessoa ainda não abriu (chefe e Diretoria Adjunta).
-const SELOS = { prazos: ['pedidos_pendentes', 'pedidos de prazo pendentes'], 'minhas-acoes': ['acoes_novas', 'ações novas'] };
+const SELOS = { prazos: [['pedidos_pendentes'], 'pedidos de prazo pendentes'], 'minhas-acoes': [['acoes_novas', 'acoes_a_validar'], 'ações novas ou aguardando a sua validação'] };
 const selo = (rota) => (SELOS[rota] ? `<span class="selo oculto" data-selo="${rota}" title="${SELOS[rota][1]}"></span>` : '');
 const app = document.getElementById('app');
 
@@ -111,7 +118,7 @@ function lerRota() {
   return { rota, id, q: new URLSearchParams(qs || '') };
 }
 // Início da seção também é a tela de entrada do Administrador da Diretoria Adjunta (mesma tela do chefe).
-const casaDe = () => (est.user.perfil === 'consulta' ? '#/acoes-centros'
+const casaDe = () => (est.user.perfil === 'consulta' ? '#/acoes-centros' : est.user.perfil === 'membro' ? '#/minhas-acoes'
   : est.user.perfil === 'chefe' || (est.user.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA) ? '#/inicio' : '#/painel');
 
 
@@ -183,15 +190,16 @@ async function telaEntrada({ expirada = false } = {}) {
     return;
   }
   const us = await fetch('/api/usuarios-demo').then((r) => r.json());
-  const card = (u) => `<button class="perfil" data-u="${u.id}"><b>${esc(u.nome)}</b><span>${u.perfil === 'chefe' ? esc(u.secao_nome || 'Sem seção atribuída') : PERFIL[u.perfil]}</span></button>`;
+  const card = (u) => `<button class="perfil" data-u="${u.id}"><b>${esc(u.nome)}</b><span>${['chefe', 'membro'].includes(u.perfil) ? esc(u.secao_nome || 'Sem seção atribuída') : PERFIL[u.perfil]}</span></button>`;
   app.innerHTML = `<div class="entrada"><div class="entrada-caixa">
     <img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo">
     <p class="entrada-tag">Protótipo de demonstração</p>
     <h1>Bem-vindo ao Agilis</h1>
     <p class="lema">Acompanhamento semanal dos Centros do Departamento de Planejamento, Orçamento e Gestão.</p>
     <div class="info">Protótipo com dados fictícios. Escolha um perfil para explorar; não há senha nesta versão.</div>
-    <div class="grupo-titulo">Diretor e Apoio</div><div class="perfis">${us.filter((u) => u.perfil !== 'chefe').map(card).join('')}</div>
-    <div class="grupo-titulo">Chefes de seção</div><div class="perfis">${us.filter((u) => u.perfil === 'chefe').map(card).join('')}</div></div></div>`;
+    <div class="grupo-titulo">Diretor e Apoio</div><div class="perfis">${us.filter((u) => !['chefe', 'membro'].includes(u.perfil)).map(card).join('')}</div>
+    <div class="grupo-titulo">Chefes de seção</div><div class="perfis">${us.filter((u) => u.perfil === 'chefe').map(card).join('')}</div>
+    ${us.some((u) => u.perfil === 'membro') ? `<div class="grupo-titulo">Membros da equipe</div><div class="perfis">${us.filter((u) => u.perfil === 'membro').map(card).join('')}</div>` : ''}</div></div>`;
 }
 
 // Delegação única no contêiner #app: vale para a tela de entrada, sem acumular ouvintes.
@@ -235,8 +243,8 @@ function casca() {
   const daDiretoriaAdjunta = u.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA;
   // O chefe com a permissão do Diretor ganha "Ações dos Centros", logo abaixo das próprias ações.
   const chefe = lePorTodosOsCentros() ? MENU_CHEFE.flatMap((m) => (m[0] === 'minhas-acoes' ? [m, ['acoes-centros', 'Ações dos Centros']] : [m])) : MENU_CHEFE;
-  const base = u.perfil === 'chefe' ? chefe : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? MENU_CONSULTA : MENU_GESTAO;
-  const menu = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['atualizacao', 'Minha atualização']] : []), ...base]
+  const base = u.perfil === 'chefe' ? chefe : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? MENU_CONSULTA : u.perfil === 'membro' ? MENU_MEMBRO : MENU_GESTAO;
+  const menu = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['equipe', 'Minha equipe'], ['atualizacao', 'Minha atualização']] : []), ...base]
     .filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
   app.innerHTML = `<div class="app"><aside class="lateral">
     <div class="marca"><img src="/imagens/logo-agilis.png" alt="Agilis" class="marca-logo"></div>
@@ -263,6 +271,7 @@ const ABAS_MOVEL = {
   chefe: [['inicio', 'Início'], ['minhas-acoes', 'Ações'], ['atualizacao', 'Atualização'], ['agenda', 'Agenda']],
   gestao: [['painel', 'Painel'], ['agenda', 'Agenda'], ['acoes', 'Ações'], ['prazos', 'Prazos']],
   consulta: [['acoes-centros', 'Ações'], ['agenda', 'Agenda']],
+  membro: [['minhas-acoes', 'Ações'], ['agenda', 'Agenda']],
 };
 const ICONE_MAIS = '<svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.5" cy="10" r="1.2"/><circle cx="10" cy="10" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/></svg>';
 // Iniciais do primeiro e do último nome, sem parênteses, partículas nem posto/graduação
@@ -275,7 +284,7 @@ const iniciais = (nome) => {
 };
 
 function cascaMovel(u, menu) {
-  const abas = ABAS_MOVEL[u.perfil === 'chefe' || u.perfil === 'consulta' ? u.perfil : 'gestao'];
+  const abas = ABAS_MOVEL[['chefe', 'consulta', 'membro'].includes(u.perfil) ? u.perfil : 'gestao'];
   const rotuloPerfil = `${PERFIL[u.perfil]}${est.boot?.secao ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}`;
   return `<header class="topo-movel">
       <img src="/imagens/logo-agilis.png" alt="Agilis" class="topo-movel-logo">
@@ -323,7 +332,7 @@ function ligarCascaMovel() {
 // As contagens vêm no bootstrap: não há requisição própria para os selos.
 function atualizarSelo() {
   for (const s of document.querySelectorAll('[data-selo]')) {
-    const n = est.boot?.[SELOS[s.dataset.selo][0]] ?? 0;
+    const n = SELOS[s.dataset.selo][0].reduce((total, chave) => total + (est.boot?.[chave] ?? 0), 0);
     s.textContent = n;
     s.classList.toggle('oculto', !n);
   }

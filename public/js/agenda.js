@@ -19,17 +19,18 @@ const diaDoMes = (iso) => `${Number(iso.slice(8))} de ${fmt({ month: 'long' }).f
 const somarMes = (mes, n) => { const [a, m] = mes.split('-').map(Number); const d = new Date(Date.UTC(a, m - 1 + n, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; };
 
 export async function agenda(raiz) {
-  const gestao = est.user.perfil !== 'chefe'; // Diretor, Apoio, Administrador e Consulta veem todas as seções
+  const gestao = !['chefe', 'membro'].includes(est.user.perfil); // Diretor, Apoio, Administrador e Consulta veem todas as seções
   if (!gestao && !est.user.secao_id) {
     raiz.innerHTML = `<div class="cabeca"><h1>Agenda</h1></div><div class="cartao">${vazio(
       'Você ainda não está vinculado a uma seção', 'Peça ao Diretor para atribuí-lo a uma seção na tela Estrutura.')}</div>`;
     return;
   }
   const hoje = est.boot.hoje;
-  const podeSerResponsavel = ['chefe', 'administrador'].includes(est.user.perfil);
+  const podeSerResponsavel = ['chefe', 'administrador', 'membro'].includes(est.user.perfil);
+  const ehMembro = est.user.perfil === 'membro';
   const minhaSecao = est.user.secao_id; // quem não tem seção (ex.: Administrador sem vínculo) não tem o filtro "Só o que é meu"
   const temEscopo = podeSerResponsavel && !!minhaSecao;
-  const podeMarcar = (t) => podeSerResponsavel && t.acao_visivel; // quem gere a ação marca a tarefa como feita
+  const podeMarcar = (t) => !!t.pode_marcar; // o servidor diz: quem executa a ação, e o membro dono da tarefa, marca como feita
 
   // Estado da tela (só em memória: ao sair e voltar, a agenda abre de novo em hoje).
   let acoes = [];
@@ -49,8 +50,9 @@ export async function agenda(raiz) {
   await carregar();
 
   // ---------- Filtros e índice por data ----------
-  // "Só meu": as tarefas atribuídas a mim (em qualquer ação) e as ações da minha seção (a própria seção, não as de fora).
-  const doFiltroAcao = (a) => mostrar !== 'tarefas' && (!soMinhas || a.secao_id === minhaSecao) && (!secao || String(a.secao_id) === secao);
+  // "Só o que é meu": as tarefas atribuídas a mim (em qualquer ação) e, das ações, as da minha seção (a própria seção, não as
+  // de fora) ou, para o membro, as que ele executa (atribuídas a ele ou criadas por ele).
+  const doFiltroAcao = (a) => mostrar !== 'tarefas' && (!soMinhas || (ehMembro ? !!a.pode_executar : a.secao_id === minhaSecao)) && (!secao || String(a.secao_id) === secao);
   const doFiltroTarefa = (t) => mostrar !== 'acoes' && (!soMinhas || t.responsavel_id === est.user.id) && (!secao || String(t.secao_id) === secao);
   const visiveis = () => ({ as: acoes.filter(doFiltroAcao), ts: tarefas.filter(doFiltroTarefa) });
   const indice = () => {
@@ -66,7 +68,7 @@ export async function agenda(raiz) {
   // ---------- Esqueleto fixo (os filtros não são redesenhados, para não perder o foco) ----------
   const secoes = gestao ? [...new Map(acoes.map((a) => [a.secao_id, a.secao_sigla || a.secao_nome])).entries()].sort((x, y) => x[1].localeCompare(y[1])) : [];
   raiz.innerHTML = `
-    <div class="cabeca"><div><h1>Agenda</h1><div class="sub">${gestao ? 'Ações e tarefas de todas as seções, por data' : 'Suas ações e tarefas, por data'}</div></div></div>
+    <div class="cabeca"><div><h1>Agenda</h1><div class="sub">${gestao ? 'Ações e tarefas de todas as seções, por data' : ehMembro ? 'Ações e tarefas da sua seção, por data' : 'Suas ações e tarefas, por data'}</div></div></div>
     <div class="cal">
       <section class="cartao cal-mes" aria-label="Calendário">
         <div class="cal-topo">
@@ -200,7 +202,7 @@ export async function agenda(raiz) {
   // quantos filtros estão ativos e, com "Só o que é meu" ligado, o filtro de seção sai de cena (o meu já é uma seção).
   const atualizarFiltros = () => {
     const dica = $('#cal-dica-escopo', raiz);
-    if (dica) dica.textContent = soMinhas ? 'Suas tarefas e as ações da sua seção.' : (gestao ? 'Tudo o que você enxerga, de todas as seções.' : 'Tudo da sua seção e subseções.');
+    if (dica) dica.textContent = soMinhas ? (ehMembro ? 'Suas tarefas e as ações atribuídas a você ou criadas por você.' : 'Suas tarefas e as ações da sua seção.') : (gestao ? 'Tudo o que você enxerga, de todas as seções.' : 'Tudo da sua seção e subseções.');
     const sel = $('#cal-secao', raiz);
     if (sel) { sel.disabled = soMinhas; if (soMinhas) { sel.value = ''; secao = ''; } sel.title = soMinhas ? 'Com "Só o que é meu", a seção já é a sua.' : ''; }
     const ativos = (mostrar !== 'tudo' ? 1 : 0) + (soMinhas ? 1 : 0) + (secao ? 1 : 0);

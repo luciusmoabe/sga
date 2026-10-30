@@ -38,7 +38,7 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
 
   // ---------- Combinados da reunião ----------
   app.get('/api/combinados', h(async (req) => {
-    const gere = req.user.perfil !== 'chefe';
+    const gere = !['chefe', 'membro'].includes(req.user.perfil);
     const inativos = gere && req.query.todos === '1';
     const arquivados = gere && req.query.arquivados === '1';
     const itens = (await q(
@@ -146,7 +146,7 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
   }));
 
   app.get('/api/reunioes', h(async (req) => {
-    const gere = req.user.perfil !== 'chefe';
+    const gere = !['chefe', 'membro'].includes(req.user.perfil);
     return await q(
       `select r.id, r.data, r.semana, r.status, r.iniciada_em, r.encerrada_em, r.enviada_em,
          (select count(*) from decisoes d where d.reuniao_id = r.id) decisoes,
@@ -168,7 +168,7 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
 
   app.get('/api/reunioes/:id', h(async (req) => {
     const r = await reuniaoOuErro(req.params.id);
-    if (req.user.perfil === 'chefe') {
+    if (['chefe', 'membro'].includes(req.user.perfil)) {
       if (r.status !== 'enviada') throw falha(404, 'Reunião não encontrada.');
       return { id: r.id, data: r.data, semana: r.semana, status: r.status, enviada_em: r.enviada_em, ata_texto: r.ata_texto, combinados_snapshot: json(r.combinados_snapshot, []), ...await complemento(req.user, r) };
     }

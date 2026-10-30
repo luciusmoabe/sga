@@ -15,8 +15,10 @@ export const PRIORIDADES = ['alta', 'media', 'baixa'];
 
 /** Perfis de acesso. O Administrador tem acesso total: faz tudo o que o Diretor, o Apoio e o Chefe fazem e gerencia contas e estrutura.
  *  A Consulta só lê as ações de todos os Centros (as mesmas que o Diretor vê), sem alterar nada nem ver relatos e reuniões. */
-export const PERFIS = ['diretor', 'apoio', 'chefe', 'administrador', 'consulta'];
-export const ROTULO_PERFIL = { diretor: 'Diretor', apoio: 'Apoio do Diretor', chefe: 'Chefe de seção', administrador: 'Administrador', consulta: 'Consulta' };
+export const PERFIS = ['diretor', 'apoio', 'chefe', 'administrador', 'consulta', 'membro'];
+export const ROTULO_PERFIL = { diretor: 'Diretor', apoio: 'Apoio do Diretor', chefe: 'Chefe de seção', administrador: 'Administrador', consulta: 'Consulta', membro: 'Membro da equipe' };
+/** Perfis que trabalham numa seção (usuarios.secao_id): o chefe, que dirige, e o membro, que só executa o que é dele. */
+export const PERFIS_DE_SECAO = ['chefe', 'membro'];
 export const TAM_SENHA = { min: 8, max: 128 };
 
 /** Tipos de seção. A Diretoria Adjunta fica no primeiro nível, sem chefe nem subseções; no resto é acompanhada como

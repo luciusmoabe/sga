@@ -229,7 +229,8 @@ test('ação encerrada não é editada; o Diretor Adjunto não direciona para a 
   await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { status: 'em_andamento' });
   await call(ANA_CPE, 'POST', `/acoes/${id}/tempo`, { minutos: 10 });
   await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { status: 'concluida' });
-  await call(DIRETOR, 'POST', `/acoes/${id}/encerrar`);
+  await db.prepare('update acoes set demanda_diretor = 1 where id = ?').run(id); // só a demanda do Diretor pede o aceite dele
+  assert.equal((await call(DIRETOR, 'POST', `/acoes/${id}/encerrar`)).status, 200);
   assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { titulo: 'Tarde demais' })).status, 409);
 
   const da = (await call(DIRETOR, 'POST', '/secoes', { nome: 'Diretoria Adjunta', sigla: 'DA', tipo: 'diretoria_adjunta' })).data.id;

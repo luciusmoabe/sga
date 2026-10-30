@@ -1068,6 +1068,17 @@ body.carregando::before {
 .cal-filtros .segmento button { min-height: 40px; }
 .cal-filtros select { width: 100%; }
 .cal-filtros-ativos { font-weight: 500; color: var(--green); }
+
+/* ---------- Membro da equipe, responsável, validação e demanda externa ---------- */
+.pilula.externa { background: #eaf0fb; color: #27518f; border: 1px solid #c8d6ef; font-weight: 650; }
+.pilula.validacao { background: var(--amarelo-bg); color: var(--amarelo); font-weight: 700; }
+.banner-origem.externa { background: #eaf0fb; border-color: #c8d6ef; }
+.banner-origem.externa strong { color: #27518f; }
+.aviso-validacao { margin: 14px 0; padding: 12px 14px; background: var(--pale); border: 1px solid var(--line-str); border-left: 4px solid var(--amarelo); border-radius: 10px; }
+.responsavel { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0 0 10px; }
+.validar-quadro { border-left-color: var(--amarelo); }
+.novas-item-estatico { cursor: default; }
+.novas-item-estatico:hover { background: var(--pale); border-color: var(--line); }
 .cal-painel { padding: 22px 24px; min-height: 320px; }
 .cal-painel-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .cal-painel-topo h2 { margin: 0; font-family: var(--head); font-size: 1.3rem; }

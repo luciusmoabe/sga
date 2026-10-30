@@ -1,14 +1,15 @@
 // Rotas de diretrizes, ações e pedidos de novo prazo.
 import { subarvore } from './db.js';
-import { DIAS_SEM_MOVIMENTO, PRIORIDADES, STATUS, TRANSICOES, addDays, br, ehISO, porDataDaTarefa } from './logic.js';
+import { DIAS_SEM_MOVIMENTO, PERFIS_DE_SECAO, PRIORIDADES, STATUS, TRANSICOES, addDays, br, ehISO, porDataDaTarefa } from './logic.js';
 import { falha, h, marks, permit, texto } from './helpers.js';
 
 export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
-  // Ações com que a pessoa trabalha (e altera, conforme o perfil). O chefe, a própria árvore; a gestão e a Consulta,
-  // as que o Diretor vê; o Administrador, todas. Rotas que gravam usam sempre este escopo.
+  const deSecao = (user) => PERFIS_DE_SECAO.includes(user.perfil); // chefe ou membro: trabalham numa seção
+  // Ações que a pessoa enxerga (e altera, conforme o perfil). O chefe e o membro, a árvore da própria seção; a gestão e a
+  // Consulta, as que o Diretor vê; o Administrador, todas. Rotas que gravam usam sempre este escopo.
   const visiveisAcoes = async (user) => {
     if (user.perfil === 'administrador') return { where: '1 = 1', params: [] }; // o Administrador consulta tudo, inclusive ações internas
-    if (user.perfil !== 'chefe') return { where: '(a.interna = 0 or a.compartilhada = 1)', params: [] };
+    if (!deSecao(user)) return { where: '(a.interna = 0 or a.compartilhada = 1)', params: [] };
     const ids = user.secao_id ? await subarvore(db, user.secao_id) : [-1];
     return { where: `a.secao_id in (${marks(ids)})`, params: ids };
   };
@@ -26,11 +27,25 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const arvore = user.secao_id ? await subarvore(db, user.secao_id) : [];
     return new Set(lista.filter((a) => !arvore.includes(a.secao_id)).map((a) => a.id));
   };
-  const SEM_PERMISSOES = { pode_editar: false, pode_mudar_prazo: false, pode_mudar_demanda: false, pode_excluir: false };
-  /** Marca `somente_leitura` e tira as permissões de autoria das ações que a pessoa só lê. */
+  const SEM_PERMISSOES = {
+    pode_editar: false, pode_mudar_prazo: false, pode_mudar_demanda: false, pode_excluir: false,
+    pode_executar: false, pode_comentar: false, pode_atribuir: false,
+  };
+  /** Marca `somente_leitura` e tira as permissões das ações que a pessoa só lê. O membro lê toda a árvore da seção,
+   *  mas age só nas ações dele; numa ação de outra pessoa, só mexe (e comenta) onde há tarefa atribuída a ele. */
   const marcarLeitura = async (user, lista) => {
     const ler = await soLeitura(user, lista);
-    return lista.map((a) => (ler.has(a.id) ? { ...a, ...SEM_PERMISSOES, somente_leitura: true } : { ...a, somente_leitura: false }));
+    const comTarefaDele = user.perfil === 'membro' && lista.length
+      ? new Set((await q('select distinct acao_id from acao_checklist where responsavel_id = ?', user.id)).map((r) => Number(r.acao_id)))
+      : new Set();
+    return lista.map((a) => {
+      if (ler.has(a.id)) return { ...a, ...SEM_PERMISSOES, somente_leitura: true };
+      if (user.perfil === 'membro' && !a.pode_executar) {
+        const tem = comTarefaDele.has(a.id);
+        return { ...a, ...SEM_PERMISSOES, pode_comentar: tem, somente_leitura: !tem };
+      }
+      return { ...a, somente_leitura: false };
+    });
   };
 
   // Última movimentação da ação (acoes.movimentada_em): toda gravação bem-sucedida em /api/acoes/:id/... conta
@@ -61,22 +76,29 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   };
   const emCurso = (a) => a.status !== 'concluida' && !a.encerrada && !a.arquivada;
   /** Acrescenta `nova` a cada ação da lista, para quem consulta. */
+  /** Quando a ação chegou para esta pessoa: para o chefe, quando a seção a recebeu; para o membro, quando o chefe a
+   *  atribuiu a ele. Vazio se não chegou para ela. */
+  const chegadaPara = (user, a, secoes) => {
+    if (user.perfil === 'membro') return a.responsavel_id === user.id ? a.atribuida_em : null;
+    return secoes.includes(a.secao_id) ? a.recebida_em : null;
+  };
   const marcarNovas = async (user, lista) => {
-    const recebidas = lista.filter((a) => a.recebida_em && emCurso(a)); // sem nenhuma, nem consulta a árvore
-    const secoes = recebidas.length ? await secoesRecebidas(user) : [];
-    const candidatas = recebidas.filter((a) => secoes.includes(a.secao_id)).map((a) => a.id);
+    const brutas = lista.filter((a) => emCurso(a) && (user.perfil === 'membro' ? a.atribuida_em && a.responsavel_id === user.id : a.recebida_em)); // sem nenhuma, nem consulta a árvore
+    const secoes = user.perfil !== 'membro' && brutas.length ? await secoesRecebidas(user) : [];
+    const candidatas = brutas.filter((a) => chegadaPara(user, a, secoes)).map((a) => a.id);
     const vistas = candidatas.length
       ? new Map((await q(`select acao_id, vista_em from acao_vistas where usuario_id = ? and acao_id in (${marks(candidatas)})`, user.id, ...candidatas))
         .map((v) => [Number(v.acao_id), v.vista_em]))
       : new Map();
-    return lista.map((a) => ({ ...a, nova: candidatas.includes(a.id) && !(vistas.get(a.id) >= a.recebida_em) }));
+    return lista.map((a) => ({ ...a, nova: candidatas.includes(a.id) && !(vistas.get(a.id) >= chegadaPara(user, a, secoes)) }));
   };
   /** Registra que `user` tomou ciência da ação, se ela chegou para ele. Guarda a primeira vez depois da chegada. */
   const registrarVista = async (user, a) => {
-    if (!a.recebida_em || !(await secoesRecebidas(user)).includes(a.secao_id)) return false;
+    const chegada = chegadaPara(user, a, user.perfil === 'membro' ? [] : await secoesRecebidas(user));
+    if (!chegada) return false;
     await run(`insert into acao_vistas (acao_id, usuario_id, vista_em) values (?,?,?)
       on conflict (acao_id, usuario_id) do update set vista_em = excluded.vista_em where acao_vistas.vista_em < ?`,
-    a.id, user.id, agoraISO(), a.recebida_em);
+    a.id, user.id, agoraISO(), chegada);
     return true;
   };
   /** Quem já tomou ciência da ação desde que ela chegou à seção atual. */
@@ -88,6 +110,10 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   const SELECT_ACAO = `select a.*, s.nome as secao_nome, s.sigla as secao_sigla,
       ua.perfil as autor_perfil,
       ua.secao_id as autor_secao_id,
+      ur.nome as responsavel_nome,
+      ur.perfil as responsavel_perfil,
+      uat.nome as atribuido_por_nome,
+      uvc.nome as validada_chefe_por_nome,
       us.chefe_id as autor_secao_chefe_id,
       d.criado_por as demandado_por_id,
       ud.nome as demandado_por_nome,
@@ -104,12 +130,31 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     from acoes a
     join secoes s on s.id = a.secao_id
     left join usuarios ua on ua.id = a.criado_por
+    left join usuarios ur on ur.id = a.responsavel_id
+    left join usuarios uat on uat.id = a.atribuido_por
+    left join usuarios uvc on uvc.id = a.validada_chefe_por
     left join secoes us on us.id = ua.secao_id
     left join diretrizes d on d.id = a.diretriz_id
     left join usuarios ud on ud.id = d.criado_por
     left join reunioes r on r.id = d.reuniao_id`;
+  /** Validação de quem delegou, depois de a ação ser concluída. Só ações demandadas pelo Diretor (aceite dele) e as que
+   *  o chefe atribuiu a outra pessoa (validação do chefe) têm uma; as demais ficam prontas ao serem concluídas.
+   *  Em sequência: primeiro o chefe, depois o Diretor. */
+  const validacaoDe = (a) => {
+    const demandadaDiretor = !!a.demanda_diretor || !!a.diretriz_id || a.demandado_por_perfil === 'diretor';
+    // Delegada: atribuída a um membro da equipe por outra pessoa (o chefe). Entre chefes, ou quando a pessoa executa a
+    // própria ação, não há quem validar.
+    const delegada = !!a.responsavel_id && !!a.atribuido_por && a.responsavel_id !== a.atribuido_por && a.responsavel_perfil === 'membro';
+    const concluida = a.status === 'concluida' && !a.encerrada && !a.arquivada;
+    let aguardando = null;
+    if (concluida && delegada && !a.validada_chefe_em) aguardando = 'chefe';
+    else if (concluida && demandadaDiretor) aguardando = 'diretor';
+    return { demandada_diretor: demandadaDiretor, delegada, exige_validacao_chefe: delegada, exige_validacao_diretor: demandadaDiretor,
+      validada_chefe: !!a.validada_chefe_em, aguardando_validacao: aguardando };
+  };
   const acaoOut = (a) => ({
     ...a,
+    ...validacaoDe(a),
     interna: !!a.interna,
     compartilhada: !!a.compartilhada,
     encerrada: !!a.encerrada,
@@ -124,7 +169,6 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     movimentada_em: a.movimentada_em || a.criada_em,
     // Em curso e sem nenhuma movimentação há DIAS_SEM_MOVIMENTO dias ou mais (ver movimentou).
     parada: a.status !== 'concluida' && !a.encerrada && !a.arquivada && (a.movimentada_em || a.criada_em) < limiteParada(),
-    demandada_diretor: !!a.demanda_diretor || !!a.diretriz_id || a.demandado_por_perfil === 'diretor',
     demandado_em: a.demandado_em || a.criada_em,
     demandado_por_nome: a.demandado_por_nome,
     reuniao_semana: a.reuniao_semana,
@@ -159,6 +203,34 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     }
     return campos;
   };
+  /** Quem pode executar uma ação da seção: chefes e membros da seção e das subseções (e, na Diretoria Adjunta, os
+   *  Administradores vinculados a ela). É a lista de onde o chefe escolhe o responsável pela ação. */
+  const executoresDa = (a) => q(`with recursive abaixo(id) as (
+        select cast(? as integer) union select s.id from secoes s join abaixo on s.pai_id = abaixo.id
+      )
+      select u.id, u.nome, u.perfil, s.sigla as secao_sigla from usuarios u join secoes s on s.id = u.secao_id
+      where u.ativo = 1 and u.perfil in ('chefe', 'membro', 'administrador') and u.secao_id in (select id from abaixo)
+      order by u.perfil, u.nome, u.id`, a.secao_id);
+  /** Lê o responsável do corpo: `undefined` se não veio, `null` para limpar, ou o id (da seção da ação). */
+  const escolherResponsavel = async (secaoId, valor) => {
+    if (valor === undefined) return undefined;
+    if (valor === null || valor === '') return null;
+    const rid = Number(valor);
+    if (!Number.isSafeInteger(rid) || !(await executoresDa({ secao_id: secaoId })).some((u) => u.id === rid)) {
+      throw falha(400, 'Escolha como responsável alguém da seção da ação (chefe, suplente ou membro da equipe).');
+    }
+    return rid;
+  };
+  /** Quem atribui deixa registrado o quê e quando; a pessoa que assume a própria ação não "delega" a si mesma. */
+  const atribuicao = (user, rid, quando) => (rid && rid !== user.id ? { atribuido_por: user.id, atribuida_em: quando } : { atribuido_por: null, atribuida_em: null });
+  /** Entidade fora da subordinação ao Diretor que demandou a ação (texto livre, até 120 caracteres). */
+  const lerDemandanteExterno = (valor) => {
+    if (valor === undefined) return undefined;
+    if (valor === null) return null;
+    if (typeof valor !== 'string') throw falha(400, 'Informe o nome da entidade que demandou a ação.');
+    if (!valor.trim()) return '';
+    return texto(valor, 120);
+  };
   const acaoVisivel = async (user, id, { leitura = false } = {}) => {
     const v = leitura ? await visiveisLeitura(user) : await visiveisAcoes(user);
     const a = await q1(`${SELECT_ACAO} where a.id = ? and ${v.where}`, id, ...v.params);
@@ -171,10 +243,18 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   const ehAutor = (user, a) => {
     if (user.perfil === 'administrador') return true;
     if (['diretor', 'apoio'].includes(user.perfil)) return a.criado_por === user.id || ['diretor', 'apoio', 'administrador'].includes(a.autor_perfil);
+    if (user.perfil === 'membro') return !!a.criado_por && a.criado_por === user.id; // o membro responde só pelas que criou
     if (user.perfil !== 'chefe' || !a.criado_por) return false;
     const titularDoSuplente = a.autor_perfil === 'chefe' && a.autor_secao_id === user.secao_id && a.autor_secao_chefe_id === user.id;
-    return a.criado_por === user.id || titularDoSuplente;
+    // O chefe responde também pelas que os membros da própria seção criaram.
+    const deMembroDaSecao = a.autor_perfil === 'membro' && a.autor_secao_id === user.secao_id;
+    return a.criado_por === user.id || titularDoSuplente || deMembroDaSecao;
   };
+  /** Quem executa a ação (status, tempo, tarefas, impedimentos): o chefe da seção e o Administrador, sempre; o membro,
+   *  só as atribuídas a ele ou criadas por ele. `a` vem de acaoVisivel, já com a visibilidade conferida. */
+  const executa = (user, a) => user.perfil === 'administrador'
+    || (user.perfil === 'chefe' && !!user.secao_id)
+    || (user.perfil === 'membro' && (a.responsavel_id === user.id || a.criado_por === user.id));
   // O autor edita título e detalhamento enquanto a ação não foi apresentada em reunião; o prazo, enquanto ela está
   // em curso (sempre guardando o anterior em acao_prazos); exclui só se ela não foi apresentada nem concluída.
   const permissoes = (user, a) => {
@@ -185,14 +265,18 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       pode_mudar_prazo: autor && emCurso,
       pode_mudar_demanda: autor && !a.encerrada && !a.diretriz_id,
       pode_excluir: autor && !a.encerrada && a.status !== 'concluida' && !a.apresentada_em,
+      pode_executar: executa(user, a) && !a.encerrada,
+      pode_comentar: user.perfil !== 'consulta' && (user.perfil !== 'membro' || executa(user, a)),
+      // Atribuir a ação a alguém da seção: o chefe e o Administrador, enquanto ela está em curso.
+      pode_atribuir: (user.perfil === 'administrador' || (user.perfil === 'chefe' && !!user.secao_id)) && emCurso,
     };
   };
   const NAO_GERE = 'Só quem criou a ação pode editá-la ou excluí-la: o chefe, as que ele (ou o seu suplente) criou; o Diretor e o Diretor Adjunto, as que direcionaram.';
   const chefeGere = (user, acao) => {
-    if (user.perfil === 'administrador') return; // o Administrador age em qualquer seção
-    if (user.perfil !== 'chefe' || !user.secao_id) {
-      throw falha(403, 'Somente o chefe da seção responsável pode alterar esta ação.');
-    }
+    if (executa(user, acao)) return;
+    throw falha(403, user.perfil === 'membro'
+      ? 'Você altera apenas as ações atribuídas a você ou criadas por você. Fale com o chefe da seção.'
+      : 'Somente o chefe da seção responsável pode alterar esta ação.');
   };
 
 
@@ -329,6 +413,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       params.push(...ids);
     }
     if (STATUS_OK.has(f.status)) { where.push('a.status = ?'); params.push(f.status); }
+    if (f.origem === 'externa') where.push('a.demandante_externo is not null'); // demandas de entidades fora da subordinação ao Diretor
     if (ehISO(f.prazo)) { where.push('a.prazo = ?'); params.push(f.prazo); } // usado ao direcionar: ações já planejadas para o mesmo dia
     const sit = f.situacao || 'abertas';
     if (sit === 'arquivadas') {
@@ -347,13 +432,13 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       .map((a) => ({ ...acaoOut(a), ...permissoes(req.user, a) }))));
   }));
 
-  app.post('/api/acoes', permit('chefe', 'diretor', 'apoio', 'administrador'), h(async (req, res) => {
+  app.post('/api/acoes', permit('chefe', 'membro', 'diretor', 'apoio', 'administrador'), h(async (req, res) => {
     const b = req.body || {};
     const titulo = texto(b.titulo, 140);
     if (!titulo) throw falha(400, 'Informe o título da ação.');
     if (!ehISO(b.prazo)) throw falha(400, 'Informe o prazo da ação.');
     const prioridade = PRIORIDADES.includes(b.prioridade) ? b.prioridade : 'media';
-    const secaoId = req.user.perfil === 'chefe' ? req.user.secao_id : Number(b.secao_id);
+    const secaoId = deSecao(req.user) ? req.user.secao_id : Number(b.secao_id);
     if (!secaoId) throw falha(400, 'Seção não informada.');
     if (!(await q1('select id from secoes where id = ? and ativa = 1', secaoId))) {
       throw falha(409, 'A seção precisa estar ativa para receber ações.');
@@ -363,18 +448,27 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     if (b.demanda_diretor !== undefined && typeof b.demanda_diretor !== 'boolean') throw falha(400, 'Informe se a ação é demanda do Diretor.');
     const demanda = b.demanda_diretor === true ? 1 : 0;
     if (demanda && interna) throw falha(400, 'Uma demanda do Diretor deve ser visível na pauta. Desmarque ação interna.');
+    const externo = lerDemandanteExterno(b.demandante_externo) ?? null;
+    if (externo === '') throw falha(400, 'Informe o nome da entidade que demandou a ação.');
+    if (externo && demanda) throw falha(400, 'Uma ação não pode ser, ao mesmo tempo, demanda do Diretor e de entidade externa. Escolha uma origem.');
+    if (externo && interna) throw falha(400, 'Uma demanda externa deve ficar visível ao Diretor. Desmarque ação interna.');
+    const responsavel = (await escolherResponsavel(secaoId, b.responsavel_id)) ?? null;
+    if (responsavel && !['chefe', 'administrador'].includes(req.user.perfil)) throw falha(403, 'Só o chefe da seção atribui ações a outras pessoas.');
     res.status(201);
     // Criada por quem não é da seção (Diretor, Apoio, Administrador sem vínculo com ela): chega como nova.
     const quando = agoraISO();
-    const recebida = req.user.perfil !== 'chefe' && req.user.secao_id !== secaoId ? quando : null;
+    const recebida = !deSecao(req.user) && req.user.secao_id !== secaoId ? quando : null;
+    const { atribuido_por: atribuidoPor, atribuida_em: atribuidaEm } = atribuicao(req.user, responsavel, quando);
     const id = (await run(
-      `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, interna, criada_em, criado_por, demanda_diretor, recebida_em)
-       values (null, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      secaoId, titulo, detalhe, b.prazo, b.prazo, prioridade, interna, quando, req.user.id, demanda, recebida,
+      `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, interna, criada_em, criado_por, demanda_diretor, recebida_em,
+         responsavel_id, atribuido_por, atribuida_em, demandante_externo)
+       values (null, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      secaoId, titulo, detalhe, b.prazo, b.prazo, prioridade, interna, quando, req.user.id, demanda, recebida, responsavel, atribuidoPor, atribuidaEm, externo,
     )).lastInsertRowid;
+    const nomeResp = responsavel ? (await q1('select nome from usuarios where id = ?', responsavel)).nome : null;
     await run(
       'insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
-      id, req.user.id, `Ação criada pela seção (${req.user.nome}).${demanda ? ' Demanda do Diretor informada pela seção.' : ''}`, agoraISO(),
+      id, req.user.id, `Ação criada pela seção (${req.user.nome}).${demanda ? ' Demanda do Diretor informada pela seção.' : ''}${externo ? ` Demanda de ${externo} (fora da subordinação ao Diretor).` : ''}${nomeResp ? ` Atribuída a ${nomeResp}.` : ''}`, agoraISO(),
     );
     return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, id));
   }));
@@ -403,7 +497,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     }
   }));
 
-  app.post('/api/acoes/:id/arquivar', h(async (req) => {
+  app.post('/api/acoes/:id/arquivar', permit('chefe', 'administrador'), h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     await chefeGere(req.user, a);
     if (a.diretriz_id && req.user.perfil !== 'administrador') {
@@ -415,7 +509,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id));
   }));
 
-  app.post('/api/acoes/:id/desarquivar', h(async (req) => {
+  app.post('/api/acoes/:id/desarquivar', permit('chefe', 'administrador'), h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     await chefeGere(req.user, a);
     if (!(await q1('select id from secoes where id = ? and ativa = 1', a.secao_id))) {
@@ -454,7 +548,10 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       lancamentos,
       pedidos,
       impedimentos: impedimentos.map(impedimentoOut),
-      checklist: checklist.map(checklistOut),
+      checklist: checklist.map((c) => ({
+        ...checklistOut(c),
+        pode_marcar: !a.encerrada && (acao.pode_executar || (req.user.perfil === 'membro' && !acao.somente_leitura && c.responsavel_id === req.user.id)),
+      })),
     };
   }));
 
@@ -471,18 +568,43 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const autor = ehAutor(req.user, a);
     // Status é da execução: o chefe da seção (ou o Administrador). Prioridade: quem executa ou o autor.
     // Título, detalhamento e prazo: só o autor (ver ehAutor e permissoes).
-    const edicao = ['titulo', 'detalhe', 'prazo', 'demanda_diretor'].some((k) => k in b);
+    const edicao = ['titulo', 'detalhe', 'prazo', 'demanda_diretor', 'demandante_externo'].some((k) => k in b);
     if (edicao && !autor) throw falha(403, NAO_GERE);
     if (b.status !== undefined || (b.prioridade !== undefined && !autor)) await chefeGere(req.user, a);
     if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
+
+    // Atribuir a ação a alguém da seção: o chefe (ou o Administrador), enquanto ela está em curso. Mudar o responsável
+    // recomeça a validação do chefe, que depende de quem executa.
+    if ('responsavel_id' in b) {
+      if (!(req.user.perfil === 'administrador' || (req.user.perfil === 'chefe' && req.user.secao_id))) throw falha(403, 'Só o chefe da seção atribui a ação a outra pessoa.');
+      if (a.arquivada || a.status === 'concluida') throw falha(409, 'Só dá para mudar o responsável de uma ação em curso. Reabra a ação antes.');
+      const rid = (await escolherResponsavel(a.secao_id, b.responsavel_id)) ?? null;
+      if (rid !== (a.responsavel_id ?? null)) {
+        const at = atribuicao(req.user, rid, agoraISO());
+        await db.transaction(async () => {
+          await run('update acoes set responsavel_id = ?, atribuido_por = ?, atribuida_em = ?, validada_chefe_em = null, validada_chefe_por = null where id = ?',
+            rid, at.atribuido_por, at.atribuida_em, a.id);
+          const novoNome = rid ? (await q1('select nome from usuarios where id = ?', rid)).nome : null;
+          await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
+            a.id, req.user.id, `Responsável: ${a.responsavel_nome || 'sem responsável'} → ${novoNome || 'sem responsável'}.`, agoraISO());
+        });
+      }
+    }
 
     if (edicao) {
       if ('demanda_diretor' in b && typeof b.demanda_diretor !== 'boolean') throw falha(400, 'Informe se a ação é demanda do Diretor.');
       if ('demanda_diretor' in b && a.diretriz_id) throw falha(409, 'A origem desta ação vem de uma diretriz e não pode ser alterada pela marcação.');
       const demanda = 'demanda_diretor' in b ? Number(b.demanda_diretor) : a.demanda_diretor;
       const demandaMudou = demanda !== a.demanda_diretor;
+      // Demanda de entidade fora da subordinação ao Diretor: nome livre; `null` remove a marcação.
+      if ('demandante_externo' in b && a.diretriz_id) throw falha(409, 'A origem desta ação vem de uma diretriz do Diretor e não pode ser alterada pela marcação.');
+      const externoLido = 'demandante_externo' in b ? lerDemandanteExterno(b.demandante_externo) : a.demandante_externo;
+      if (externoLido === '') throw falha(400, 'Informe o nome da entidade que demandou a ação.');
+      const externo = externoLido || null;
+      const externoMudou = externo !== (a.demandante_externo || null);
+      if (externo && demanda) throw falha(400, 'Uma ação não pode ser, ao mesmo tempo, demanda do Diretor e de entidade externa. Escolha uma origem.');
       // Marcar a origem torna a ação visível à gestão, conforme explicado no formulário.
-      const interna = demandaMudou && demanda ? 0 : a.interna;
+      const interna = (demandaMudou && demanda) || (externoMudou && externo) ? 0 : a.interna;
       const titulo = 'titulo' in b ? texto(b.titulo, 160) : a.titulo;
       if (!titulo) throw falha(400, 'O título da ação não pode ficar vazio.');
       const detalhe = 'detalhe' in b ? (texto(b.detalhe, 2000) || null) : a.detalhe;
@@ -499,10 +621,11 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       const mudou = [titulo !== a.titulo && 'título', (detalhe || null) !== (a.detalhe || null) && 'detalhamento',
         prazoMudou && `prazo (de ${br(a.prazo)} para ${br(prazo)})`,
         demandaMudou && (demanda ? 'demanda do Diretor sinalizada pela seção' : 'marcação de demanda do Diretor removida'),
+        externoMudou && (externo ? `demanda de ${externo} (fora da subordinação ao Diretor)` : 'marcação de demanda externa removida'),
         interna !== a.interna && 'ação passou a ser visível ao Diretor'].filter(Boolean);
       if (mudou.length) {
         await db.transaction(async () => {
-          await run('update acoes set titulo = ?, detalhe = ?, prazo = ?, demanda_diretor = ?, interna = ? where id = ?', titulo, detalhe, prazo, demanda, interna, a.id);
+          await run('update acoes set titulo = ?, detalhe = ?, prazo = ?, demanda_diretor = ?, interna = ?, demandante_externo = ? where id = ?', titulo, detalhe, prazo, demanda, interna, externo, a.id);
           // Toda mudança de prazo guarda o anterior; prazo_original continua sendo o primeiro.
           if (prazoMudou) {
             await run(`insert into acao_prazos (acao_id, prazo_anterior, prazo_novo, origem, alterado_em, alterado_por)
@@ -527,7 +650,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         if (!TRANSICOES[a.status].includes(novo)) throw falha(409, 'Essa mudança de status não é permitida a partir do status atual.');
         if (novo === 'concluida' && a.tempo_total <= 0) throw falha(422, 'Informe o tempo gasto, em minutos, antes de concluir a ação.');
         await db.transaction(async () => {
-          await run('update acoes set status = ?, concluida_em = ? where id = ?', novo, novo === 'concluida' ? agoraISO() : null, a.id);
+          // Mudar o status recomeça a validação do chefe: ela vale para a conclusão que ele viu.
+          await run('update acoes set status = ?, concluida_em = ?, validada_chefe_em = null, validada_chefe_por = null where id = ?', novo, novo === 'concluida' ? agoraISO() : null, a.id);
           // Ação concluída não tem mais o que travar: os impedimentos abertos são encerrados, e o histórico fica.
           if (novo === 'concluida') {
             await run('update impedimentos set resolvido_em = ?, resolvido_por = ?, resolucao = ? where acao_id = ? and resolvido_em is null',
@@ -560,16 +684,20 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id));
   }));
 
-  app.post('/api/acoes/:id/comentarios', permit('chefe', 'diretor', 'apoio', 'administrador'), h(async (req, res) => {
+  app.post('/api/acoes/:id/comentarios', permit('chefe', 'membro', 'diretor', 'apoio', 'administrador'), h(async (req, res) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     const t = texto(req.body?.texto, 1000);
     if (!t) throw falha(400, 'Escreva o comentário.');
+    if (req.user.perfil === 'membro' && !executa(req.user, a) && !(await q1('select 1 from acao_checklist where acao_id = ? and responsavel_id = ?', a.id, req.user.id))) {
+      throw falha(403, 'Você comenta nas ações atribuídas a você, criadas por você ou que tenham tarefa sua.');
+    }
     await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id, t, agoraISO());
     res.status(201);
     return { ok: true };
   }));
 
-  app.post('/api/acoes/:id/pedido-prazo', h(async (req, res) => {
+  // O pedido de novo prazo vai ao Diretor e é feito pelo chefe; o membro pede ao chefe, pelos comentários.
+  app.post('/api/acoes/:id/pedido-prazo', permit('chefe', 'administrador'), h(async (req, res) => {
     const id = Number(req.params.id);
     await chefeGere(req.user, await acaoVisivel(req.user, id));
     await db.transaction(async () => {
@@ -592,8 +720,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   // ---------- Impedimentos da ação ----------
   // Histórico com ciclo aberto → resolvido; nunca editado nem excluído (correção = resolver e registrar outro).
   // O chefe age na própria árvore; Diretor, Apoio e Administrador, em qualquer ação que possam ver.
-  const perfisImpedimento = permit('chefe', 'diretor', 'apoio', 'administrador');
-  const podeAgirNoImpedimento = async (user, acao) => { if (user.perfil === 'chefe') await chefeGere(user, acao); };
+  const perfisImpedimento = permit('chefe', 'membro', 'diretor', 'apoio', 'administrador');
+  const podeAgirNoImpedimento = async (user, acao) => { if (deSecao(user)) await chefeGere(user, acao); };
 
   app.post('/api/acoes/:id/impedimentos', perfisImpedimento, h(async (req, res) => {
     const id = Number(req.params.id);
@@ -665,12 +793,24 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const v = await visiveisAcoes(req.user);
     const lista = await q(`select c.id, c.acao_id, c.texto, c.data, c.concluido, c.responsavel_id, u.nome as responsavel_nome,
         a.titulo as acao_titulo, a.status as acao_status, a.secao_id, s.sigla as secao_sigla, s.nome as secao_nome,
+        a.responsavel_id as acao_responsavel_id, a.criado_por as acao_criado_por,
         (${v.where}) as acao_visivel
       from acao_checklist c join acoes a on a.id = c.acao_id join secoes s on s.id = a.secao_id
         left join usuarios u on u.id = c.responsavel_id
       where a.arquivada = 0 and a.encerrada = 0 and ((${v.where}) or c.responsavel_id = ?)
       order by c.acao_id, c.ordem, c.id`, ...v.params, ...v.params, req.user.id);
-    return lista.map((t) => ({ ...checklistOut(t), acao_visivel: !!t.acao_visivel })).sort(porDataDaTarefa);
+    // Quem pode marcar a tarefa como feita: quem executa a ação (o chefe, o Administrador, o membro dono ou autor da
+    // ação) e o membro a quem a própria tarefa foi atribuída.
+    const marca = (t) => !!t.acao_visivel && (req.user.perfil === 'administrador' || (req.user.perfil === 'chefe' && !!req.user.secao_id)
+      || (req.user.perfil === 'membro' && (t.responsavel_id === req.user.id || t.acao_responsavel_id === req.user.id || t.acao_criado_por === req.user.id)));
+    return lista.map((t) => ({ ...checklistOut(t), acao_visivel: !!t.acao_visivel, pode_marcar: marca(t) })).sort(porDataDaTarefa);
+  }));
+
+  // Quem pode ser o responsável pela ação: chefes, membros e (na Diretoria Adjunta) Administradores da seção e subseções.
+  app.get('/api/acoes/:id/executores', permit('chefe', 'administrador'), h(async (req) => {
+    const a = await acaoVisivel(req.user, Number(req.params.id));
+    await chefeGere(req.user, a);
+    return executoresDa(a);
   }));
 
   app.get('/api/acoes/:id/responsaveis', h(async (req) => {
@@ -698,11 +838,14 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const id = Number(req.params.id);
     const iid = Number(req.params.iid);
     const a = await acaoVisivel(req.user, id);
-    await chefeGere(req.user, a);
-    if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
     const item = await q1('select * from acao_checklist where id = ? and acao_id = ?', iid, a.id);
+    // O membro que não executa a ação, mas tem uma tarefa atribuída nela, marca essa tarefa como feita ou a reabre.
+    const soMarcar = req.user.perfil === 'membro' && !executa(req.user, a) && !!item && item.responsavel_id === req.user.id;
+    if (!soMarcar) await chefeGere(req.user, a);
+    if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
     if (!item) throw falha(404, 'Tarefa não encontrada.');
     const b = req.body || {};
+    if (soMarcar && Object.keys(b).some((k) => k !== 'concluido')) throw falha(403, 'Na tarefa atribuída a você, só dá para marcar como feita ou reabrir. O resto fica com quem executa a ação.');
     if ('texto' in b) {
       const t = texto(b.texto, 200);
       if (!t) throw falha(400, 'A tarefa não pode ficar vazia.');
@@ -763,19 +906,48 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     });
   }));
 
+  // Aceite do Diretor: só das ações demandadas por ele, e depois da validação do chefe quando a ação foi delegada a um
+  // membro. O Administrador age em qualquer etapa.
   app.post('/api/acoes/:id/encerrar', permit('diretor', 'administrador'), h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     if (a.status !== 'concluida') throw falha(409, 'Só é possível encerrar uma ação concluída.');
+    if (req.user.perfil === 'diretor') {
+      const v = validacaoDe(a);
+      if (v.aguardando_validacao === 'chefe') throw falha(409, 'Esta ação ainda aguarda a validação do chefe da seção. O seu aceite vem depois.');
+      if (!v.exige_validacao_diretor) throw falha(409, 'Esta ação não foi demandada pelo Diretor: ela fica pronta ao ser concluída e não precisa do seu aceite.');
+    }
     await run('update acoes set encerrada = 1 where id = ?', a.id);
     return { ok: true };
   }));
-  app.post('/api/acoes/:id/devolver', permit('diretor', 'administrador'), h(async (req) => {
+  // Validação do chefe: a ação que ele atribuiu a um membro só fica pronta (ou segue para o aceite do Diretor, se for
+  // demanda dele) depois que o chefe da seção confere o que o membro concluiu.
+  app.post('/api/acoes/:id/validar', permit('chefe', 'administrador'), h(async (req) => {
+    const a = await acaoVisivel(req.user, Number(req.params.id));
+    await chefeGere(req.user, a);
+    if (!validacaoDe(a).exige_validacao_chefe) throw falha(409, 'Esta ação não foi atribuída a um membro da equipe: não há o que validar.');
+    if (a.encerrada || a.status !== 'concluida') throw falha(409, 'Só dá para validar uma ação concluída.');
+    if (a.validada_chefe_em) throw falha(409, 'Esta ação já foi validada.');
+    await run('update acoes set validada_chefe_em = ?, validada_chefe_por = ? where id = ?', agoraISO(), req.user.id, a.id);
+    await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id, `Validada pelo chefe (${req.user.nome}).`, agoraISO());
+    return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id));
+  }));
+  // Devolver para ajuste: cada um devolve a etapa que lhe cabe (o chefe, a que aguarda a validação dele; o Diretor, a
+  // que aguarda o aceite dele). A ação volta a "em andamento" e a validação recomeça.
+  app.post('/api/acoes/:id/devolver', permit('chefe', 'diretor', 'administrador'), h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     const t = texto(req.body?.comentario, 1000);
     if (!t) throw falha(400, 'Explique o que falta para a ação ser aceita.');
     if (a.status !== 'concluida') throw falha(409, 'Só é possível devolver uma ação concluída.');
-    await run(`update acoes set status = 'em_andamento', concluida_em = null, encerrada = 0 where id = ?`, a.id);
-    await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id, `Devolvida pel${req.user.perfil === 'administrador' ? 'o Administrador' : 'o Diretor'}: ${t}`, agoraISO());
+    const etapa = validacaoDe(a).aguardando_validacao;
+    if (req.user.perfil === 'chefe') {
+      await chefeGere(req.user, a);
+      if (etapa !== 'chefe') throw falha(409, 'Só dá para devolver a ação que aguarda a sua validação.');
+    } else if (req.user.perfil === 'diretor' && etapa !== 'diretor') {
+      throw falha(409, etapa === 'chefe' ? 'Esta ação ainda aguarda a validação do chefe da seção.' : 'Esta ação não aguarda o aceite do Diretor.');
+    }
+    await run(`update acoes set status = 'em_andamento', concluida_em = null, encerrada = 0, validada_chefe_em = null, validada_chefe_por = null where id = ?`, a.id);
+    const quem = { administrador: 'o Administrador', diretor: 'o Diretor', chefe: `o chefe (${req.user.nome})` }[req.user.perfil];
+    await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id, `Devolvida pel${quem}: ${t}`, agoraISO());
     return { ok: true };
   }));
 

@@ -20,7 +20,7 @@ export async function acoesDosCentros(raiz) {
       <button type="button" class="btn btn-sec filtros-alternar" aria-expanded="false" aria-controls="c-filtros">Filtros</button>
       <div class="filtros-extra linha" id="c-filtros" style="margin:0">
         <div style="min-width:170px"><label for="c-secao">Seção</label><select id="c-secao"><option value="">Todas</option></select></div>
-        <div style="min-width:170px"><label for="c-sit">Situação</label><select id="c-sit"><option value="abertas">Abertas</option><option value="atrasadas">Atrasadas</option><option value="concluidas">Concluídas (aguardando aceite)</option><option value="encerradas">Encerradas</option></select></div>
+        <div style="min-width:170px"><label for="c-sit">Situação</label><select id="c-sit"><option value="abertas">Abertas</option><option value="atrasadas">Atrasadas</option><option value="concluidas">Concluídas</option><option value="encerradas">Encerradas</option></select></div>
         <div style="min-width:170px"><label for="c-status">Status</label><select id="c-status"><option value="">Qualquer</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       </div></div>
       <div class="tabela-rolagem" id="c-lista"></div></div>`;

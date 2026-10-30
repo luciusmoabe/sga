@@ -226,7 +226,8 @@ export async function acoes(raiz, _p) {
       <button type="button" class="btn btn-sec filtros-alternar" aria-expanded="false" aria-controls="filtros-extra">Filtros</button>
       <div class="filtros-extra linha" id="filtros-extra" style="margin:0">
       <div style="min-width:170px"><label for="f-secao">Seção</label><select id="f-secao"><option value="">Todas</option>${secoes.map((s) => `<option value="${s.id}">${esc(s.sigla || s.nome)}</option>`).join('')}</select></div>
-      <div style="min-width:170px"><label for="f-sit">Situação</label><select id="f-sit"><option value="abertas">Abertas</option><option value="atrasadas">Atrasadas</option><option value="concluidas">Concluídas (aguardando aceite)</option><option value="encerradas">Encerradas</option></select></div>
+      <div style="min-width:170px"><label for="f-sit">Situação</label><select id="f-sit"><option value="abertas">Abertas</option><option value="atrasadas">Atrasadas</option><option value="concluidas">Concluídas</option><option value="encerradas">Encerradas</option></select></div>
+      <div style="min-width:170px"><label for="f-origem">Origem</label><select id="f-origem"><option value="">Qualquer</option><option value="externa">Demanda externa</option></select></div>
       <div style="min-width:170px"><label for="f-status">Status</label><select id="f-status"><option value="">Qualquer</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       </div></div>
       <div class="tabela-rolagem" id="lista-acoes"></div></div>`;
@@ -237,14 +238,14 @@ export async function acoes(raiz, _p) {
   });
   const carregar = async () => {
     const p = new URLSearchParams();
-    for (const [k, id] of [['secao', 'f-secao'], ['situacao', 'f-sit'], ['status', 'f-status'], ['q', 'f-q']]) if ($(`#${id}`, raiz).value) p.set(k, $(`#${id}`, raiz).value);
+    for (const [k, id] of [['secao', 'f-secao'], ['situacao', 'f-sit'], ['status', 'f-status'], ['origem', 'f-origem'], ['q', 'f-q']]) if ($(`#${id}`, raiz).value) p.set(k, $(`#${id}`, raiz).value);
     const lista = await get(`/acoes?${p}`);
     $('#lista-acoes', raiz).innerHTML = lista.length ? `<table class="tabela-lista"><thead><tr><th>Ação</th><th>Seção</th><th>Prazo</th><th>Situação</th><th>Tempo</th></tr></thead><tbody>
       ${lista.map((a) => `<tr class="clicavel" data-acao="${a.id}" tabindex="0"><td><b>${esc(a.titulo)}</b> ${a.demandada_diretor ? '<span class="pilula diretor">Diretriz</span> ' : ''}<span class="pilula prio-${a.prioridade}">${PRIO[a.prioridade]}</span></td>
         <td data-rotulo="Seção">${esc(a.secao_sigla)}</td><td class="num" data-rotulo="Prazo">${br(a.prazo)}</td><td data-rotulo="Situação">${pilulaStatus(a)}${a.pedido_pendente ? ' <span class="pilula">Pediu novo prazo</span>' : ''}</td>
         <td class="num" data-rotulo="Tempo">${fmtMin(a.tempo_total)}</td></tr>`).join('')}</tbody></table>` : vazio('Nenhuma ação encontrada', 'Ajuste os filtros ou direcione uma nova ação.');
   };
-  for (const id of ['f-secao', 'f-sit', 'f-status']) $(`#${id}`, raiz).addEventListener('change', carregar);
+  for (const id of ['f-secao', 'f-sit', 'f-status', 'f-origem']) $(`#${id}`, raiz).addEventListener('change', carregar);
   let t;
   $('#f-q', raiz).addEventListener('input', () => { clearTimeout(t); t = setTimeout(carregar, 250); });
   const abrir = (el) => abrirAcao(el.dataset.acao, () => { carregar(); }).catch((e) => toast(e.message, 'erro'));

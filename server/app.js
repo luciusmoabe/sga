@@ -47,6 +47,24 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
     if (req.user?.perfil !== 'consulta' || (req.method === 'GET' && LEITURA_CONSULTA.some((r) => r.test(req.path)))) return next();
     next(falha(403, 'O perfil Consulta só permite ler as ações dos Centros.'));
   });
+  // Membro da equipe: lê as ações e tarefas da sua seção e age só no que é dele. Lista fechada, como a da Consulta: o
+  // que não está aqui (relatos, reuniões, atas, combinados, estrutura, contas, aceite, validação, arquivar, redirecionar e
+  // pedir prazo) responde 403 mesmo que a rota, por descuido, não confira o perfil. Quem pode o quê em cada ação é
+  // decidido dentro das rotas (executa/ehAutor em rotas-acoes.js).
+  const ROTAS_MEMBRO = [
+    ['GET', /^\/(bootstrap|secoes|tarefas|avisos\/atual)$/],
+    ['GET', /^\/acoes(\/\d+(\/(responsaveis|executores))?)?$/],
+    ['POST', /^\/acoes$/],
+    ['PATCH', /^\/acoes\/\d+$/],
+    ['DELETE', /^\/acoes\/\d+$/],
+    ['POST', /^\/acoes\/\d+\/(tempo|comentarios|vista|checklist|impedimentos|impedimentos\/\d+\/resolver)$/],
+    ['PATCH', /^\/acoes\/\d+\/checklist\/\d+$/],
+    ['DELETE', /^\/acoes\/\d+\/checklist\/\d+$/],
+  ];
+  app.use('/api', (req, res, next) => {
+    if (req.user?.perfil !== 'membro' || ROTAS_MEMBRO.some(([metodo, rota]) => req.method === metodo && rota.test(req.path))) return next();
+    next(falha(403, 'O seu perfil de membro da equipe não dá acesso a esta função. Fale com o chefe da seção.'));
+  });
 
   rotasEstrutura(app, { ...ctx, auth, adminAuth: contas });
   const { criarDiretriz, SELECT_ACAO, acaoOut } = rotasAcoes(app, ctx);

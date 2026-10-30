@@ -10,22 +10,35 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     // Consultas independentes em paralelo; as contagens alimentam os selos do menu sem uma requisição a mais:
     // pedidos de prazo pendentes, para a gestão; ações recebidas ainda não abertas, para quem as recebe.
     const recebe = req.user.secao_id && ['chefe', 'administrador'].includes(req.user.perfil);
-    const [{ dia, hora, config }, secao, pedidos, novas] = await Promise.all([
+    const arvore = recebe ? subarvore(db, req.user.secao_id) : null;
+    const [{ dia, hora, config }, secao, pedidos, novas, aValidar] = await Promise.all([
       cfgReuniao(),
       req.user.secao_id ? q1('select id, nome, sigla, tipo from secoes where id = ?', req.user.secao_id) : null,
-      ['chefe', 'consulta'].includes(req.user.perfil) ? null : q1(
+      ['chefe', 'membro', 'consulta'].includes(req.user.perfil) ? null : q1(
         `select count(*) n from pedidos_prazo p join acoes a on a.id = p.acao_id
          where p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and (${req.user.perfil === 'administrador' ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'})`),
-      recebe ? subarvore(db, req.user.secao_id).then((ids) => q1(
+      recebe ? arvore.then((ids) => q1(
         `select count(*) n from acoes a where a.secao_id in (${marks(ids)}) and a.recebida_em is not null
            and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
            and not exists (select 1 from acao_vistas v where v.acao_id = a.id and v.usuario_id = ? and v.vista_em >= a.recebida_em)`,
-        ...ids, req.user.id)) : null,
+        ...ids, req.user.id))
+        // O membro recebe a ação quando o chefe a atribui a ele: nova até ele abrir o detalhe.
+        : req.user.perfil === 'membro' ? q1(
+          `select count(*) n from acoes a where a.responsavel_id = ? and a.atribuida_em is not null
+             and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
+             and not exists (select 1 from acao_vistas v where v.acao_id = a.id and v.usuario_id = ? and v.vista_em >= a.atribuida_em)`,
+          req.user.id, req.user.id) : null,
+      // Ações que o chefe atribuiu a membros e eles concluíram: aguardam a validação dele.
+      recebe ? arvore.then((ids) => q1(
+        `select count(*) n from acoes a join usuarios r on r.id = a.responsavel_id and r.perfil = 'membro'
+         where a.secao_id in (${marks(ids)}) and a.status = 'concluida' and a.encerrada = 0 and a.arquivada = 0
+           and a.atribuido_por is not null and a.atribuido_por != a.responsavel_id and a.validada_chefe_em is null`, ...ids)) : null,
     ]);
     const semana = refDiaReuniao(agora(), dia, HORA_CORTE_PADRAO);
     return {
       pedidos_pendentes: Number(pedidos?.n ?? 0),
       acoes_novas: Number(novas?.n ?? 0),
+      acoes_a_validar: Number(aValidar?.n ?? 0),
       user: req.user,
       csrf: req.csrf,
       secao,

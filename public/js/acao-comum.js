@@ -59,9 +59,9 @@ const impedimentoHTML = (i, podeResolver = true) => `<div class="impedimento ${i
 </div>`;
 
 // ---------- Tarefas da ação (apoio ao chefe; quem registra tempo e muda status também mexe aqui) ----------
-/** Mesma regra de quem gerencia tempo e status: o chefe da seção (se enxerga a ação, é da sua árvore) e o Administrador. */
-const podeGerirTarefas = () => est.user?.perfil === 'chefe' || ehAdmin();
-const gereChecklist = (a) => podeGerirTarefas() && !a.encerrada && !a.somente_leitura;
+/** Quem executa a ação (o chefe da seção, o Administrador e o membro a quem ela foi atribuída ou que a criou) cria, edita
+ *  e exclui tarefas. Marcar como feita vale também para o membro dono da tarefa: o servidor diz em `pode_marcar`. */
+const gereChecklist = (a) => !!a.pode_executar && !a.encerrada && !a.somente_leitura;
 const opcoesResponsavel = (responsaveis, escolhido) => `<option value="">Sem responsável</option>${responsaveis.map((u) =>
   `<option value="${u.id}" ${u.id === escolhido ? 'selected' : ''}>${esc(u.nome)}${u.secao_sigla ? ` (${esc(u.secao_sigla)})` : ''}</option>`).join('')}`;
 /** Data e responsável da tarefa, sempre em texto (não só cor): "Atrasada" quando a data passou e ela não foi feita. */
@@ -69,7 +69,7 @@ const tarefaMetaHTML = (it) => `<div class="tarefa-meta">
   ${it.data ? `<span class="${it.atrasada ? 'tarefa-atrasada' : ''}">${it.atrasada ? 'Atrasada · ' : ''}<span class="num">${br(it.data)}</span></span>` : '<span>Sem data</span>'}
   <span aria-hidden="true">·</span><span>${it.responsavel_nome ? esc(it.responsavel_nome) : 'Sem responsável'}</span></div>`;
 const checklistItemHTML = (it, editavel) => `<div class="item previsto tarefa" data-checklist-id="${it.id}">
-  <input type="checkbox" aria-label="${it.concluido ? 'Reabrir' : 'Concluir'} tarefa: ${esc(it.texto)}" data-marcar-check="${it.id}" ${it.concluido ? 'checked' : ''} ${editavel ? '' : 'disabled'}>
+  <input type="checkbox" aria-label="${it.concluido ? 'Reabrir' : 'Concluir'} tarefa: ${esc(it.texto)}" data-marcar-check="${it.id}" ${it.concluido ? 'checked' : ''} ${it.pode_marcar ? '' : 'disabled'}>
   <div class="tarefa-corpo">
     ${editavel ? `<button type="button" class="checklist-texto" data-editar-check="${it.id}" title="Editar tarefa" style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</button>` : `<span style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</span>`}
     ${tarefaMetaHTML(it)}
@@ -127,6 +127,58 @@ export async function confirmarPrazoNasSecoes({ todos, secoes, prazo }) {
   });
 }
 
+// ---------- Origem da ação: demanda do Diretor ou de entidade fora da subordinação a ele ----------
+/** Uma origem só: nunca as duas. O nome da entidade é obrigatório quando a marcação está ligada. */
+export const origemCamposHTML = ({ diretor = false, externo = '' } = {}) => `
+  <div class="escolha"><label><input type="checkbox" name="demanda_diretor" value="1" ${diretor ? 'checked' : ''}> Demanda do Diretor</label></div>
+  <div class="escolha" style="margin-top:8px"><label><input type="checkbox" name="demanda_externa" value="1" ${externo ? 'checked' : ''}> Demanda de entidade fora da subordinação ao Diretor</label></div>
+  <div class="campo origem-externa" style="margin-top:8px" ${externo ? '' : 'hidden'}><label for="origem-externo">Quem demandou</label>
+    <input id="origem-externo" name="demandante_externo" maxlength="120" value="${esc(externo)}" placeholder="Ex.: Tribunal de Contas do Estado"></div>`;
+/** Liga as duas marcações entre si (marcar uma desmarca a outra) e mostra o campo do nome só quando preciso. */
+export function ligarOrigem(raiz) {
+  const dir = raiz.querySelector('[name="demanda_diretor"]');
+  const ext = raiz.querySelector('[name="demanda_externa"]');
+  const campo = raiz.querySelector('.origem-externa');
+  if (!dir || !ext || !campo) return;
+  dir.addEventListener('change', () => { if (dir.checked) ext.checked = false; campo.hidden = !ext.checked; });
+  ext.addEventListener('change', () => {
+    if (ext.checked) dir.checked = false;
+    campo.hidden = !ext.checked;
+    if (ext.checked) campo.querySelector('input').focus();
+  });
+}
+/** Lê a origem escolhida no formulário. */
+export function lerOrigem(d) {
+  const externa = d.demanda_externa === '1';
+  const nome = (d.demandante_externo || '').trim();
+  if (externa && !nome) throw new Error('Informe o nome da entidade que demandou a ação.');
+  if (externa && d.demanda_diretor === '1') throw new Error('Escolha uma origem só: demanda do Diretor ou de entidade externa.');
+  return { demanda_diretor: d.demanda_diretor === '1', demandante_externo: externa ? nome : null };
+}
+
+// ---------- Validação de quem delegou ----------
+/** O chefe confere o que o membro concluiu. */
+export async function validarAcao(id) {
+  await post(`/acoes/${id}/validar`);
+  toast('Ação validada.');
+  selosMudaram();
+}
+/** Devolve a ação concluída para ajuste, com o motivo (o chefe, na etapa dele; o Diretor, na dele). */
+export function devolverAcao(a, aoConcluir) {
+  abrirForm({
+    titulo: 'Devolver para ajuste',
+    corpo: `<p class="suave pequeno">Ação: <b>${esc(a.titulo)}</b></p>
+      <div class="campo"><label for="dev">O que falta para a ação ser aceita?</label><textarea id="dev" name="comentario" required></textarea></div>`,
+    rotulo: 'Devolver',
+    aoEnviar: async (d) => {
+      await post(`/acoes/${a.id}/devolver`, { comentario: d.comentario });
+      toast(`Ação devolvida${a.responsavel_nome ? ` a ${a.responsavel_nome}` : ''}.`);
+      selosMudaram();
+      await aoConcluir?.();
+    },
+  });
+}
+
 // ---------- Editar a ação (título, detalhamento, prazo) ----------
 /** Só quem criou a ação edita (o servidor confere e informa em `pode_editar` e `pode_mudar_prazo`): o chefe, as
  *  que ele ou o suplente criou; o Diretor e o Diretor Adjunto, as que direcionaram. Ação já apresentada em reunião
@@ -141,14 +193,19 @@ export function abrirEditarAcao(a, aoConcluir) {
       <div class="campo"><label for="ea-detalhe">Detalhamento (opcional)</label><textarea id="ea-detalhe" name="detalhe" maxlength="2000">${esc(a.detalhe || '')}</textarea></div>`}
       <div class="campo"><label for="ea-prazo">Prazo</label><input id="ea-prazo" type="date" name="prazo" required value="${esc(a.prazo)}" ${a.pode_mudar_prazo ? '' : 'disabled'}>
         <div class="dica">${a.prazo !== a.prazo_original ? `Prazo original: ${br(a.prazo_original)}. ` : ''}A mudança de prazo fica registrada no histórico da ação.</div></div>
-      ${a.pode_mudar_demanda ? `<div class="escolha"><label><input type="checkbox" name="demanda_diretor" value="1" ${a.demanda_diretor ? 'checked' : ''}> Demanda do Diretor</label></div><p class="suave pequeno">A origem será informada pela seção e a alteração ficará no histórico.${a.interna ? ' Ao marcar, esta ação deixará de ser interna e ficará visível ao Diretor.' : ''}</p>` : ''}`,
+      ${a.pode_mudar_demanda ? `${origemCamposHTML({ diretor: !!a.demanda_diretor, externo: a.demandante_externo || '' })}<p class="suave pequeno">A origem será informada pela seção e a alteração ficará no histórico.${a.interna ? ' Ao marcar uma origem, esta ação deixará de ser interna e ficará visível ao Diretor.' : ''}</p>` : ''}`,
+    aoAbrir: (dlg) => ligarOrigem(dlg),
     rotulo: soPrazo && !a.pode_mudar_demanda ? 'Alterar prazo' : 'Salvar alterações',
     aoEnviar: async (d) => {
       const mudancas = {};
       if (!soPrazo && d.titulo.trim() !== a.titulo) mudancas.titulo = d.titulo;
       if (!soPrazo && d.detalhe.trim() !== (a.detalhe || '')) mudancas.detalhe = d.detalhe;
       if (a.pode_mudar_prazo && d.prazo !== a.prazo) mudancas.prazo = d.prazo;
-      if (a.pode_mudar_demanda && (d.demanda_diretor === '1') !== !!a.demanda_diretor) mudancas.demanda_diretor = d.demanda_diretor === '1';
+      if (a.pode_mudar_demanda) {
+        const origem = lerOrigem(d);
+        if (origem.demanda_diretor !== !!a.demanda_diretor) mudancas.demanda_diretor = origem.demanda_diretor;
+        if (origem.demandante_externo !== (a.demandante_externo || null)) mudancas.demandante_externo = origem.demandante_externo;
+      }
       if (!Object.keys(mudancas).length) { toast('Nada foi alterado.'); return; }
       await patch(`/acoes/${a.id}`, mudancas);
       toast('Ação atualizada.');
@@ -190,17 +247,44 @@ const cienciaHTML = (a) => {
   return `<p class="pequeno suave">Recebida pela seção em ${dataHora(a.recebida_em)}. ${quem.length ? `Aberta por ${quem.join('; ')}.` : 'Ainda não foi aberta por quem a recebeu.'}</p>`;
 };
 
+/** Quem executa a ação e a quem ela foi atribuída; o chefe (e o Administrador) pode atribuir ou trocar. */
+const responsavelHTML = (a) => `<div class="responsavel" id="acao-responsavel">
+  <span class="suave pequeno">Responsável pela execução:</span>
+  <b>${a.responsavel_nome ? esc(a.responsavel_nome) : '<span class="suave">ninguém atribuído (a seção responde)</span>'}</b>
+  ${a.responsavel_id && a.atribuido_por_nome ? `<span class="suave pequeno">· atribuída por ${esc(a.atribuido_por_nome)} em ${dataHora(a.atribuida_em)}</span>` : ''}
+  ${a.pode_atribuir ? '<button type="button" class="btn btn-fantasma btn-mini" data-atribuir>Alterar</button>' : ''}
+</div>`;
+
+/** Etapa de validação depois da conclusão: primeiro o chefe (se atribuiu a um membro), depois o Diretor (se for demanda dele). */
+const validacaoHTML = (a) => {
+  const chefeAgindo = a.pode_executar && ['chefe', 'administrador'].includes(est.user?.perfil);
+  if (a.aguardando_validacao === 'chefe') {
+    return `<div class="aviso-validacao"><b>Aguardando a validação do chefe da seção.</b>
+      ${a.responsavel_nome ? `<span class="suave pequeno"> ${esc(a.responsavel_nome)} concluiu a ação.</span>` : ''}
+      ${chefeAgindo ? '<div class="linha" style="margin-top:8px"><button type="button" class="btn btn-ok" data-validar>Validar</button><button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>' : ''}</div>`;
+  }
+  if (a.aguardando_validacao === 'diretor') {
+    return `<div class="aviso-validacao"><b>Aguardando o aceite do Diretor.</b>${a.validada_chefe ? ` <span class="suave pequeno">O chefe já validou${a.validada_chefe_por_nome ? ` (${esc(a.validada_chefe_por_nome)})` : ''}.</span>` : ''}
+      ${ehDiretor() ? '<div class="linha" style="margin-top:8px"><button type="button" class="btn btn-ok" data-encerrar>Aceitar e encerrar</button><button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>' : ''}</div>`;
+  }
+  return a.validada_chefe && a.status === 'concluida' ? `<p class="pequeno suave">Validada pelo chefe${a.validada_chefe_por_nome ? ` (${esc(a.validada_chefe_por_nome)})` : ''} em ${dataHora(a.validada_chefe_em)}.</p>` : '';
+};
+
 export async function abrirAcao(id, aoMudar) {
-  // Quem gere as tarefas recebe junto a lista de responsáveis possíveis; para os demais (ou ação só de leitura), vazia.
-  const [a, responsaveis] = await Promise.all([get(`/acoes/${id}`), podeGerirTarefas() ? get(`/acoes/${id}/responsaveis`).catch(() => []) : []]);
+  const a = await get(`/acoes/${id}`);
+  // Quem executa a ação escolhe, na lista de responsáveis possíveis, o responsável de cada tarefa; para os demais, vazia.
+  const responsaveis = a.pode_executar ? await get(`/acoes/${id}/responsaveis`).catch(() => []) : [];
   // Ação recebida e ainda não aberta por quem a abre agora: registra a ciência e atualiza a lista e os selos.
   if (a.nova) post(`/acoes/${a.id}/vista`).then(() => { selosMudaram(); aoMudar?.(); }).catch(() => { /* fica nova; registra na próxima abertura */ });
   const diretor = ehDiretor();
   const prazoAlterado = a.prazo !== a.prazo_original;
-  // Ação que a pessoa só lê (perfil Consulta, ou chefe vendo outra seção): nenhum controle, nem comentário.
+  // Ação que a pessoa só lê (perfil Consulta, chefe vendo outra seção, membro numa ação de outra pessoa): nenhum controle.
   const leitura = !!a.somente_leitura;
+  const ehMembro = est.user?.perfil === 'membro';
+  const podeImp = !leitura && (!ehMembro || a.pode_executar);
   const corpo = `
-    ${leitura ? '<div class="info">Somente leitura: você acompanha esta ação, mas quem a altera é a seção responsável.</div>' : ''}
+    ${leitura ? '<div class="info">Somente leitura: você acompanha esta ação, mas quem a altera é a seção responsável.</div>'
+    : ehMembro && !a.pode_executar ? '<div class="info">Esta ação é de outra pessoa da equipe. Você marca como feitas as tarefas atribuídas a você e pode comentar; o resto fica com quem a executa.</div>' : ''}
     ${a.demandada_diretor ? `
       <div class="banner-origem diretor">
         <span class="banner-origem-icone">🎯</span>
@@ -208,6 +292,13 @@ export async function abrirAcao(id, aoMudar) {
           <strong>Demandada pelo Diretor</strong>
           ${a.demanda_diretor && !a.diretriz_id ? '<div class="detalhes">Origem informada pela seção.</div>' : ''}
           <div class="detalhes">Determinada em ${dataHora(a.demandado_em || a.criada_em)}${a.demandado_por_nome ? ` por ${esc(a.demandado_por_nome)}` : ''}${a.reuniao_semana ? ` · Reunião de ${br(a.reuniao_semana)}` : ''}</div>
+        </div>
+      </div>` : a.demandante_externo ? `
+      <div class="banner-origem externa">
+        <span class="banner-origem-icone">🏛️</span>
+        <div>
+          <strong>Demanda de ${esc(a.demandante_externo)}</strong>
+          <div class="detalhes">Entidade fora da subordinação ao Diretor · a ação fica visível a ele</div>
         </div>
       </div>` : (a.interna ? `
       <div class="banner-origem">
@@ -219,7 +310,8 @@ export async function abrirAcao(id, aoMudar) {
       </div>` : '')}
     <p>${a.detalhe ? esc(a.detalhe) : '<span class="suave">Sem detalhamento.</span>'}</p>
     <div class="linha" id="acao-badges" style="margin-bottom:10px;align-items:center;flex-wrap:wrap;gap:8px">${badgesHTML(a)}</div>
-    ${!leitura && (est.user?.perfil === 'chefe' || ehAdmin() || a.pode_editar) ? `    <div class="linha" style="margin-bottom:10px;align-items:center">
+    ${a.responsavel_id || a.pode_atribuir ? responsavelHTML(a) : ''}
+    ${!leitura && (a.pode_executar || a.pode_editar) ? `    <div class="linha" style="margin-bottom:10px;align-items:center">
       <label for="sel-prio" class="suave pequeno" style="margin:0"><b>Alterar prioridade:</b></label>
       <select id="sel-prio" data-mudar-prio style="width:auto;padding:3px 8px;font-size:0.84rem;margin-left:6px">
         <option value="alta" ${a.prioridade === 'alta' ? 'selected' : ''}>Alta</option>
@@ -238,18 +330,17 @@ export async function abrirAcao(id, aoMudar) {
       ${br(p.prazo_atual)} → <b>${br(p.novo_prazo)}</b> · ${esc(p.status)} <br><span class="suave">${esc(p.justificativa)}</span></div>`).join('')}` : ''}
     <div id="acao-checklist-bloco">${checklistBlocoHTML(a, responsaveis)}</div>
     <h3 style="margin:12px 0 6px">Impedimentos</h3>
-    ${a.impedimentos.length ? a.impedimentos.map((i) => impedimentoHTML(i, !leitura)).join('') : '<p class="suave pequeno">Nenhum impedimento registrado.</p>'}
-    ${aceitaImpedimento(a) && !leitura ? '<button type="button" class="btn btn-sec btn-mini" data-novo-imp>Registrar impedimento</button>' : ''}
+    ${a.impedimentos.length ? a.impedimentos.map((i) => impedimentoHTML(i, podeImp)).join('') : '<p class="suave pequeno">Nenhum impedimento registrado.</p>'}
+    ${aceitaImpedimento(a) && podeImp ? '<button type="button" class="btn btn-sec btn-mini" data-novo-imp>Registrar impedimento</button>' : ''}
     <h3 style="margin:12px 0 6px">Comentários</h3>
     ${a.comentarios.length ? a.comentarios.map((c) => `<div class="comentario"><b>${esc(c.usuario_nome || '')}</b>
       <span class="suave pequeno"> · ${dataHora(c.criado_em)}</span><br>${esc(c.texto)}</div>`).join('') : '<p class="suave pequeno">Nenhum comentário ainda.</p>'}
-    ${leitura ? '' : '<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>'}
-    ${diretor && a.status === 'concluida' && !a.encerrada ? `<div class="linha"><button type="button" class="btn btn-ok" data-encerrar>Aceitar e encerrar</button>
-      <button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>` : ''}
+    ${leitura || !a.pode_comentar ? '' : '<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>'}
+    ${validacaoHTML(a)}
     ${a.pode_editar || a.pode_mudar_demanda ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Editar ação</button>'
       : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Alterar prazo</button>' : ''}
     ${aceitaRedirecionar(a) ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-redirecionar>Redirecionar para outra seção</button>' : ''}
-    ${leitura ? '' : !a.demandada_diretor || (a.demanda_diretor && !a.diretriz_id) || ehAdmin() ? `
+    ${leitura || ehMembro ? '' : !a.demandada_diretor || (a.demanda_diretor && !a.diretriz_id) || ehAdmin() ? `
       <div class="linha" style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line);align-items:center">
         ${a.arquivada
           ? `<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar ação</button>`
@@ -350,6 +441,27 @@ export async function abrirAcao(id, aoMudar) {
         } catch (e) { toast(e.message, 'erro'); }
       });
       on(dlg, 'click', '[data-novo-imp]', () => abrirNovoImpedimento(a, recarregar));
+      on(dlg, 'click', '[data-atribuir]', async () => {
+        try {
+          const executores = await get(`/acoes/${a.id}/executores`);
+          abrirForm({
+            titulo: 'Responsável pela execução',
+            corpo: `<p class="suave pequeno">Ação: <b>${esc(a.titulo)}</b></p>
+              <div class="campo"><label for="at-resp">Quem executa</label><select id="at-resp" name="responsavel_id">
+                <option value="">Ninguém (a seção responde)</option>${executores.map((u) => `<option value="${u.id}" ${u.id === a.responsavel_id ? 'selected' : ''}>${esc(u.nome)}${u.perfil === 'membro' ? ' (membro da equipe)' : ''}${u.secao_sigla ? ` · ${esc(u.secao_sigla)}` : ''}</option>`).join('')}</select></div>
+              <p class="suave pequeno">Ao concluir, a ação de um membro da equipe aguarda a sua validação.</p>`,
+            rotulo: 'Salvar responsável',
+            aoEnviar: async (d) => {
+              await patch(`/acoes/${a.id}`, { responsavel_id: d.responsavel_id ? Number(d.responsavel_id) : null });
+              toast('Responsável atualizado.');
+              await recarregar();
+            },
+          });
+        } catch (e) { toast(e.message, 'erro'); }
+      });
+      on(dlg, 'click', '[data-validar]', async () => {
+        try { await validarAcao(a.id); dlg.close(); aoMudar?.(); } catch (e) { toast(e.message, 'erro'); }
+      });
       on(dlg, 'click', '[data-editar-acao]', () => abrirEditarAcao(a, recarregar));
       // Quem redireciona continua vendo a ação (o chefe só move dentro da própria árvore).
       on(dlg, 'click', '[data-redirecionar]', () => abrirRedirecionar(a, recarregar).catch((e) => toast(e.message, 'erro')));
@@ -392,19 +504,7 @@ export async function abrirAcao(id, aoMudar) {
       on(dlg, 'click', '[data-encerrar]', async () => {
         await post(`/acoes/${a.id}/encerrar`).then(() => { toast('Ação encerrada.'); dlg.close(); aoMudar?.(); }).catch((e) => toast(e.message, 'erro'));
       });
-      on(dlg, 'click', '[data-devolver]', () => {
-        abrirForm({
-          titulo: 'Devolver para ajuste',
-          corpo: `<div class="campo"><label for="dev">O que falta para a ação ser aceita?</label><textarea id="dev" name="comentario" required></textarea></div>`,
-          rotulo: 'Devolver',
-          aoEnviar: async (d) => {
-            await post(`/acoes/${a.id}/devolver`, { comentario: d.comentario });
-            toast('Ação devolvida ao chefe.');
-            dlg.close();
-            aoMudar?.();
-          },
-        });
-      });
+      on(dlg, 'click', '[data-devolver]', () => devolverAcao(a, async () => { dlg.close(); aoMudar?.(); }));
     },
   });
 }
