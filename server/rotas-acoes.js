@@ -2,23 +2,30 @@
 import { subarvore } from './db.js';
 import { DIAS_SEM_MOVIMENTO, PERFIS_DE_SECAO, PRIORIDADES, STATUS, TRANSICOES, addDays, br, ehISO, porDataDaTarefa } from './logic.js';
 import { falha, h, marks, permit, texto } from './helpers.js';
+import { empresaAtual } from './empresa.js';
 
 export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   const deSecao = (user) => PERFIS_DE_SECAO.includes(user.perfil); // chefe ou membro: trabalham numa seção
   // Ações que a pessoa enxerga (e altera, conforme o perfil). O chefe e o membro, a árvore da própria seção; a gestão e a
   // Consulta, as que o Diretor vê; o Administrador, todas. Rotas que gravam usam sempre este escopo.
-  const visiveisAcoes = async (user) => {
-    if (user.perfil === 'administrador') return { where: '1 = 1', params: [] }; // o Administrador consulta tudo, inclusive ações internas
-    if (!deSecao(user)) return { where: '(a.interna = 0 or a.compartilhada = 1)', params: [] };
+  // Todo escopo começa pela empresa de quem consulta (`a.empresa_id = ?` é sempre o primeiro marcador do `where`).
+  const escopoBase = async (user) => {
+    if (user.perfil === 'administrador') return { inner: '1 = 1', params: [] }; // o Administrador consulta tudo, inclusive ações internas
+    if (!deSecao(user)) return { inner: '(a.interna = 0 or a.compartilhada = 1)', params: [] };
     const ids = user.secao_id ? await subarvore(db, user.secao_id) : [-1];
-    return { where: `a.secao_id in (${marks(ids)})`, params: ids };
+    return { inner: `a.secao_id in (${marks(ids)})`, params: ids };
+  };
+  const daEmpresa = (inner, params) => ({ where: `a.empresa_id = ? and (${inner})`, params: [empresaAtual(), ...params] });
+  const visiveisAcoes = async (user) => {
+    const b = await escopoBase(user);
+    return daEmpresa(b.inner, b.params);
   };
   // Leitura ampliada: o chefe com usuarios.ver_outros_centros também lê, sem alterar, as ações dos outros Centros
   // que o Diretor vê (sem as internas). Vale só para a lista com escopo=todos e para o detalhe.
   const visiveisLeitura = async (user) => {
-    const v = await visiveisAcoes(user);
-    if (user.perfil !== 'chefe' || !user.ver_outros_centros) return v;
-    return { where: `(${v.where} or a.interna = 0 or a.compartilhada = 1)`, params: v.params };
+    const b = await escopoBase(user);
+    if (user.perfil !== 'chefe' || !user.ver_outros_centros) return daEmpresa(b.inner, b.params);
+    return daEmpresa(`${b.inner} or a.interna = 0 or a.compartilhada = 1`, b.params);
   };
   /** Ação que a pessoa só pode ler: tudo para a Consulta; para o chefe, as de fora da própria árvore. */
   const soLeitura = async (user, lista) => {
@@ -51,15 +58,16 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   // Última movimentação da ação (acoes.movimentada_em): toda gravação bem-sucedida em /api/acoes/:id/... conta
   // (status, prioridade, edição, tempo, comentário, checklist, impedimento, pedido de prazo, redirecionamento,
   // arquivamento, aceite). A data é gravada antes da resposta sair. Ação nova usa a data de criação.
-  const movimentou = (id) => run('update acoes set movimentada_em = ? where id = ?', agoraISO(), id);
+  const movimentou = (id, empresaId) => run('update acoes set movimentada_em = ? where id = ? and empresa_id = ?', agoraISO(), id, empresaId);
   app.use('/api/acoes/:id', (req, res, next) => {
     const id = Number(req.params.id);
     // Abrir o detalhe (ciência de ação recebida) não é andamento da ação.
     if (req.method === 'GET' || req.path === '/vista' || !Number.isSafeInteger(id)) return next();
+    const empresaId = req.user.empresa_id;
     const enviar = res.json.bind(res);
     res.json = (corpo) => {
       if (res.statusCode >= 400) return enviar(corpo);
-      movimentou(id).then(() => enviar(corpo), next);
+      movimentou(id, empresaId).then(() => enviar(corpo), next);
       return res;
     };
     next();
@@ -181,12 +189,13 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   /** Quem pode ser responsável por uma tarefa: as contas ativas vinculadas à seção da ação, às seções acima dela
    *  (o chefe do Centro) e às subseções (titulares, suplentes e, na Diretoria Adjunta, os membros). */
   const responsaveisDa = (a) => q(`with recursive acima(id, pai_id) as (
-        select id, pai_id from secoes where id = ? union all select s.id, s.pai_id from secoes s join acima on s.id = acima.pai_id
+        select id, pai_id from secoes where id = ? and empresa_id = ? union all select s.id, s.pai_id from secoes s join acima on s.id = acima.pai_id where s.empresa_id = ?
       ), abaixo(id) as (
-        select cast(? as integer) union select s.id from secoes s join abaixo on s.pai_id = abaixo.id
+        select cast(? as integer) union select s.id from secoes s join abaixo on s.pai_id = abaixo.id where s.empresa_id = ?
       )
       select u.id, u.nome, s.sigla as secao_sigla from usuarios u join secoes s on s.id = u.secao_id
-      where u.ativo = 1 and u.secao_id in (select id from acima union select id from abaixo) order by u.nome, u.id`, a.secao_id, a.secao_id);
+      where u.empresa_id = ? and u.ativo = 1 and u.secao_id in (select id from acima union select id from abaixo) order by u.nome, u.id`,
+  a.secao_id, empresaAtual(), empresaAtual(), a.secao_id, empresaAtual(), empresaAtual());
   /** Lê data e responsável do corpo (só os campos enviados). `null` ou vazio limpa o campo. */
   const camposDaTarefa = async (a, b) => {
     const campos = {};
@@ -206,11 +215,11 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   /** Quem pode executar uma ação da seção: chefes e membros da seção e das subseções (e, na Diretoria Adjunta, os
    *  Administradores vinculados a ela). É a lista de onde o chefe escolhe o responsável pela ação. */
   const executoresDa = (a) => q(`with recursive abaixo(id) as (
-        select cast(? as integer) union select s.id from secoes s join abaixo on s.pai_id = abaixo.id
+        select cast(? as integer) union select s.id from secoes s join abaixo on s.pai_id = abaixo.id where s.empresa_id = ?
       )
       select u.id, u.nome, u.perfil, s.sigla as secao_sigla from usuarios u join secoes s on s.id = u.secao_id
-      where u.ativo = 1 and u.perfil in ('chefe', 'membro', 'administrador') and u.secao_id in (select id from abaixo)
-      order by u.perfil, u.nome, u.id`, a.secao_id);
+      where u.empresa_id = ? and u.ativo = 1 and u.perfil in ('chefe', 'membro', 'administrador') and u.secao_id in (select id from abaixo)
+      order by u.perfil, u.nome, u.id`, a.secao_id, empresaAtual(), empresaAtual());
   /** Lê o responsável do corpo: `undefined` se não veio, `null` para limpar, ou o id (da seção da ação). */
   const escolherResponsavel = async (secaoId, valor) => {
     if (valor === undefined) return undefined;
@@ -291,12 +300,12 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     let alvos;
     if (destino === 'todos') {
       // "Todos os Centros" não inclui a Diretoria Adjunta, que não é Centro: ela recebe quando escolhida.
-      alvos = (await q("select id from secoes where pai_id is null and ativa = 1 and tipo != 'diretoria_adjunta'")).map((r) => r.id);
+      alvos = (await q("select id from secoes where pai_id is null and ativa = 1 and tipo != 'diretoria_adjunta' and empresa_id = ?", empresaAtual())).map((r) => r.id);
     } else {
       const ids = [...new Set((b.secoes || []).map(Number))];
       const validados = [];
       for (const i of ids) {
-        if (await q1('select 1 from secoes where id = ? and pai_id is null and ativa = 1', i)) validados.push(i);
+        if (await q1('select 1 from secoes where id = ? and pai_id is null and ativa = 1 and empresa_id = ?', i, empresaAtual())) validados.push(i);
       }
       alvos = validados;
       if (alvos.length !== ids.length) throw falha(400, 'Só Centros, Coordenação e Diretoria Adjunta ativos podem receber ações do Diretor.');
@@ -310,20 +319,20 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const detalhe = texto(b.detalhe, 2000) || null;
     return await db.transaction(async () => {
       if (reuniaoId !== null) {
-        const r = await q1(`select status from reunioes where id = ?${db.isPg ? ' for update' : ''}`, reuniaoId);
+        const r = await q1(`select status from reunioes where id = ? and empresa_id = ?${db.isPg ? ' for update' : ''}`, reuniaoId, empresaAtual());
         if (!r) throw falha(404, 'Reunião não encontrada.');
         if (r.status !== 'em_andamento') throw falha(409, 'Esta reunião já foi encerrada.');
       }
 
       const d = (await run(
-        'insert into diretrizes (titulo, detalhe, destino, prazo, prioridade, criado_por, criado_em, reuniao_id) values (?,?,?,?,?,?,?,?)',
-        titulo, detalhe, destino, b.prazo, prioridade, user.id, agoraISO(), reuniaoId,
+        'insert into diretrizes (titulo, detalhe, destino, prazo, prioridade, criado_por, criado_em, reuniao_id, empresa_id) values (?,?,?,?,?,?,?,?,?)',
+        titulo, detalhe, destino, b.prazo, prioridade, user.id, agoraISO(), reuniaoId, empresaAtual(),
       )).lastInsertRowid;
       for (const s of alvos) {
         const quando = agoraISO();
         const aId = (await run(
-          `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em, criado_por, recebida_em) values (?,?,?,?,?,?,?,?,?,?)`,
-          d, s, titulo, detalhe, b.prazo, b.prazo, prioridade, quando, user.id, quando,
+          `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em, criado_por, recebida_em, empresa_id) values (?,?,?,?,?,?,?,?,?,?,?)`,
+          d, s, titulo, detalhe, b.prazo, b.prazo, prioridade, quando, user.id, quando, empresaAtual(),
         )).lastInsertRowid;
         await run(
           `insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)`,
@@ -340,9 +349,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
   }));
   app.get('/api/diretrizes', permit('diretor', 'apoio', 'administrador'), h(async () => {
     const lista = await q(`select d.*, u.nome as criado_por_nome,
-         (select count(*) from acoes a where a.diretriz_id = d.id) total,
-         (select count(*) from acoes a where a.diretriz_id = d.id and a.status = 'concluida') concluidas
-       from diretrizes d left join usuarios u on u.id = d.criado_por order by d.criado_em desc, d.id desc limit 30`);
+         (select count(*) from acoes a where a.diretriz_id = d.id and a.empresa_id = d.empresa_id) total,
+         (select count(*) from acoes a where a.diretriz_id = d.id and a.empresa_id = d.empresa_id and a.status = 'concluida') concluidas
+       from diretrizes d left join usuarios u on u.id = d.criado_por where d.empresa_id = ? order by d.criado_em desc, d.id desc limit 30`, empresaAtual());
     if (!lista.length) return lista;
     // Seções que têm hoje a ação de cada diretriz (uma ação redirecionada aparece na seção de destino).
     const ids = lista.map((d) => d.id);
@@ -352,7 +361,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         (select u.nome from acao_vistas v join usuarios u on u.id = v.usuario_id
           where v.acao_id = a.id and v.vista_em >= a.recebida_em order by v.vista_em limit 1) as vista_por
       from acoes a join secoes s on s.id = a.secao_id
-      where a.diretriz_id in (${marks(ids)}) order by s.ordem, s.id`, ...ids);
+      where a.empresa_id = ? and a.diretriz_id in (${marks(ids)}) order by s.ordem, s.id`, empresaAtual(), ...ids);
     return lista.map((d) => ({
       ...d,
       secoes: secoes.filter((s) => s.diretriz_id === d.id).map(({ id, sigla, nome, recebida_em, vista_em, vista_por }) => ({ id, sigla, nome, recebida_em, vista_em, vista_por })),
@@ -368,32 +377,32 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const ids = [...new Set((Array.isArray(b.secoes) ? b.secoes : []).map(Number))];
     if (!ids.length) throw falha(400, 'Escolha ao menos uma seção para acrescentar.');
     const out = await db.transaction(async () => {
-      const d = await q1(`select * from diretrizes where id = ?${db.isPg ? ' for update' : ''}`, id);
+      const d = await q1(`select * from diretrizes where id = ? and empresa_id = ?${db.isPg ? ' for update' : ''}`, id, empresaAtual());
       if (!d) throw falha(404, 'Direcionamento não encontrado.');
       const prazo = b.prazo || d.prazo;
       if (!ehISO(prazo)) throw falha(400, 'Informe o prazo da ação.');
       if (prazo < hoje()) throw falha(400, 'O prazo desta ação já passou. Informe um novo prazo para as seções acrescentadas.');
       for (const s of ids) {
-        if (!(await q1('select 1 from secoes where id = ? and pai_id is null and ativa = 1', s))) {
+        if (!(await q1('select 1 from secoes where id = ? and pai_id is null and ativa = 1 and empresa_id = ?', s, empresaAtual()))) {
           throw falha(400, 'Só Centros, Coordenação e Diretoria Adjunta ativos podem receber ações do Diretor.');
         }
       }
       if (req.user.perfil === 'administrador' && req.user.secao_id && ids.includes(req.user.secao_id)) {
         throw falha(400, 'O Diretor Adjunto não direciona ações para a própria seção. Crie essas ações em "Minhas ações".');
       }
-      const jaTem = (await q(`select secao_id from acoes where diretriz_id = ? and secao_id in (${marks(ids)})`, id, ...ids)).map((r) => r.secao_id);
+      const jaTem = (await q(`select secao_id from acoes where diretriz_id = ? and empresa_id = ? and secao_id in (${marks(ids)})`, id, empresaAtual(), ...ids)).map((r) => r.secao_id);
       if (jaTem.length) throw falha(409, 'Alguma das seções escolhidas já recebeu esta ação. Atualize a tela e escolha outras.');
       for (const s of ids) {
         const quando = agoraISO();
         const aId = (await run(
-          `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em, criado_por, recebida_em) values (?,?,?,?,?,?,?,?,?,?)`,
-          d.id, s, d.titulo, d.detalhe, prazo, prazo, d.prioridade, quando, req.user.id, quando,
+          `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em, criado_por, recebida_em, empresa_id) values (?,?,?,?,?,?,?,?,?,?,?)`,
+          d.id, s, d.titulo, d.detalhe, prazo, prazo, d.prioridade, quando, req.user.id, quando, empresaAtual(),
         )).lastInsertRowid;
         await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
           aId, req.user.id, 'Ação demandada pelo Diretor (seção acrescentada ao direcionamento).', agoraISO());
       }
       // "Todos os Centros" deixa de descrever o destino quando entra uma seção a mais: passa a listar as seções.
-      if (d.destino === 'todos') await run("update diretrizes set destino = 'especificos' where id = ?", d.id);
+      if (d.destino === 'todos') await run("update diretrizes set destino = 'especificos' where id = ? and empresa_id = ?", d.id, empresaAtual());
       return { id: d.id, acoes_criadas: ids.length };
     });
     res.status(201);
@@ -440,7 +449,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const prioridade = PRIORIDADES.includes(b.prioridade) ? b.prioridade : 'media';
     const secaoId = deSecao(req.user) ? req.user.secao_id : Number(b.secao_id);
     if (!secaoId) throw falha(400, 'Seção não informada.');
-    if (!(await q1('select id from secoes where id = ? and ativa = 1', secaoId))) {
+    if (!(await q1('select id from secoes where id = ? and ativa = 1 and empresa_id = ?', secaoId, empresaAtual()))) {
       throw falha(409, 'A seção precisa estar ativa para receber ações.');
     }
     const detalhe = texto(b.detalhe, 2000) || null;
@@ -461,16 +470,16 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const { atribuido_por: atribuidoPor, atribuida_em: atribuidaEm } = atribuicao(req.user, responsavel, quando);
     const id = (await run(
       `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, interna, criada_em, criado_por, demanda_diretor, recebida_em,
-         responsavel_id, atribuido_por, atribuida_em, demandante_externo)
-       values (null, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      secaoId, titulo, detalhe, b.prazo, b.prazo, prioridade, interna, quando, req.user.id, demanda, recebida, responsavel, atribuidoPor, atribuidaEm, externo,
+         responsavel_id, atribuido_por, atribuida_em, demandante_externo, empresa_id)
+       values (null, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      secaoId, titulo, detalhe, b.prazo, b.prazo, prioridade, interna, quando, req.user.id, demanda, recebida, responsavel, atribuidoPor, atribuidaEm, externo, empresaAtual(),
     )).lastInsertRowid;
-    const nomeResp = responsavel ? (await q1('select nome from usuarios where id = ?', responsavel)).nome : null;
+    const nomeResp = responsavel ? (await q1('select nome from usuarios where id = ? and empresa_id = ?', responsavel, empresaAtual())).nome : null;
     await run(
       'insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
       id, req.user.id, `Ação criada pela seção (${req.user.nome}).${demanda ? ' Demanda do Diretor informada pela seção.' : ''}${externo ? ` Demanda de ${externo} (fora da subordinação ao Diretor).` : ''}${nomeResp ? ` Atribuída a ${nomeResp}.` : ''}`, agoraISO(),
     );
-    return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, id));
+    return acaoOut(await q1(`${SELECT_ACAO} where a.id = ? and a.empresa_id = ?`, id, empresaAtual()));
   }));
 
   app.delete('/api/acoes/:id', h(async (req) => {
@@ -480,7 +489,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         if (!ehAutor(req.user, a)) throw falha(403, NAO_GERE);
         if (a.status === 'concluida' || a.encerrada) throw falha(409, 'Ação concluída não pode ser excluída: ela faz parte do histórico da seção. Se quiser tirá-la da lista, arquive.');
         if (a.apresentada_em) throw falha(409, 'Esta ação já foi apresentada em reunião e não pode mais ser excluída. O prazo ainda pode ser alterado.');
-        if (await q1('select id from acoes where acao_pai_id=?',a.id)) throw falha(409,'Exclua primeiro as ações derivadas desta ação.');
+        if (await q1('select id from acoes where acao_pai_id=? and empresa_id=?',a.id,empresaAtual())) throw falha(409,'Exclua primeiro as ações derivadas desta ação.');
         await run('delete from tempo where acao_id = ?', a.id);
         await run('delete from acao_comentarios where acao_id = ?', a.id);
         await run('delete from impedimentos where acao_id = ?', a.id);
@@ -488,7 +497,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         await run('delete from acao_prazos where acao_id = ?', a.id);
         await run('delete from pedidos_prazo where acao_id = ?', a.id);
         await run('delete from acao_vistas where acao_id = ?', a.id);
-        await run('delete from acoes where id = ?', a.id);
+        await run('delete from acoes where id = ? and empresa_id = ?', a.id, empresaAtual());
         return { ok: true, id: a.id };
       });
     } catch(e) {
@@ -503,22 +512,22 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     if (a.diretriz_id && req.user.perfil !== 'administrador') {
       throw falha(403, 'Ações demandadas pelo Diretor não podem ser arquivadas pela seção.');
     }
-    await run('update acoes set arquivada = 1 where id = ?', a.id);
+    await run('update acoes set arquivada = 1 where id = ? and empresa_id = ?', a.id, empresaAtual());
     await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
       a.id, req.user.id, 'Ação arquivada.', agoraISO());
-    return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id));
+    return acaoOut(await q1(`${SELECT_ACAO} where a.id = ? and a.empresa_id = ?`, a.id, empresaAtual()));
   }));
 
   app.post('/api/acoes/:id/desarquivar', permit('chefe', 'administrador'), h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     await chefeGere(req.user, a);
-    if (!(await q1('select id from secoes where id = ? and ativa = 1', a.secao_id))) {
+    if (!(await q1('select id from secoes where id = ? and ativa = 1 and empresa_id = ?', a.secao_id, empresaAtual()))) {
       throw falha(409, 'Reative a seção antes de desarquivar a ação.');
     }
-    await run('update acoes set arquivada = 0 where id = ?', a.id);
+    await run('update acoes set arquivada = 0 where id = ? and empresa_id = ?', a.id, empresaAtual());
     await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
       a.id, req.user.id, 'Ação desarquivada.', agoraISO());
-    return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id));
+    return acaoOut(await q1(`${SELECT_ACAO} where a.id = ? and a.empresa_id = ?`, a.id, empresaAtual()));
   }));
 
   app.get('/api/acoes/:id', h(async (req) => {
@@ -582,9 +591,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       if (rid !== (a.responsavel_id ?? null)) {
         const at = atribuicao(req.user, rid, agoraISO());
         await db.transaction(async () => {
-          await run('update acoes set responsavel_id = ?, atribuido_por = ?, atribuida_em = ?, validada_chefe_em = null, validada_chefe_por = null where id = ?',
-            rid, at.atribuido_por, at.atribuida_em, a.id);
-          const novoNome = rid ? (await q1('select nome from usuarios where id = ?', rid)).nome : null;
+          await run('update acoes set responsavel_id = ?, atribuido_por = ?, atribuida_em = ?, validada_chefe_em = null, validada_chefe_por = null where id = ? and empresa_id = ?',
+            rid, at.atribuido_por, at.atribuida_em, a.id, empresaAtual());
+          const novoNome = rid ? (await q1('select nome from usuarios where id = ? and empresa_id = ?', rid, empresaAtual())).nome : null;
           await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
             a.id, req.user.id, `Responsável: ${a.responsavel_nome || 'sem responsável'} → ${novoNome || 'sem responsável'}.`, agoraISO());
         });
@@ -625,7 +634,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         interna !== a.interna && 'ação passou a ser visível ao Diretor'].filter(Boolean);
       if (mudou.length) {
         await db.transaction(async () => {
-          await run('update acoes set titulo = ?, detalhe = ?, prazo = ?, demanda_diretor = ?, interna = ?, demandante_externo = ? where id = ?', titulo, detalhe, prazo, demanda, interna, externo, a.id);
+          await run('update acoes set titulo = ?, detalhe = ?, prazo = ?, demanda_diretor = ?, interna = ?, demandante_externo = ? where id = ? and empresa_id = ?', titulo, detalhe, prazo, demanda, interna, externo, a.id, empresaAtual());
           // Toda mudança de prazo guarda o anterior; prazo_original continua sendo o primeiro.
           if (prazoMudou) {
             await run(`insert into acao_prazos (acao_id, prazo_anterior, prazo_novo, origem, alterado_em, alterado_por)
@@ -640,7 +649,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const p = b.prioridade;
     if (p !== undefined) {
       if (!PRIORIDADES.includes(p)) throw falha(400, 'Prioridade inválida (use alta, media ou baixa).');
-      await run('update acoes set prioridade = ? where id = ?', p, a.id);
+      await run('update acoes set prioridade = ? where id = ? and empresa_id = ?', p, a.id, empresaAtual());
     }
 
     const novo = req.body?.status;
@@ -651,7 +660,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         if (novo === 'concluida' && a.tempo_total <= 0) throw falha(422, 'Informe o tempo gasto, em minutos, antes de concluir a ação.');
         await db.transaction(async () => {
           // Mudar o status recomeça a validação do chefe: ela vale para a conclusão que ele viu.
-          await run('update acoes set status = ?, concluida_em = ?, validada_chefe_em = null, validada_chefe_por = null where id = ?', novo, novo === 'concluida' ? agoraISO() : null, a.id);
+          await run('update acoes set status = ?, concluida_em = ?, validada_chefe_em = null, validada_chefe_por = null where id = ? and empresa_id = ?', novo, novo === 'concluida' ? agoraISO() : null, a.id, empresaAtual());
           // Ação concluída não tem mais o que travar: os impedimentos abertos são encerrados, e o histórico fica.
           if (novo === 'concluida') {
             await run('update impedimentos set resolvido_em = ?, resolvido_por = ?, resolucao = ? where acao_id = ? and resolvido_em is null',
@@ -668,7 +677,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         });
       }
     }
-    return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id));
+    return acaoOut(await q1(`${SELECT_ACAO} where a.id = ? and a.empresa_id = ?`, a.id, empresaAtual()));
   }));
 
   app.post('/api/acoes/:id/tempo', h(async (req, res) => {
@@ -681,7 +690,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     if (!ehISO(data) || data > hoje()) throw falha(400, 'A data do lançamento não pode ser futura.');
     await run('insert into tempo (acao_id, usuario_id, data, minutos, criado_em) values (?,?,?,?,?)', a.id, req.user.id, data, minutos, agoraISO());
     res.status(201);
-    return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id));
+    return acaoOut(await q1(`${SELECT_ACAO} where a.id = ? and a.empresa_id = ?`, a.id, empresaAtual()));
   }));
 
   app.post('/api/acoes/:id/comentarios', permit('chefe', 'membro', 'diretor', 'apoio', 'administrador'), h(async (req, res) => {
@@ -701,7 +710,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const id = Number(req.params.id);
     await chefeGere(req.user, await acaoVisivel(req.user, id));
     await db.transaction(async () => {
-      if (db.isPg) await q1('select id from acoes where id = ? for update', id);
+      if (db.isPg) await q1('select id from acoes where id = ? and empresa_id = ? for update', id, empresaAtual());
       const a = await acaoVisivel(req.user, id);
       await chefeGere(req.user, a);
       if (a.arquivada || a.encerrada) throw falha(409, 'Não é possível pedir prazo para uma ação arquivada ou encerrada.');
@@ -731,7 +740,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const apoio = texto(b.apoio, 600) || null;
     const critico = b.critico ? 1 : 0;
     const out = await db.transaction(async () => {
-      if (db.isPg) await q1('select id from acoes where id = ? for update', id);
+      if (db.isPg) await q1('select id from acoes where id = ? and empresa_id = ? for update', id, empresaAtual());
       const a = await acaoVisivel(req.user, id);
       await podeAgirNoImpedimento(req.user, a);
       if (a.encerrada || a.arquivada) throw falha(409, 'Ação arquivada ou encerrada não recebe impedimentos.');
@@ -740,7 +749,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         if (!TRANSICOES[a.status].includes('bloqueada')) {
           throw falha(409, 'Para bloquear, a ação precisa estar em andamento. Inicie a ação ou registre o impedimento sem bloquear.');
         }
-        await run("update acoes set status = 'bloqueada' where id = ?", a.id);
+        await run("update acoes set status = 'bloqueada' where id = ? and empresa_id = ?", a.id, empresaAtual());
       }
       const iid = (await run(
         'insert into impedimentos (acao_id, descricao, critico, apoio, criado_em, criado_por) values (?,?,?,?,?,?)',
@@ -750,7 +759,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         `Impedimento registrado${critico ? ' (crítico)' : ''}${b.bloquear ? ', ação bloqueada' : ''}: ${descricao}`, agoraISO());
       return {
         impedimento: impedimentoOut(await q1('select * from impedimentos where id = ?', iid)),
-        acao: acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id)),
+        acao: acaoOut(await q1(`${SELECT_ACAO} where a.id = ? and a.empresa_id = ?`, a.id, empresaAtual())),
       };
     });
     res.status(201);
@@ -762,7 +771,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const iid = Number(req.params.iid);
     const resolucao = texto(req.body?.resolucao, 600) || null;
     return db.transaction(async () => {
-      if (db.isPg) await q1('select id from acoes where id = ? for update', id);
+      if (db.isPg) await q1('select id from acoes where id = ? and empresa_id = ? for update', id, empresaAtual());
       const a = await acaoVisivel(req.user, id);
       await podeAgirNoImpedimento(req.user, a);
       const imp = await q1('select * from impedimentos where id = ? and acao_id = ?', iid, a.id);
@@ -772,12 +781,12 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         agoraISO(), req.user.id, resolucao, imp.id);
       if (!r.changes) throw falha(409, 'Este impedimento já foi resolvido. Atualize a tela.');
       const retomar = !!req.body?.retomar && a.status === 'bloqueada' && !a.encerrada && !a.arquivada;
-      if (retomar) await run("update acoes set status = 'em_andamento' where id = ?", a.id);
+      if (retomar) await run("update acoes set status = 'em_andamento' where id = ? and empresa_id = ?", a.id, empresaAtual());
       await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id,
         `Impedimento resolvido${resolucao ? `: ${resolucao}` : ''}${retomar ? '. Ação retomada (em andamento).' : ''}`, agoraISO());
       return {
         impedimento: impedimentoOut(await q1('select * from impedimentos where id = ?', imp.id)),
-        acao: acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id)),
+        acao: acaoOut(await q1(`${SELECT_ACAO} where a.id = ? and a.empresa_id = ?`, a.id, empresaAtual())),
       };
     });
   }));
@@ -797,8 +806,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         (${v.where}) as acao_visivel
       from acao_checklist c join acoes a on a.id = c.acao_id join secoes s on s.id = a.secao_id
         left join usuarios u on u.id = c.responsavel_id
-      where a.arquivada = 0 and a.encerrada = 0 and ((${v.where}) or c.responsavel_id = ?)
-      order by c.acao_id, c.ordem, c.id`, ...v.params, ...v.params, req.user.id);
+      where a.empresa_id = ? and a.arquivada = 0 and a.encerrada = 0 and ((${v.where}) or c.responsavel_id = ?)
+      order by c.acao_id, c.ordem, c.id`, ...v.params, empresaAtual(), ...v.params, req.user.id);
     // Quem pode marcar a tarefa como feita: quem executa a ação (o chefe, o Administrador, o membro dono ou autor da
     // ação) e o membro a quem a própria tarefa foi atribuída.
     const marca = (t) => !!t.acao_visivel && (req.user.perfil === 'administrador' || (req.user.perfil === 'chefe' && !!req.user.secao_id)
@@ -882,27 +891,27 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     const motivo = texto(req.body?.motivo, 600);
     if (!destinoId) throw falha(400, 'Escolha a seção que vai receber a ação.');
     return db.transaction(async () => {
-      if (db.isPg) await q1('select id from acoes where id = ? for update', id);
+      if (db.isPg) await q1('select id from acoes where id = ? and empresa_id = ? for update', id, empresaAtual());
       const a = await acaoVisivel(req.user, id);
       if (req.user.perfil === 'chefe') await chefeGere(req.user, a);
       if (a.encerrada || a.arquivada) throw falha(409, 'Ação arquivada ou encerrada não pode ser redirecionada.');
       if (a.status === 'concluida') throw falha(409, 'Uma ação concluída não pode ser redirecionada.');
       if (destinoId === a.secao_id) throw falha(400, 'A ação já está nesta seção. Escolha outra seção.');
-      const destino = await q1('select id, nome, sigla from secoes where id = ? and ativa = 1', destinoId);
+      const destino = await q1('select id, nome, sigla from secoes where id = ? and ativa = 1 and empresa_id = ?', destinoId, empresaAtual());
       if (!destino) throw falha(409, 'A seção escolhida não existe ou não está ativa.');
       if (req.user.perfil === 'chefe' && !(await subarvore(db, req.user.secao_id)).includes(destino.id)) {
         throw falha(403, 'O chefe só redireciona ações para a própria seção ou para as subseções dela.');
       }
-      if (a.diretriz_id && await q1('select 1 from acoes where diretriz_id = ? and secao_id = ? and id != ?', a.diretriz_id, destino.id, a.id)) {
+      if (a.diretriz_id && await q1('select 1 from acoes where diretriz_id = ? and secao_id = ? and id != ? and empresa_id = ?', a.diretriz_id, destino.id, a.id, empresaAtual())) {
         throw falha(409, 'A seção escolhida já recebeu esta mesma demanda do Diretor.');
       }
       // Chega à nova seção como nova; quem redireciona dentro da própria árvore já está ciente.
       const quando = agoraISO();
-      await run('update acoes set secao_id = ?, recebida_em = ? where id = ?', destino.id, quando, a.id);
+      await run('update acoes set secao_id = ?, recebida_em = ? where id = ? and empresa_id = ?', destino.id, quando, a.id, empresaAtual());
       await registrarVista(req.user, { ...a, secao_id: destino.id, recebida_em: quando });
       await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id,
         `Ação redirecionada de ${a.secao_sigla || a.secao_nome} para ${destino.sigla || destino.nome}${motivo ? `. Motivo: ${motivo}` : '.'}`, agoraISO());
-      return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id));
+      return acaoOut(await q1(`${SELECT_ACAO} where a.id = ? and a.empresa_id = ?`, a.id, empresaAtual()));
     });
   }));
 
@@ -916,7 +925,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       if (v.aguardando_validacao === 'chefe') throw falha(409, 'Esta ação ainda aguarda a validação do chefe da seção. O seu aceite vem depois.');
       if (!v.exige_validacao_diretor) throw falha(409, 'Esta ação não foi demandada pelo Diretor: ela fica pronta ao ser concluída e não precisa do seu aceite.');
     }
-    await run('update acoes set encerrada = 1 where id = ?', a.id);
+    await run('update acoes set encerrada = 1 where id = ? and empresa_id = ?', a.id, empresaAtual());
     return { ok: true };
   }));
   // Validação do chefe: a ação que ele atribuiu a um membro só fica pronta (ou segue para o aceite do Diretor, se for
@@ -927,9 +936,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     if (!validacaoDe(a).exige_validacao_chefe) throw falha(409, 'Esta ação não foi atribuída a um membro da equipe: não há o que validar.');
     if (a.encerrada || a.status !== 'concluida') throw falha(409, 'Só dá para validar uma ação concluída.');
     if (a.validada_chefe_em) throw falha(409, 'Esta ação já foi validada.');
-    await run('update acoes set validada_chefe_em = ?, validada_chefe_por = ? where id = ?', agoraISO(), req.user.id, a.id);
+    await run('update acoes set validada_chefe_em = ?, validada_chefe_por = ? where id = ? and empresa_id = ?', agoraISO(), req.user.id, a.id, empresaAtual());
     await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id, `Validada pelo chefe (${req.user.nome}).`, agoraISO());
-    return acaoOut(await q1(`${SELECT_ACAO} where a.id = ?`, a.id));
+    return acaoOut(await q1(`${SELECT_ACAO} where a.id = ? and a.empresa_id = ?`, a.id, empresaAtual()));
   }));
   // Devolver para ajuste: cada um devolve a etapa que lhe cabe (o chefe, a que aguarda a validação dele; o Diretor, a
   // que aguarda o aceite dele). A ação volta a "em andamento" e a validação recomeça.
@@ -945,7 +954,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     } else if (req.user.perfil === 'diretor' && etapa !== 'diretor') {
       throw falha(409, etapa === 'chefe' ? 'Esta ação ainda aguarda a validação do chefe da seção.' : 'Esta ação não aguarda o aceite do Diretor.');
     }
-    await run(`update acoes set status = 'em_andamento', concluida_em = null, encerrada = 0, validada_chefe_em = null, validada_chefe_por = null where id = ?`, a.id);
+    await run(`update acoes set status = 'em_andamento', concluida_em = null, encerrada = 0, validada_chefe_em = null, validada_chefe_por = null where id = ? and empresa_id = ?`, a.id, empresaAtual());
     const quem = { administrador: 'o Administrador', diretor: 'o Diretor', chefe: `o chefe (${req.user.nome})` }[req.user.perfil];
     await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id, `Devolvida pel${quem}: ${t}`, agoraISO());
     return { ok: true };
@@ -957,27 +966,27 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
     return await q(`select p.*, a.titulo as acao_titulo, a.secao_id, s.nome as secao_nome, s.sigla as secao_sigla, u.nome as usuario_nome
               from pedidos_prazo p join acoes a on a.id = p.acao_id join secoes s on s.id = a.secao_id
               left join usuarios u on u.id = p.usuario_id
-              where (${req.user.perfil === 'administrador' ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'}) ${st ? `and p.status = '${st}' and a.arquivada = 0 and a.encerrada = 0` : ''}
-              order by p.criado_em desc`);
+              where a.empresa_id = ? and (${req.user.perfil === 'administrador' ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'}) ${st ? `and p.status = '${st}' and a.arquivada = 0 and a.encerrada = 0` : ''}
+              order by p.criado_em desc`, empresaAtual());
   }));
   app.post('/api/pedidos-prazo/:id/decidir', permit('diretor', 'apoio', 'administrador'), h(async (req) => {
     const id = Number(req.params.id);
     const todas = req.user.perfil === 'administrador'; // vê também as ações internas das subseções
     const filtro = todas ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1';
     const visivel = await q1(`select p.acao_id from pedidos_prazo p join acoes a on a.id = p.acao_id
-      where p.id = ? and (${filtro})`, id);
+      where p.id = ? and a.empresa_id = ? and (${filtro})`, id, empresaAtual());
     if (!visivel) throw falha(404, 'Pedido não encontrado.');
     return db.transaction(async () => {
       // Criar pedido e decidir pedido adquirem a mesma trava, sempre na ação.
-      if (db.isPg) await q1('select id from acoes where id = ? for update', visivel.acao_id);
+      if (db.isPg) await q1('select id from acoes where id = ? and empresa_id = ? for update', visivel.acao_id, empresaAtual());
       const p = await q1(`select p.*, a.arquivada, a.encerrada, a.prazo from pedidos_prazo p join acoes a on a.id = p.acao_id
-        where p.id = ? and (${filtro})`, id);
+        where p.id = ? and a.empresa_id = ? and (${filtro})`, id, empresaAtual());
       if (!p) throw falha(404, 'Pedido não encontrado.');
       if (p.arquivada || p.encerrada) throw falha(409, 'Não é possível decidir prazo de uma ação arquivada ou encerrada.');
       if (p.status !== 'pendente') throw falha(409, 'Este pedido já foi decidido.');
       let reuniaoId = null;
       if (req.body?.reuniao_id) {
-        const r = await q1(`select id from reunioes where id = ? and status = 'em_andamento'${db.isPg ? ' for update' : ''}`, Number(req.body.reuniao_id));
+        const r = await q1(`select id from reunioes where id = ? and status = 'em_andamento' and empresa_id = ?${db.isPg ? ' for update' : ''}`, Number(req.body.reuniao_id), empresaAtual());
         if (!r) throw falha(409, 'A reunião informada não está em andamento.');
         reuniaoId = r.id;
       }
@@ -991,9 +1000,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         where id = ? and status = 'pendente'`,
         aprovar ? 'aprovado' : 'recusado', agoraISO(), req.user.id, reuniaoId, p.id);
       if (!alterado.changes) throw falha(409, 'Este pedido já foi decidido. Atualize a tela.');
-      await movimentou(p.acao_id);
+      await movimentou(p.acao_id, req.user.empresa_id);
       if (aprovar) {
-        await run('update acoes set prazo = ? where id = ?', p.novo_prazo, p.acao_id);
+        await run('update acoes set prazo = ? where id = ? and empresa_id = ?', p.novo_prazo, p.acao_id, empresaAtual());
         await run(`insert into acao_prazos (acao_id, prazo_anterior, prazo_novo, origem, pedido_id, alterado_em, alterado_por)
           values (?,?,?,'pedido',?,?,?)`, p.acao_id, p.prazo, p.novo_prazo, p.id, agoraISO(), req.user.id);
       }

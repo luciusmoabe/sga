@@ -1,5 +1,5 @@
 // Ponto de entrada: entrada simulada, casca da aplicação e roteamento por hash.
-import { entrar, entrarSenha, get, sair, sessao, limparSessao, modoAuth, versao } from './api.js';
+import { empresaLembrada, empresasDaEntrada, entrar, entrarSenha, get, lembrarEmpresa, sair, sessao, limparSessao, modoAuth, versao } from './api.js';
 import { atualizarSessao, est } from './estado.js';
 import { $, esc, on, trilho, toast } from './ui.js';
 import { acoes, centro, direcionar, painel, pauta, prazos } from './telas-diretor.js';
@@ -137,10 +137,41 @@ async function carregarSessao() {
 // Tela para onde voltar depois de um novo login causado por sessão expirada.
 let retorno = null;
 
+/** Empresa escolhida na entrada: a do endereço (`?empresa=slug`), a lembrada do último acesso ou a única que existe. */
+const empresaDoEndereco = () => (new URLSearchParams(location.search).get('empresa') || '').trim().toLowerCase().slice(0, 60);
+function escolherEmpresa({ empresas, escolhida }) {
+  const pedida = empresaDoEndereco();
+  if (pedida && escolhida) return escolhida.slug;
+  const lembrada = empresaLembrada();
+  if (empresas.some((e) => e.slug === lembrada)) return lembrada;
+  return empresas.length === 1 ? empresas[0].slug : '';
+}
+
+/** Campo "Empresa" da entrada. Com uma só empresa (ou vinda do endereço, fora da lista) mostra o nome; com várias, um seletor
+ *  com busca (a partir de 7 empresas). O servidor sempre confere se a conta pertence à empresa escolhida. */
+function campoEmpresa({ empresas: lista, escolhida }, atual) {
+  const empresas = [...lista].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  const doEndereco = escolhida && !empresas.some((e) => e.slug === escolhida.slug);
+  if (doEndereco || empresas.length === 1) {
+    const e = doEndereco ? escolhida : empresas[0];
+    return `<div class="campo empresa-fixa"><span class="rotulo-campo">Empresa</span><b>${esc(e.nome)}</b><input type="hidden" name="empresa" value="${esc(e.slug)}">${empresas.length > 1 || doEndereco ? '<a href="/">Não é a sua? Escolher outra</a>' : ''}</div>`;
+  }
+  return `<div class="campo"><label for="login-empresa">Empresa</label>
+    ${empresas.length > 6 ? '<input id="login-empresa-busca" type="search" placeholder="Buscar empresa" aria-label="Buscar empresa" autocomplete="off">' : ''}
+    <select id="login-empresa" name="empresa" required>
+      <option value="">Escolha a sua empresa</option>
+      ${empresas.map((e) => `<option value="${esc(e.slug)}"${e.slug === atual ? ' selected' : ''}>${esc(e.nome)}</option>`).join('')}
+    </select></div>`;
+}
+
 async function telaEntrada({ expirada = false } = {}) {
   document.body.classList.remove('tv');
   if (!expirada) retorno = null;
   if (await modoAuth() === 'supabase') {
+    let lista;
+    try { lista = await empresasDaEntrada(empresaDoEndereco()); }
+    catch { lista = { empresas: [], escolhida: null }; }
+    const atual = escolherEmpresa(lista);
     app.innerHTML = `<div class="entrada"><div class="entrada-caixa estreita">
       <img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo">
       <p class="entrada-tag">Acompanhamento semanal</p>
@@ -148,6 +179,7 @@ async function telaEntrada({ expirada = false } = {}) {
       <p class="lema">Entre com seu e-mail e senha.</p>
       ${expirada ? '<div class="info" role="status">Sua sessão expirou. Entre novamente para continuar de onde parou; rascunhos não enviados foram mantidos.</div>' : ''}
       <form id="login-senha">
+        ${campoEmpresa(lista, atual)}
         <div class="campo"><label for="login-email">E-mail</label>
         <input id="login-email" name="email" type="email" autocomplete="username" maxlength="254" required></div>
         <div class="campo"><label for="login-password">Senha</label>
@@ -166,6 +198,11 @@ async function telaEntrada({ expirada = false } = {}) {
       e.currentTarget.setAttribute('aria-label', mostrar ? 'Ocultar senha' : 'Mostrar senha');
       e.currentTarget.title = mostrar ? 'Ocultar senha' : 'Mostrar senha';
     });
+    // Busca no seletor de empresas (só aparece quando há muitas): esconde as que não combinam, sem tirar a escolhida.
+    $('#login-empresa-busca')?.addEventListener('input', (ev) => {
+      const termo = ev.currentTarget.value.trim().toLowerCase();
+      for (const op of $('#login-empresa').options) op.hidden = !!op.value && !!termo && !op.textContent.toLowerCase().includes(termo) && !op.selected;
+    });
     form.addEventListener('submit', async e => {
       e.preventDefault();
       const botao = form.querySelector('button[type=submit]');
@@ -175,7 +212,10 @@ async function telaEntrada({ expirada = false } = {}) {
       const erro = form.querySelector('#login-erro');
       erro.textContent = '';
       try {
-        await entrarSenha(form.elements.email.value, form.elements.senha.value);
+        const empresa = form.elements.empresa?.value || '';
+        if (!empresa && lista.empresas.length !== 1) throw new Error('Escolha a sua empresa.');
+        await entrarSenha(form.elements.email.value, form.elements.senha.value, empresa);
+        if (empresa) lembrarEmpresa(empresa);
         form.elements.senha.value = '';
         est.user = null;
         location.hash = retorno || '#/';
@@ -189,7 +229,13 @@ async function telaEntrada({ expirada = false } = {}) {
     });
     return;
   }
-  const us = await fetch('/api/usuarios-demo').then((r) => r.json());
+  const lista = await empresasDaEntrada(empresaDoEndereco()).catch(() => ({ empresas: [], escolhida: null }));
+  const pedidaDemo = escolherEmpresa(lista);
+  const demo = await fetch(`/api/usuarios-demo${pedidaDemo ? `?empresa=${encodeURIComponent(pedidaDemo)}` : ''}`).then((r) => r.json());
+  const us = demo.usuarios;
+  const slugDemo = demo.empresa || pedidaDemo;
+  const trocaEmpresa = lista.empresas.length > 1
+    ? `<div class="grupo-titulo">Empresa</div><div class="perfis">${[...lista.empresas].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map((e) => `<button class="perfil${e.slug === slugDemo ? ' ativo' : ''}" data-empresa="${esc(e.slug)}" aria-pressed="${e.slug === slugDemo}"><b>${esc(e.nome)}</b></button>`).join('')}</div>` : '';
   const card = (u) => `<button class="perfil" data-u="${u.id}"><b>${esc(u.nome)}</b><span>${['chefe', 'membro'].includes(u.perfil) ? esc(u.secao_nome || 'Sem seção atribuída') : PERFIL[u.perfil]}</span></button>`;
   app.innerHTML = `<div class="entrada"><div class="entrada-caixa">
     <img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo">
@@ -197,12 +243,19 @@ async function telaEntrada({ expirada = false } = {}) {
     <h1>Bem-vindo ao Agilis</h1>
     <p class="lema">Acompanhamento semanal dos Centros do Departamento de Planejamento, Orçamento e Gestão.</p>
     <div class="info">Protótipo com dados fictícios. Escolha um perfil para explorar; não há senha nesta versão.</div>
-    <div class="grupo-titulo">Diretor e Apoio</div><div class="perfis">${us.filter((u) => !['chefe', 'membro'].includes(u.perfil)).map(card).join('')}</div>
-    <div class="grupo-titulo">Chefes de seção</div><div class="perfis">${us.filter((u) => u.perfil === 'chefe').map(card).join('')}</div>
+    ${trocaEmpresa}
+    ${us.length ? '' : '<div class="info">Esta empresa ainda não tem usuários cadastrados.</div>'}
+    ${us.length ? `<div class="grupo-titulo">Diretor e Apoio</div><div class="perfis">${us.filter((u) => !['chefe', 'membro'].includes(u.perfil)).map(card).join('')}</div>
+    <div class="grupo-titulo">Chefes de seção</div><div class="perfis">${us.filter((u) => u.perfil === 'chefe').map(card).join('')}</div>` : ''}
     ${us.some((u) => u.perfil === 'membro') ? `<div class="grupo-titulo">Membros da equipe</div><div class="perfis">${us.filter((u) => u.perfil === 'membro').map(card).join('')}</div>` : ''}</div></div>`;
 }
 
 // Delegação única no contêiner #app: vale para a tela de entrada, sem acumular ouvintes.
+on(app, 'click', '[data-empresa]', async (el) => {
+  if (sessao.userId) return;
+  lembrarEmpresa(el.dataset.empresa);
+  await telaEntrada();
+});
 on(app, 'click', '[data-u]', async (el) => {
   if (sessao.userId) return;
   entrar(el.dataset.u);

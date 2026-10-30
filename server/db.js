@@ -3,6 +3,7 @@ import pg from 'pg';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { temEmpresa, empresaAtual } from './empresa.js';
 import 'dotenv/config';
 
 const { Pool, types } = pg;
@@ -313,26 +314,34 @@ export function openDb(target = process.env.SGC_DB || 'data/sgc.db', { databaseU
   return openSqliteDb(target);
 }
 
+// As consultas de árvore filtram pela empresa em curso (requisição autenticada). Fora de uma requisição (seed, scripts, testes
+// de banco) não há empresa em curso e a árvore é lida inteira.
+const filtroEmpresa = (alias = '') => (temEmpresa()
+  ? { sql: ` and ${alias}empresa_id = ?`, args: [empresaAtual()] }
+  : { sql: '', args: [] });
+
 /** Ids da seção e descendentes, consultados no banco para todas as instâncias. */
 export async function subarvore(db, id) {
+  const f = filtroEmpresa('s.');
   const rows = await db.prepare(
     `with recursive t(id) as (
-       select cast(? as integer) union select s.id from secoes s join t on s.pai_id = t.id
+       select cast(? as integer) union select s.id from secoes s join t on s.pai_id = t.id where 1 = 1${f.sql}
      ) select id from t`,
-  ).all(id);
+  ).all(id, ...f.args);
   return rows.map(r => r.id);
 }
 
 /** Ancestrais (do pai até o Centro), útil para permissões. */
 export async function ancestrais(db, id) {
+  const f = filtroEmpresa();
   const lista = [];
   const vistos = new Set([id]);
-  let atual = (await db.prepare('select pai_id from secoes where id = ?').get(id))?.pai_id;
+  let atual = (await db.prepare(`select pai_id from secoes where id = ?${f.sql}`).get(id, ...f.args))?.pai_id;
   while (atual) {
     if (vistos.has(atual)) throw new Error('A estrutura de seções contém um ciclo.');
     vistos.add(atual);
     lista.push(atual);
-    atual = (await db.prepare('select pai_id from secoes where id = ?').get(atual))?.pai_id;
+    atual = (await db.prepare(`select pai_id from secoes where id = ?${f.sql}`).get(atual, ...f.args))?.pai_id;
   }
   return lista;
 }

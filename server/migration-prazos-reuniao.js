@@ -1,10 +1,21 @@
 // Implementação da versão 13: histórico de prazos das ações e marca de ação apresentada em reunião.
 // Alterações futuras exigem uma nova migração.
-import { arvoresDosCentros } from './helpers.js';
 
 const colunas = async (db, tabela) => (db.isPg
   ? await db.prepare('select column_name as nome from information_schema.columns where table_schema = current_schema() and table_name = ?').all(tabela)
   : (await db.prepare(`pragma table_info(${tabela})`).all()).map(c => ({ nome: c.name })));
+
+/** Ids das seções que aparecem na reunião (Centros ativos e subseções, sem as que ficam fora dela). Cópia congelada da regra
+ *  desta versão: a migração não depende do código atual, que passou a filtrar por empresa. */
+async function secoesDaReuniao(db) {
+  const rows = await db.prepare(
+    `with recursive t(centro_id, id) as (
+       select id, id from secoes where pai_id is null and ativa = 1 and na_reuniao = 1
+       union select t.centro_id, s.id from secoes s join t on s.pai_id = t.id where s.na_reuniao = 1
+     ) select id from t`,
+  ).all();
+  return rows.map(r => r.id);
+}
 
 export async function aplicarPrazosEReuniao(db) {
   if (!(await colunas(db, 'acoes')).some(c => c.nome === 'apresentada_em')) {
@@ -33,7 +44,7 @@ export async function aplicarPrazosEReuniao(db) {
   const reunioes = await db.prepare(`select id, data, coalesce(encerrada_em, iniciada_em) as fim from reunioes
     where status != 'em_andamento' order by data, id`).all();
   if (!reunioes.length) return;
-  const ids = [...(await arvoresDosCentros(db, { reuniao: true })).values()].flat();
+  const ids = await secoesDaReuniao(db);
   if (!ids.length) return;
   const marcas = ids.map(() => '?').join(',');
   for (const r of reunioes) {

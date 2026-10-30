@@ -7,7 +7,10 @@ import { once } from 'node:events';
 import { openDb } from '../server/db.js';
 import { seed } from '../server/seed.js';
 import { createApp } from '../server/app.js';
-import { janelasDoRelato, montarRelato } from '../server/relato.js';
+import { janelasDoRelato, montarRelato as montarRelatoNaEmpresa } from '../server/relato.js';
+import { comEmpresa } from '../server/empresa.js';
+
+const montarRelato = (...args) => comEmpresa(1, () => montarRelatoNaEmpresa(...args));
 
 const DIRETOR = 1, ADMIN = 10, CHEFE_CPE = 3;
 const SEMANA = '2026-09-22';

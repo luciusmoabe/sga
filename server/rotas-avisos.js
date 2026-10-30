@@ -3,6 +3,7 @@
 // ao contrário de combinados e decisões, não é documento de reunião, então a exclusão é definitiva.
 import { ehISO } from './logic.js';
 import { falha, h, permit, texto } from './helpers.js';
+import { empresaAtual } from './empresa.js';
 
 export function rotasAvisos(app, { q, q1, run, hoje, agoraISO }) {
   const gestao = permit('diretor', 'administrador');
@@ -10,7 +11,7 @@ export function rotasAvisos(app, { q, q1, run, hoje, agoraISO }) {
 
   app.get('/api/avisos', gestao, h(async () => {
     const h0 = hoje();
-    return (await q('select a.*, u.nome criado_por_nome from avisos a left join usuarios u on u.id = a.criado_por order by a.id desc'))
+    return (await q('select a.*, u.nome criado_por_nome from avisos a left join usuarios u on u.id = a.criado_por where a.empresa_id = ? order by a.id desc', empresaAtual()))
       .map((a) => ({ ...a, ativo: !!a.ativo, vigente: !!a.ativo && a.data_inicio <= h0 && a.data_fim >= h0 }));
   }));
 
@@ -18,7 +19,7 @@ export function rotasAvisos(app, { q, q1, run, hoje, agoraISO }) {
   app.get('/api/avisos/atual', h(async () => {
     const h0 = hoje();
     const atual = await q1(
-      'select * from avisos where ativo = 1 and data_inicio <= ? and data_fim >= ? order by id desc limit 1', h0, h0,
+      'select * from avisos where empresa_id = ? and ativo = 1 and data_inicio <= ? and data_fim >= ? order by id desc limit 1', empresaAtual(), h0, h0,
     );
     return { aviso: fmt(atual) };
   }));
@@ -33,16 +34,16 @@ export function rotasAvisos(app, { q, q1, run, hoje, agoraISO }) {
     if (dataFim < dataInicio) throw falha(400, 'A data final não pode vir antes da data de início.');
     if (dataFim < hoje()) throw falha(400, 'A data final não pode ser no passado.');
     const id = (await run(
-      'insert into avisos (texto, data_inicio, data_fim, ativo, criado_por, criado_em) values (?,?,?,?,?,?)',
-      t, dataInicio, dataFim, 1, req.user.id, agoraISO(),
+      'insert into avisos (texto, data_inicio, data_fim, ativo, criado_por, criado_em, empresa_id) values (?,?,?,?,?,?,?)',
+      t, dataInicio, dataFim, 1, req.user.id, agoraISO(), empresaAtual(),
     )).lastInsertRowid;
     res.status(201);
-    return { aviso: fmt(await q1('select * from avisos where id = ?', id)) };
+    return { aviso: fmt(await q1('select * from avisos where id = ? and empresa_id = ?', id, empresaAtual())) };
   }));
 
   app.patch('/api/avisos/:id', gestao, h(async (req) => {
     const id = Number(req.params.id);
-    const a = await q1('select * from avisos where id = ?', id);
+    const a = await q1('select * from avisos where id = ? and empresa_id = ?', id, empresaAtual());
     if (!a) throw falha(404, 'Aviso não encontrado.');
     const b = req.body || {};
     const dataInicio = 'data_inicio' in b ? b.data_inicio : a.data_inicio;
@@ -55,15 +56,15 @@ export function rotasAvisos(app, { q, q1, run, hoje, agoraISO }) {
     if ('texto' in b) {
       const t = texto(b.texto, 300);
       if (!t) throw falha(400, 'O aviso não pode ficar vazio.');
-      await run('update avisos set texto = ? where id = ?', t, id);
+      await run('update avisos set texto = ? where id = ? and empresa_id = ?', t, id, empresaAtual());
     }
-    if ('data_inicio' in b || 'data_fim' in b) await run('update avisos set data_inicio = ?, data_fim = ? where id = ?', dataInicio, dataFim, id);
-    if ('ativo' in b) await run('update avisos set ativo = ? where id = ?', b.ativo ? 1 : 0, id);
-    return { aviso: fmt(await q1('select * from avisos where id = ?', id)) };
+    if ('data_inicio' in b || 'data_fim' in b) await run('update avisos set data_inicio = ?, data_fim = ? where id = ? and empresa_id = ?', dataInicio, dataFim, id, empresaAtual());
+    if ('ativo' in b) await run('update avisos set ativo = ? where id = ? and empresa_id = ?', b.ativo ? 1 : 0, id, empresaAtual());
+    return { aviso: fmt(await q1('select * from avisos where id = ? and empresa_id = ?', id, empresaAtual())) };
   }));
 
   app.delete('/api/avisos/:id', gestao, h(async (req) => {
-    const r = await run('delete from avisos where id = ?', Number(req.params.id));
+    const r = await run('delete from avisos where id = ? and empresa_id = ?', Number(req.params.id), empresaAtual());
     if (!r.changes) throw falha(404, 'Aviso não encontrado.');
     return { ok: true };
   }));

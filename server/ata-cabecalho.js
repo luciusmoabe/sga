@@ -1,4 +1,5 @@
 import { falha, h, permit } from './helpers.js';
+import { empresaAtual } from './empresa.js';
 
 export function rotasCabecalhoAta(app, { db, cfg }) {
   app.put('/api/config/ata', permit('diretor', 'apoio', 'administrador'), h(async req => {
@@ -13,7 +14,7 @@ export function rotasCabecalhoAta(app, { db, cfg }) {
     }
     return db.transaction(async () => {
       for (const [chave, valor] of [['ata_cabecalho', ata_cabecalho.trim()], ['ata_brasao', ata_brasao]]) {
-        await db.prepare('insert into config (chave, valor) values (?, ?) on conflict(chave) do update set valor = excluded.valor').run(chave, valor);
+        await db.prepare('insert into config (chave, valor, empresa_id) values (?, ?, ?) on conflict(empresa_id, chave) do update set valor = excluded.valor').run(chave, valor, empresaAtual());
       }
       return cfg();
     });

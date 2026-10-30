@@ -909,6 +909,12 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 
 /* Entrada por e-mail e senha */
 #login-senha { margin-top: 1.5rem; }
+#login-senha select, #login-senha input[type=search] { width: 100%; }
+#login-empresa-busca { margin-bottom: 6px; }
+.empresa-fixa { display: flex; flex-direction: column; gap: 2px; }
+.empresa-fixa .rotulo-campo { font-weight: 600; font-size: 0.9rem; }
+.empresa-fixa a { font-size: 0.85rem; }
+.perfil.ativo { outline: 2px solid var(--ink-2); outline-offset: -2px; }
 #login-senha input { width: 100%; min-width: 0; box-sizing: border-box; padding: 12px 14px; border-radius: 10px; }
 #login-erro, #troca-erro { margin: 0 0 .75rem; color: #a4262c; }
 #login-erro:empty, #troca-erro:empty { display: none; }

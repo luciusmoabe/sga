@@ -1,6 +1,7 @@
 import { DIAS_SEM_MOVIMENTO, addDays, agora, atualizacaoPendente, semaforo } from './logic.js';
 import { porNecessidade as compararNecessidade } from '../public/js/regras.js';
 import { dataNoFuso, instante } from '../public/js/datas.js';
+import { empresaAtual } from './empresa.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -50,8 +51,8 @@ export function atualizacaoDe(row) {
 export const ultimaAtualizacao = async (db, secaoId, semana) => {
   const row = await db
     .prepare(`select a.*, u.nome as usuario_nome from atualizacoes a left join usuarios u on u.id = a.usuario_id
-      where a.secao_id = ? and a.semana = ? order by a.versao desc limit 1`)
-    .get(secaoId, semana);
+      where a.secao_id = ? and a.semana = ? and a.empresa_id = ? order by a.versao desc limit 1`)
+    .get(secaoId, semana, empresaAtual());
   return atualizacaoDe(row);
 };
 
@@ -60,12 +61,13 @@ export const ultimaAtualizacao = async (db, secaoId, semana) => {
  *  Com `reuniao`, só o que aparece na reunião: uma seção fora dela leva junto as subseções abaixo. */
 export async function arvoresDosCentros(db, { reuniao = false } = {}) {
   const filtro = reuniao ? ' and na_reuniao = 1' : '';
+  const emp = empresaAtual();
   const rows = await db.prepare(
     `with recursive t(centro_id, id) as (
-       select id, id from secoes where pai_id is null and ativa = 1${filtro}
-       union select t.centro_id, s.id from secoes s join t on s.pai_id = t.id${reuniao ? ' where s.na_reuniao = 1' : ''}
+       select id, id from secoes where pai_id is null and ativa = 1 and empresa_id = ?${filtro}
+       union select t.centro_id, s.id from secoes s join t on s.pai_id = t.id where s.empresa_id = ?${reuniao ? ' and s.na_reuniao = 1' : ''}
      ) select centro_id, id from t order by centro_id, id`,
-  ).all();
+  ).all(emp, emp);
   const arvores = new Map();
   for (const r of rows) {
     if (!arvores.has(r.centro_id)) arvores.set(r.centro_id, []);
@@ -82,8 +84,8 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
   const [todosCentros, arvores] = await Promise.all([
     db.prepare(
       `select s.*, u.nome as chefe_nome from secoes s left join usuarios u on u.id = s.chefe_id
-       where s.pai_id is null and s.ativa = 1 order by s.ordem, s.id`,
-    ).all(),
+       where s.pai_id is null and s.ativa = 1 and s.empresa_id = ? order by s.ordem, s.id`,
+    ).all(empresaAtual()),
     arvoresPre ?? arvoresDosCentros(db),
   ]);
   const centros = todosCentros.filter((c) => arvores.has(c.id));
@@ -114,19 +116,19 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
          coalesce(sum(case when status != 'concluida' and prazo < ? and interna = 1 and compartilhada = 0 then 1 end), 0) atrasadas_internas,
          coalesce(sum(case when status != 'concluida' and (interna = 0 or compartilhada = 1) and coalesce(movimentada_em, criada_em) < ? then 1 end), 0) paradas
        from acoes
-       where encerrada = 0 and arquivada = 0 and secao_id in (${marks(todosIds)})
+       where encerrada = 0 and arquivada = 0 and empresa_id = ? and secao_id in (${marks(todosIds)})
        group by secao_id`,
-    ).all(hoje, hoje, ate, hoje, limiteParada, ...todosIds),
+    ).all(hoje, hoje, ate, hoje, limiteParada, empresaAtual(), ...todosIds),
     // 2: última atualização de cada seção, incluindo subseções
     db.prepare(
       `select a.*
        from atualizacoes a
-       where a.secao_id in (${marks(todosIds)}) and a.semana = ?
+       where a.secao_id in (${marks(todosIds)}) and a.semana = ? and a.empresa_id = ?
          and a.versao = (
            select max(b.versao) from atualizacoes b
-           where b.secao_id = a.secao_id and b.semana = a.semana
+           where b.secao_id = a.secao_id and b.semana = a.semana and b.empresa_id = a.empresa_id
          )`,
-    ).all(...todosIds, semana),
+    ).all(...todosIds, semana, empresaAtual()),
     // 3: tempo na semana, agrupado por seção
     db.prepare(
       `select a.secao_id, coalesce(sum(t.minutos), 0) minutos
@@ -236,11 +238,11 @@ export async function cartoesReuniao(db, semana, hoje) {
               coalesce((select sum(minutos) from tempo where acao_id = a.id), 0) tempo_total,
               s.sigla secao_sigla
        from acoes a join secoes s on s.id = a.secao_id
-       where a.secao_id in (${marks(todosIds)}) and (a.interna = 0 or a.compartilhada = 1)
+       where a.empresa_id = ? and a.secao_id in (${marks(todosIds)}) and (a.interna = 0 or a.compartilhada = 1)
          and ((a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0)
            or (a.status = 'concluida' and substr(a.concluida_em, 1, 10) >= ? and substr(a.concluida_em, 1, 10) <= ?))
        order by case a.status when 'concluida' then 1 else 0 end, a.prazo`,
-    ).all(...todosIds, addDays(semana, -8), semana),
+    ).all(empresaAtual(), ...todosIds, addDays(semana, -8), semana),
     db.prepare(
       `select p.id, p.acao_id, a.secao_id, p.novo_prazo, p.prazo_atual, p.justificativa, a.titulo acao_titulo
        from pedidos_prazo p join acoes a on a.id = p.acao_id
@@ -249,9 +251,9 @@ export async function cartoesReuniao(db, semana, hoje) {
     ).all(...todosIds),
     db.prepare(
       `select a.*, u.nome as usuario_nome from atualizacoes a left join usuarios u on u.id = a.usuario_id
-       where a.secao_id in (${marks(raizes)}) and a.semana = ?
-         and a.versao = (select max(b.versao) from atualizacoes b where b.secao_id = a.secao_id and b.semana = a.semana)`,
-    ).all(...raizes, semana),
+       where a.secao_id in (${marks(raizes)}) and a.semana = ? and a.empresa_id = ?
+         and a.versao = (select max(b.versao) from atualizacoes b where b.secao_id = a.secao_id and b.semana = a.semana and b.empresa_id = a.empresa_id)`,
+    ).all(...raizes, semana, empresaAtual()),
     // Impedimentos abertos em ações em curso, só de ações visíveis ao Diretor: o quadro da reunião mostra o estado de agora.
     db.prepare(
       `select i.id, i.acao_id, i.descricao, i.critico, i.apoio, i.criado_em, a.titulo acao_titulo, a.secao_id, s.sigla secao_sigla

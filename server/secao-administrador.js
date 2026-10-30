@@ -18,7 +18,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const db = modo === '--sqlite' ? openDb(arquivo, { databaseUrl: null })
     : openDb('postgres', { databaseUrl: process.env.SGC_MIGRATION_DATABASE_URL });
   try {
-    await definirSecaoAdministrador(db, args[0], secao);
+    await definirSecaoAdministrador(db, args[0], secao, process.env.SGC_EMPRESA ? Number(process.env.SGC_EMPRESA) : 1);
     console.log(secao ? 'Administrador vinculado à Diretoria Adjunta.' : 'Administrador desvinculado da Diretoria Adjunta.');
   } finally { await db.close(); }
 }

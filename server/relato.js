@@ -5,6 +5,7 @@ import { subarvore } from './db.js';
 import { dataNoFuso, instante } from '../public/js/datas.js';
 import { addDays, hojeISO } from './logic.js';
 import { marks } from './helpers.js';
+import { empresaAtual } from './empresa.js';
 
 /** Janelas do relato para a reunião de `semana` (data ISO do dia da reunião), vistas em `hoje`.
  *  Concluídas: de 7 dias antes até a véspera da reunião.
@@ -36,20 +37,21 @@ export async function montarRelato(db, secaoId, semana, hoje = hojeISO()) {
   const janelas = janelasDoRelato(semana, hoje);
   const ids = await subarvore(db, secaoId);
   const lugares = marks(ids);
+  const emp = empresaAtual();
   const base = `select a.id, a.titulo, a.prazo, a.status, a.prioridade, a.secao_id, a.interna, a.compartilhada, a.concluida_em,
       s.sigla as secao_sigla from acoes a join secoes s on s.id = a.secao_id`;
   const [abertas, concluidasBrutas, impedimentos] = await Promise.all([
-    db.prepare(`${base} where a.secao_id in (${lugares}) and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
-      and a.prazo <= ? order by a.prazo, a.id`).all(...ids, janelas.programadas.ate),
+    db.prepare(`${base} where a.empresa_id = ? and a.secao_id in (${lugares}) and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
+      and a.prazo <= ? order by a.prazo, a.id`).all(emp, ...ids, janelas.programadas.ate),
     // Margem de um dia em cada ponta: o corte exato é feito abaixo, no fuso da Bahia.
-    db.prepare(`${base} where a.secao_id in (${lugares}) and a.status = 'concluida' and a.concluida_em is not null
+    db.prepare(`${base} where a.empresa_id = ? and a.secao_id in (${lugares}) and a.status = 'concluida' and a.concluida_em is not null
       and substr(a.concluida_em, 1, 10) >= ? and substr(a.concluida_em, 1, 10) <= ? order by a.concluida_em, a.id`)
-      .all(...ids, addDays(janelas.concluidas.de, -1), addDays(janelas.concluidas.ate, 1)),
+      .all(emp, ...ids, addDays(janelas.concluidas.de, -1), addDays(janelas.concluidas.ate, 1)),
     db.prepare(`select i.id, i.acao_id, i.descricao, i.critico, i.apoio, i.criado_em, a.titulo as acao_titulo,
         a.status as acao_status, a.interna, a.compartilhada, a.secao_id, s.sigla as secao_sigla
       from impedimentos i join acoes a on a.id = i.acao_id join secoes s on s.id = a.secao_id
-      where i.resolvido_em is null and a.secao_id in (${lugares}) and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
-      order by i.critico desc, i.criado_em, i.id`).all(...ids),
+      where i.resolvido_em is null and a.empresa_id = ? and a.secao_id in (${lugares}) and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
+      order by i.critico desc, i.criado_em, i.id`).all(emp, ...ids),
   ]);
   const concluidas = concluidasBrutas.filter((a) => {
     const dia = dataNoFuso(instante(a.concluida_em));

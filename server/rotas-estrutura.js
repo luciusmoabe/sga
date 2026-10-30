@@ -4,13 +4,14 @@ import { DIRETORIA_ADJUNTA, LIMITE_NIVEIS, TAM_SENHA, TIPOS_SECAO } from './logi
 
 const SEM_CHEFE = 'A Diretoria Adjunta não tem chefe: quem faz parte dela é Administrador, cadastrado pelo servidor.';
 import { falha, h, marks, permit, texto } from './helpers.js';
+import { empresaAtual } from './empresa.js';
 import { editarHierarquia, excluirCadastro } from './crud-cadastros.js';
 import { administradorAuth, cadastrarChefe } from './cadastro-chefes.js';
 
 export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth }) {
   // ---------- Seções (estrutura em árvore) ----------
   const listaSecoes = async (user) => {
-    let rows = await q(`select s.*, u.nome as chefe_nome from secoes s left join usuarios u on u.id = s.chefe_id order by s.ordem, s.id`);
+    let rows = await q(`select s.*, u.nome as chefe_nome from secoes s left join usuarios u on u.id = s.chefe_id where s.empresa_id = ? order by s.ordem, s.id`, empresaAtual());
     if (['chefe', 'membro'].includes(user.perfil)) {
       const ids = new Set(user.secao_id ? await subarvore(db, user.secao_id) : []);
       rows = rows.filter((r) => ids.has(r.id));
@@ -19,7 +20,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     const nv = (r) => (r.pai_id && porId.has(r.pai_id) ? nv(porId.get(r.pai_id)) + 1 : 1);
     // A Diretoria Adjunta não tem chefe: a tela mostra os Administradores vinculados a ela.
     const membros = rows.some((r) => r.tipo === DIRETORIA_ADJUNTA)
-      ? await q(`select id, nome, secao_id from usuarios where perfil = 'administrador' and ativo = 1 and secao_id is not null order by nome`)
+      ? await q(`select id, nome, secao_id from usuarios where empresa_id = ? and perfil = 'administrador' and ativo = 1 and secao_id is not null order by nome`, empresaAtual())
       : [];
     return rows.map((r) => ({
       ...r, ativa: !!r.ativa, na_reuniao: !!r.na_reuniao, nivel: nv(r),
@@ -30,18 +31,18 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
 
   const validarChefe = async (chefeId) => {
     if (chefeId == null || chefeId === '') return null;
-    const u = await q1('select * from usuarios where id = ? and ativo = 1 and perfil = ?', Number(chefeId), 'chefe');
+    const u = await q1('select * from usuarios where id = ? and ativo = 1 and perfil = ? and empresa_id = ?', Number(chefeId), 'chefe', empresaAtual());
     if (!u) throw falha(400, 'O chefe escolhido não existe ou não tem o perfil de chefe.');
     return u.id;
   };
   const atribuirChefe = async (secaoId, chefeId) => {
-    const atual = (await q1('select chefe_id from secoes where id = ?', secaoId))?.chefe_id;
-    if (atual && atual !== chefeId) await run('update usuarios set secao_id = null where id = ? and secao_id = ?', atual, secaoId);
+    const atual = (await q1('select chefe_id from secoes where id = ? and empresa_id = ?', secaoId, empresaAtual()))?.chefe_id;
+    if (atual && atual !== chefeId) await run('update usuarios set secao_id = null where id = ? and secao_id = ? and empresa_id = ?', atual, secaoId, empresaAtual());
     if (chefeId) {
-      await run('update secoes set chefe_id = null where chefe_id = ? and id != ?', chefeId, secaoId);
-      await run('update usuarios set secao_id = ? where id = ?', secaoId, chefeId);
+      await run('update secoes set chefe_id = null where chefe_id = ? and id != ? and empresa_id = ?', chefeId, secaoId, empresaAtual());
+      await run('update usuarios set secao_id = ? where id = ? and empresa_id = ?', secaoId, chefeId, empresaAtual());
     }
-    await run('update secoes set chefe_id = ? where id = ?', chefeId, secaoId);
+    await run('update secoes set chefe_id = ? where id = ? and empresa_id = ?', chefeId, secaoId, empresaAtual());
   };
 
   app.post('/api/secoes', permit('diretor', 'administrador'), h(async (req, res) => db.transaction(async () => {
@@ -51,12 +52,12 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     if (!nome) throw falha(400, 'Informe o nome da seção.');
     if (!TIPOS_SECAO.includes(b.tipo)) throw falha(400, 'Escolha o tipo: Centro, Coordenação, Subseção ou Diretoria Adjunta.');
     if (b.tipo === DIRETORIA_ADJUNTA) {
-      if (await q1('select id from secoes where tipo = ?', DIRETORIA_ADJUNTA)) throw falha(409, 'A Diretoria Adjunta já está cadastrada.');
+      if (await q1('select id from secoes where tipo = ? and empresa_id = ?', DIRETORIA_ADJUNTA, empresaAtual())) throw falha(409, 'A Diretoria Adjunta já está cadastrada.');
       if (b.chefe_id) throw falha(400, SEM_CHEFE);
     }
     let pai = null;
     if (b.tipo === 'subsecao') {
-      pai = await q1('select * from secoes where id = ? and ativa = 1', Number(b.pai_id));
+      pai = await q1('select * from secoes where id = ? and ativa = 1 and empresa_id = ?', Number(b.pai_id), empresaAtual());
       if (!pai) throw falha(400, 'Escolha a seção à qual a subseção ficará ligada.');
       if (pai.tipo === DIRETORIA_ADJUNTA) throw falha(400, 'A Diretoria Adjunta não tem subseções.');
       if (await nivel(db, pai.id) + 1 > LIMITE_NIVEIS) throw falha(400, `A estrutura aceita até ${LIMITE_NIVEIS} níveis abaixo do Departamento.`);
@@ -65,12 +66,12 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     }
     const chefe = await validarChefe(b.chefe_id);
     const ordemRow = pai
-      ? await q1('select coalesce(max(ordem), 0) + 1 o from secoes where pai_id = ?', pai.id)
-      : await q1('select coalesce(max(ordem), 0) + 1 o from secoes where pai_id is null');
+      ? await q1('select coalesce(max(ordem), 0) + 1 o from secoes where pai_id = ? and empresa_id = ?', pai.id, empresaAtual())
+      : await q1('select coalesce(max(ordem), 0) + 1 o from secoes where pai_id is null and empresa_id = ?', empresaAtual());
     const ordem = ordemRow?.o ?? 1;
     const id = (await run(
-      'insert into secoes (nome, sigla, tipo, pai_id, ordem, na_reuniao, criada_em) values (?,?,?,?,?,?,?)',
-      nome, texto(b.sigla, 12).toUpperCase() || null, b.tipo, pai?.id ?? null, ordem, b.na_reuniao === false ? 0 : 1, agoraISO(),
+      'insert into secoes (nome, sigla, tipo, pai_id, ordem, na_reuniao, criada_em, empresa_id) values (?,?,?,?,?,?,?,?)',
+      nome, texto(b.sigla, 12).toUpperCase() || null, b.tipo, pai?.id ?? null, ordem, b.na_reuniao === false ? 0 : 1, agoraISO(), empresaAtual(),
     )).lastInsertRowid;
     if (chefe) await atribuirChefe(id, chefe);
     res.status(201);
@@ -80,22 +81,22 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
   app.patch('/api/secoes/:id', permit('diretor', 'administrador'), h(async (req) => db.transaction(async () => {
     if (db.isPg) await db.prepare('select pg_advisory_xact_lock(7319, 2)').get();
     const id = Number(req.params.id);
-    const s = await q1('select * from secoes where id = ?', id);
+    const s = await q1('select * from secoes where id = ? and empresa_id = ?', id, empresaAtual());
     if (!s) throw falha(404, 'Seção não encontrada.');
     const b = req.body || {};
     if ('tipo' in b || 'pai_id' in b) {
       await editarHierarquia(db,id,b);
-      Object.assign(s, await q1('select * from secoes where id=?',id));
+      Object.assign(s, await q1('select * from secoes where id=? and empresa_id=?',id,empresaAtual()));
     }
     if ('nome' in b) {
       const nome = texto(b.nome, 120);
       if (!nome) throw falha(400, 'O nome da seção não pode ficar vazio.');
-      await run('update secoes set nome = ? where id = ?', nome, id);
+      await run('update secoes set nome = ? where id = ? and empresa_id = ?', nome, id, empresaAtual());
     }
-    if ('sigla' in b) await run('update secoes set sigla = ? where id = ?', texto(b.sigla, 12).toUpperCase() || null, id);
+    if ('sigla' in b) await run('update secoes set sigla = ? where id = ? and empresa_id = ?', texto(b.sigla, 12).toUpperCase() || null, id, empresaAtual());
     if ('na_reuniao' in b) {
       if (typeof b.na_reuniao !== 'boolean') throw falha(400, 'Informe se a seção aparece na reunião (sim ou não).');
-      await run('update secoes set na_reuniao = ? where id = ?', b.na_reuniao ? 1 : 0, id);
+      await run('update secoes set na_reuniao = ? where id = ? and empresa_id = ?', b.na_reuniao ? 1 : 0, id, empresaAtual());
     }
     if ('chefe_id' in b) {
       const chefe = await validarChefe(b.chefe_id);
@@ -104,28 +105,28 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     }
     if (b.mover === 'cima' || b.mover === 'baixo') {
       const irmas = s.pai_id == null
-        ? await q('select id from secoes where pai_id is null order by ordem, id')
-        : await q('select id from secoes where pai_id = ? order by ordem, id', s.pai_id);
+        ? await q('select id from secoes where pai_id is null and empresa_id = ? order by ordem, id', empresaAtual())
+        : await q('select id from secoes where pai_id = ? and empresa_id = ? order by ordem, id', s.pai_id, empresaAtual());
       for (let i = 0; i < irmas.length; i++) {
-        await run('update secoes set ordem = ? where id = ?', i + 1, irmas[i].id);
+        await run('update secoes set ordem = ? where id = ? and empresa_id = ?', i + 1, irmas[i].id, empresaAtual());
       }
       const i = irmas.findIndex((r) => r.id === id);
       const j = b.mover === 'cima' ? i - 1 : i + 1;
       if (j >= 0 && j < irmas.length) {
-        await run('update secoes set ordem = ? where id = ?', j + 1, id);
-        await run('update secoes set ordem = ? where id = ?', i + 1, irmas[j].id);
+        await run('update secoes set ordem = ? where id = ? and empresa_id = ?', j + 1, id, empresaAtual());
+        await run('update secoes set ordem = ? where id = ? and empresa_id = ?', i + 1, irmas[j].id, empresaAtual());
       }
     }
     if ('ativa' in b) {
       if (b.ativa) {
-        if (s.pai_id && !(await q1('select 1 from secoes where id = ? and ativa = 1', s.pai_id))) throw falha(409, 'Reative primeiro a seção acima desta.');
-        await run('update secoes set ativa = 1 where id = ?', id);
+        if (s.pai_id && !(await q1('select 1 from secoes where id = ? and ativa = 1 and empresa_id = ?', s.pai_id, empresaAtual()))) throw falha(409, 'Reative primeiro a seção acima desta.');
+        await run('update secoes set ativa = 1 where id = ? and empresa_id = ?', id, empresaAtual());
       } else {
-        if (await q1('select 1 from secoes where pai_id = ? and ativa = 1', id)) throw falha(409, 'Desative antes as subseções que ficam abaixo desta seção.');
-        const abertas = (await q1(`select count(*) n from acoes where secao_id = ? and status != 'concluida' and encerrada = 0 and arquivada = 0`, id))?.n ?? 0;
+        if (await q1('select 1 from secoes where pai_id = ? and ativa = 1 and empresa_id = ?', id, empresaAtual())) throw falha(409, 'Desative antes as subseções que ficam abaixo desta seção.');
+        const abertas = (await q1(`select count(*) n from acoes where secao_id = ? and empresa_id = ? and status != 'concluida' and encerrada = 0 and arquivada = 0`, id, empresaAtual()))?.n ?? 0;
         if (abertas > 0) {
           if (b.reatribuir && s.pai_id) {
-            await run(`update acoes set secao_id = ? where secao_id = ? and status != 'concluida' and encerrada = 0 and arquivada = 0`, s.pai_id, id);
+            await run(`update acoes set secao_id = ? where secao_id = ? and empresa_id = ? and status != 'concluida' and encerrada = 0 and arquivada = 0`, s.pai_id, id, empresaAtual());
           } else {
             const e = falha(409, s.pai_id
               ? `Esta seção tem ${abertas} ação(ões) aberta(s). Reatribua-as à seção acima para desativar.`
@@ -134,7 +135,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
             throw e;
           }
         }
-        await run('update secoes set ativa = 0 where id = ?', id);
+        await run('update secoes set ativa = 0 where id = ? and empresa_id = ?', id, empresaAtual());
       }
     }
     return (await listaSecoes(req.user)).find((x) => x.id === id);
@@ -159,20 +160,20 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     const id=Number(req.params.id), b=req.body || {};
     if(req.user.perfil==='chefe') {
       // O chefe só redefine a senha dos membros da própria equipe; e-mail e demais perfis ficam com o Diretor.
-      const t=await q1('select perfil, secao_id from usuarios where id=?',id);
+      const t=await q1('select perfil, secao_id from usuarios where id=? and empresa_id=?',id,empresaAtual());
       const ids=req.user.secao_id ? await subarvore(db,req.user.secao_id) : [];
       if(!t || t.perfil!=='membro' || !ids.includes(t.secao_id)) throw falha(403,'Você redefine o acesso apenas dos membros da sua equipe.');
       if(b.email) throw falha(403,'Para trocar o e-mail de um membro, peça ao Diretor. Você pode redefinir a senha.');
     }
     const conta=await q1('select * from auth_contas where usuario_id=? and projeto=?',id,auth.supabaseUrl);
     if(!conta) throw falha(404,'Usuário sem login vinculado.');
-    const alvo=await q1('select perfil from usuarios where id=?',id);
+    const alvo=await q1('select perfil from usuarios where id=? and empresa_id=?',id,empresaAtual());
     if(req.user.perfil!=='administrador' && ['diretor','administrador'].includes(alvo?.perfil)) throw falha(403,'Somente o Administrador altera o acesso do Diretor e de outros Administradores.');
     const dados={};
     if(b.email) {
       const email=String(b.email).trim().toLowerCase();
       if(email.length>160 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw falha(400,'E-mail inválido.');
-      if(await q1('select id from usuarios where lower(email)=? and id!=?',email,id)) throw falha(409,'E-mail já cadastrado.');
+      if(await q1('select id /*global*/ from usuarios where lower(email)=? and id!=?',email,id)) throw falha(409,'E-mail já cadastrado.');
       dados.email=email; dados.email_confirm=true;
     }
     if(b.senha) {
@@ -182,16 +183,16 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     if(!Object.keys(dados).length) throw falha(400,'Informe novo e-mail ou senha.');
     await (adminAuth || administradorAuth(auth)).atualizar(conta.subject,dados);
     await db.transaction(async()=>{
-      if(dados.email) await run('update usuarios set email=? where id=?',dados.email,id);
+      if(dados.email) await run('update usuarios set email=? where id=? and empresa_id=?',dados.email,id,empresaAtual());
       // Quem define a senha a conhece: a pessoa precisa trocá-la no próximo acesso.
-      if(dados.password) await run('update usuarios set trocar_senha=1 where id=?',id);
+      if(dados.password) await run('update usuarios set trocar_senha=1 where id=? and empresa_id=?',id,empresaAtual());
       await run('delete from auth_sessoes_senha where conta_id=?',conta.id);
     });
     return {ok:true};
   }));
   app.get('/api/usuarios', permit('diretor', 'apoio', 'administrador'), h(async () =>
     (await q(`select u.*, s.nome as secao_nome, s.chefe_id as secao_chefe_id, (select count(*) from auth_contas c where c.usuario_id=u.id) as tem_login
-       from usuarios u left join secoes s on s.id = u.secao_id order by u.ativo desc, u.perfil, u.nome`))
+       from usuarios u left join secoes s on s.id = u.secao_id where u.empresa_id = ? order by u.ativo desc, u.perfil, u.nome`, empresaAtual()))
       // Suplente: Chefe com seção atribuída que não é o titular (secoes.chefe_id) daquela seção.
       .map(({ secao_chefe_id, ...u }) => ({ ...u, suplente: u.perfil === 'chefe' && !!u.secao_id && secao_chefe_id !== u.id }))));
   app.post('/api/usuarios', permit('diretor', 'administrador'), h(async (req, res) => {
@@ -199,13 +200,13 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     const nome = texto(b.nome, 120);
     if (!nome) throw falha(400, 'Informe o nome.');
     if (!['chefe', 'apoio', 'consulta'].includes(b.perfil)) throw falha(400, 'Escolha o perfil: Chefe, Apoio ou Consulta. Membros da equipe se cadastram com acesso.');
-    const id = (await run('insert into usuarios (nome, email, perfil) values (?,?,?)', nome, texto(b.email, 160) || null, b.perfil)).lastInsertRowid;
+    const id = (await run('insert into usuarios (nome, email, perfil, empresa_id) values (?,?,?,?)', nome, texto(b.email, 160) || null, b.perfil, empresaAtual())).lastInsertRowid;
     res.status(201);
-    return await q1('select * from usuarios where id = ?', id);
+    return await q1('select * from usuarios where id = ? and empresa_id = ?', id, empresaAtual());
   }));
   app.patch('/api/usuarios/:id', permit('diretor', 'administrador'), h(async (req) => db.transaction(async () => {
     const id = Number(req.params.id), b=req.body || {};
-    const u = await q1('select * from usuarios where id = ?' + (db.isPg ? ' for update' : ''), id);
+    const u = await q1('select * from usuarios where id = ? and empresa_id = ?' + (db.isPg ? ' for update' : ''), id, empresaAtual());
     if (!u) throw falha(404, 'Usuário não encontrado.');
     const porAdmin = req.user.perfil === 'administrador';
     const muda = 'perfil' in b || 'ativo' in b || 'secao_id' in b;
@@ -222,54 +223,54 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     if ('nome' in b) {
       const nome=texto(b.nome,120);
       if(!nome) throw falha(400,'Informe o nome.');
-      await run('update usuarios set nome=? where id=?',nome,id);
+      await run('update usuarios set nome=? where id=? and empresa_id=?',nome,id,empresaAtual());
     }
     if ('email' in b) {
       const email=texto(b.email,160).toLowerCase();
       if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw falha(400,'E-mail inválido.');
-      if(email && await q1('select id from usuarios where lower(email)=? and id!=?',email,id)) throw falha(409,'E-mail já cadastrado.');
+      if(email && await q1('select id /*global*/ from usuarios where lower(email)=? and id!=?',email,id)) throw falha(409,'E-mail já cadastrado.');
       const conta=await q1('select id from auth_contas where usuario_id=?',id);
       if(conta && email !== u.email) throw falha(409,'Para uma conta vinculada, altere o e-mail pelo botão Login.');
-      await run('update usuarios set email=? where id=?',email || null,id);
+      await run('update usuarios set email=? where id=? and empresa_id=?',email || null,id,empresaAtual());
     }
     if ('ativo' in b && typeof b.ativo !== 'boolean') throw falha(400,'Estado inválido.');
     const ativo='ativo' in b ? Number(b.ativo) : u.ativo;
     const secao='secao_id' in b ? (b.secao_id ? Number(b.secao_id) : null) : u.secao_id;
     if (u.perfil === 'diretor' && (perfil !== 'diretor' || !ativo)) {
-      const outros = (await q1(`select count(*) n from usuarios where perfil = 'diretor' and ativo = 1 and id != ?`, id)).n;
+      const outros = (await q1(`select count(*) n from usuarios where perfil = 'diretor' and ativo = 1 and id != ? and empresa_id = ?`, id, empresaAtual())).n;
       if (!outros) throw falha(409, 'O sistema precisa de ao menos um Diretor ativo. Cadastre outro Diretor antes de trocar ou desativar este.');
     }
     if(perfil==='chefe' && ativo && secao) {
-      const s=await q1('select * from secoes where id=?',secao);
+      const s=await q1('select * from secoes where id=? and empresa_id=?',secao,empresaAtual());
       if(!s?.ativa) throw falha(400,'Escolha uma seção ativa.');
       if(s.tipo===DIRETORIA_ADJUNTA) throw falha(400,SEM_CHEFE);
       if(s.chefe_id && s.chefe_id!==id) throw falha(409,'A seção já possui outro chefe. Use o botão Chefe para substituir.');
     }
     if(perfil==='membro' && ativo) {
-      const s=secao ? await q1('select ativa from secoes where id=?',secao) : null;
+      const s=secao ? await q1('select ativa from secoes where id=? and empresa_id=?',secao,empresaAtual()) : null;
       if(!s?.ativa) throw falha(400,'Escolha a seção ativa do membro da equipe.');
     }
-    await run('update secoes set chefe_id=null where chefe_id=?',id);
-    await run('update usuarios set perfil=?,ativo=?,secao_id=?,ver_outros_centros=? where id=?',perfil,ativo,['chefe','membro'].includes(perfil) && ativo ? secao : null,verOutros,id);
+    await run('update secoes set chefe_id=null where chefe_id=? and empresa_id=?',id,empresaAtual());
+    await run('update usuarios set perfil=?,ativo=?,secao_id=?,ver_outros_centros=? where id=? and empresa_id=?',perfil,ativo,['chefe','membro'].includes(perfil) && ativo ? secao : null,verOutros,id,empresaAtual());
     if(perfil==='chefe' && ativo && secao) {
-      const r=await run('update secoes set chefe_id=? where id=? and chefe_id is null and ativa=1',id,secao);
+      const r=await run('update secoes set chefe_id=? where id=? and chefe_id is null and ativa=1 and empresa_id=?',id,secao,empresaAtual());
       if(r.changes!==1) throw falha(409,'Seção alterada por outra operação. Atualize a página.');
     }
-    return await q1('select * from usuarios where id = ?', id);
+    return await q1('select * from usuarios where id = ? and empresa_id = ?', id, empresaAtual());
   })));
   // ---------- Equipe: membros da própria seção ----------
   // O chefe (e o Administrador vinculado a uma seção) cadastra, consulta e desativa os membros da equipe da sua seção e
   // das subseções. Excluir conta e mudar perfil continuam com o Diretor e o Administrador.
   const semSecao = () => { throw falha(409, 'Você ainda não está vinculado a uma seção. Peça ao Diretor para atribuí-lo a uma seção.'); };
   const MEMBRO_DA_EQUIPE = `select u.id, u.nome, u.email, u.ativo, u.trocar_senha, u.secao_id, s.sigla as secao_sigla,
-      (select count(*) from acoes a where a.responsavel_id = u.id and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0) as acoes_abertas,
+      (select count(*) from acoes a where a.responsavel_id = u.id and a.empresa_id = u.empresa_id and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0) as acoes_abertas,
       (select count(*) from auth_contas c where c.usuario_id = u.id) as tem_login
     from usuarios u join secoes s on s.id = u.secao_id`;
   const membroOut = (m) => ({ ...m, ativo: !!m.ativo, trocar_senha: !!m.trocar_senha, acoes_abertas: Number(m.acoes_abertas), tem_login: Number(m.tem_login) > 0 });
   app.get('/api/equipe', permit('chefe', 'administrador'), h(async (req) => {
     if (!req.user.secao_id) semSecao();
     const ids = await subarvore(db, req.user.secao_id);
-    return (await q(`${MEMBRO_DA_EQUIPE} where u.perfil = 'membro' and u.secao_id in (${marks(ids)}) order by u.ativo desc, u.nome, u.id`, ...ids)).map(membroOut);
+    return (await q(`${MEMBRO_DA_EQUIPE} where u.empresa_id = ? and u.perfil = 'membro' and u.secao_id in (${marks(ids)}) order by u.ativo desc, u.nome, u.id`, empresaAtual(), ...ids)).map(membroOut);
   }));
   app.post('/api/equipe', permit('chefe', 'administrador'), h(async (req, res) => {
     if (auth.mode !== 'supabase') throw falha(400, 'Criação de login disponível somente com Supabase Auth.');
@@ -283,14 +284,14 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     const id = Number(req.params.id);
     if (typeof (req.body || {}).ativo !== 'boolean') throw falha(400, 'Informe se o membro fica ativo ou inativo.');
     const ids = await subarvore(db, req.user.secao_id);
-    const alvo = await q1('select perfil, secao_id from usuarios where id = ?', id);
+    const alvo = await q1('select perfil, secao_id from usuarios where id = ? and empresa_id = ?', id, empresaAtual());
     if (!alvo || alvo.perfil !== 'membro' || !ids.includes(alvo.secao_id)) throw falha(404, 'Membro não encontrado na sua equipe.');
     await db.transaction(async () => {
-      await run('update usuarios set ativo = ? where id = ?', req.body.ativo ? 1 : 0, id);
+      await run('update usuarios set ativo = ? where id = ? and empresa_id = ?', req.body.ativo ? 1 : 0, id, empresaAtual());
       // Quem sai da equipe perde a sessão aberta na hora; as ações atribuídas a ele continuam com o nome dele, para o chefe reatribuir.
       if (!req.body.ativo) await run('delete from auth_sessoes_senha where conta_id in (select id from auth_contas where usuario_id = ?)', id);
     });
-    return membroOut(await q1(`${MEMBRO_DA_EQUIPE} where u.id = ?`, id));
+    return membroOut(await q1(`${MEMBRO_DA_EQUIPE} where u.id = ? and u.empresa_id = ?`, id, empresaAtual()));
   }));
   app.delete('/api/usuarios/:id', permit('diretor', 'administrador'), h(req => excluirCadastro(db,'usuarios',Number(req.params.id))));
   app.delete('/api/secoes/:id', permit('diretor', 'administrador'), h(req => excluirCadastro(db,'secoes',Number(req.params.id))));

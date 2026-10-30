@@ -38,8 +38,10 @@ test('exige um usuário e lista os perfis de demonstração', async () => {
   assert.equal((await call(null, 'GET', '/bootstrap')).status, 401);
   const u = await call(null, 'GET', '/usuarios-demo');
   assert.equal(u.status, 200);
-  assert.equal(u.data[0].perfil, 'diretor');
-  assert.ok(u.data.some((x) => x.perfil === 'apoio'));
+  assert.equal(u.data.empresa, 'dpog', 'sem escolha, a primeira empresa ativa');
+  assert.equal(u.data.usuarios[0].perfil, 'diretor');
+  assert.ok(u.data.usuarios.some((x) => x.perfil === 'apoio'));
+  assert.deepEqual((await call(null, 'GET', '/usuarios-demo?empresa=nao-existe')).data, { empresa: null, usuarios: [] });
 });
 
 test('a semana da reunião é a terça seguinte ao sábado', async () => {

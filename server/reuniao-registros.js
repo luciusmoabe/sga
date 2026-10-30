@@ -1,5 +1,6 @@
 import { falha, h, permit, texto } from './helpers.js';
 import { integrarRegistrosAta } from './ata-registros.js';
+import { empresaAtual } from './empresa.js';
 
 // Todas as alterações usam a mesma transação e trava do ciclo da reunião.
 export function registrosReuniao(app, { q, q1, run, agoraISO, comReuniao }) {
@@ -32,13 +33,13 @@ export function registrosReuniao(app, { q, q1, run, agoraISO, comReuniao }) {
       if (!(await q1('select id from ata_revisoes where reuniao_id = ? limit 1', r.id))) await registrarVersao(r, req.user, r.ata_texto);
       await registrarVersao(r, req.user, nova);
     }
-    await run('update reunioes set ata_texto = ? where id = ?', nova, r.id);
+    await run('update reunioes set ata_texto = ? where id = ? and empresa_id = ?', nova, r.id, empresaAtual());
   };
 
   app.get('/api/reunioes/:id/candidatos', gestao, h(async (req) => {
-    if (!(await q1('select id from reunioes where id = ?', Number(req.params.id)))) throw falha(404, 'Reunião não encontrada.');
+    if (!(await q1('select id from reunioes where id = ? and empresa_id = ?', Number(req.params.id), empresaAtual()))) throw falha(404, 'Reunião não encontrada.');
     return q(`select u.id, u.nome, s.nome secao_nome from usuarios u
-      left join secoes s on s.id = u.secao_id where u.ativo = 1 order by u.nome`);
+      left join secoes s on s.id = u.secao_id where u.ativo = 1 and u.empresa_id = ? order by u.nome`, empresaAtual());
   }));
   app.put('/api/reunioes/:id/participantes', gestao, h(async (req) => comReuniao(req.params.id, async (r) => {
     const ids = req.body?.usuarios;
@@ -48,7 +49,7 @@ export function registrosReuniao(app, { q, q1, run, agoraISO, comReuniao }) {
     for (const id of new Set(ids)) {
       const anterior = registrados.find(p => p.usuario_id === id);
       if (anterior) { pessoas.push({ ...anterior, id }); continue; }
-      const u = await q1(`select u.id, u.nome, s.nome secao_nome from usuarios u left join secoes s on s.id = u.secao_id where u.id = ? and u.ativo = 1`, id);
+      const u = await q1(`select u.id, u.nome, s.nome secao_nome from usuarios u left join secoes s on s.id = u.secao_id where u.id = ? and u.ativo = 1 and u.empresa_id = ?`, id, empresaAtual());
       if (!u) throw falha(400, 'Participante inválido.');
       pessoas.push(u);
     }
@@ -106,7 +107,7 @@ export function registrosReuniao(app, { q, q1, run, agoraISO, comReuniao }) {
       if (t !== r.ata_texto) {
         if (!(await q1('select id from ata_revisoes where reuniao_id = ? limit 1', r.id))) await registrarVersao(r, req.user, r.ata_texto);
         await registrarVersao(r, req.user, t);
-        await run('update reunioes set ata_texto = ? where id = ?', t, r.id);
+        await run('update reunioes set ata_texto = ? where id = ? and empresa_id = ?', t, r.id, empresaAtual());
       }
     }
     await run('update ata_sugestoes set status = ?, resposta = ?, respondida_por = ?, respondida_em = ? where id = ?', status, resposta, req.user.id, agoraISO(), s.id);

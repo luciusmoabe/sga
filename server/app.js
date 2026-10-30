@@ -13,6 +13,7 @@ import { rotasCabecalhoAta } from './ata-cabecalho.js';
 import { cabecalhosSeguranca } from './seguranca-http.js';
 import { configurarAuth, instalarAuth } from './auth.js';
 import { administradorAuth } from './cadastro-chefes.js';
+import { escopoDaEmpresa, instalarLintDeEmpresa } from './empresa.js';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -36,10 +37,13 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   app.use('/fontes', express.static(path.join(raiz, 'public/fontes'), { maxAge: '30d', immutable: true }));
   app.use(express.static(path.join(raiz, 'public')));
 
+  if (process.env.SGC_LINT_EMPRESA) instalarLintDeEmpresa(db);
   const ctx = criarContexto(db);
   // API administrativa do Supabase (criação de contas e troca de senha); só existe no modo institucional.
   const contas = adminAuth || (auth.mode === 'supabase' ? administradorAuth(auth) : null);
   instalarAuth(app, db, auth, provedor, contas);
+  // Daqui em diante toda consulta roda na empresa de quem está logado (server/empresa.js).
+  app.use('/api', escopoDaEmpresa);
   // Perfil Consulta: só lê as ações. Lista fechada, para que nenhuma rota, atual ou futura, fique aberta a ele por
   // descuido. Entrar, sair e trocar a senha são atendidos antes, em instalarAuth.
   const LEITURA_CONSULTA = [/^\/bootstrap$/, /^\/acoes$/, /^\/acoes\/\d+$/, /^\/tarefas$/];

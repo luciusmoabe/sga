@@ -1,6 +1,7 @@
 import { GUID } from './auth.js';
 import { falha } from './helpers.js';
 import { DIRETORIA_ADJUNTA, TAM_SENHA } from './logic.js';
+import { empresaAtual, temEmpresa } from './empresa.js';
 
 export function administradorAuth(config, { env = process.env, fetchImpl = fetch } = {}) {
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -36,7 +37,10 @@ export function administradorAuth(config, { env = process.env, fetchImpl = fetch
 // `suplente` cadastra um segundo Chefe para a mesma seção, com os mesmos poderes do titular (mesmo secao_id),
 // para responder na ausência dele: não mexe em secoes.chefe_id, então não há substituição nem confirmação.
 // `secaoAdministrador` só vem do comando do servidor: vincula o novo Administrador à Diretoria Adjunta.
-export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe', { permitidos = ['chefe', 'apoio'], suplente = false, secaoAdministrador = null } = {}) {
+// `empresaId` só vem dos comandos do servidor (fora de uma requisição; padrão 1, o órgão atual); numa requisição vale sempre a empresa de quem cadastra.
+export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe', { permitidos = ['chefe', 'apoio'], suplente = false, secaoAdministrador = null, empresaId = 1 } = {}) {
+  const emp = temEmpresa() ? empresaAtual() : Number(empresaId);
+  if (!Number.isInteger(emp) || emp < 1) throw new Error('Cadastro de conta sem empresa.');
   if (!permitidos.includes(perfil)) {
     throw falha(400, permitidos.length === 1 ? 'Este cadastro é só de membro da equipe.'
       : permitidos.includes('diretor') ? 'Escolha Diretor, Apoio do Diretor, Chefe de seção, Membro da equipe ou Consulta.' : 'Escolha Chefe, Apoio, Membro da equipe ou Consulta.');
@@ -54,18 +58,18 @@ export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe',
   if (anterior !== null && (!Number.isSafeInteger(anterior) || anterior < 1)) throw falha(400, 'Confirmação de substituição inválida.');
   const validar = async () => {
     if (perfil === 'chefe') {
-    const s = await db.prepare('select id, ativa, chefe_id, tipo from secoes where id = ?').get(secaoId);
+    const s = await db.prepare('select id, ativa, chefe_id, tipo from secoes where id = ? and empresa_id = ?').get(secaoId, emp);
     if (!s?.ativa) throw falha(400, 'Escolha uma seção ativa.');
     if (s.tipo === DIRETORIA_ADJUNTA) throw falha(400, 'A Diretoria Adjunta não tem chefe: quem faz parte dela é Administrador, cadastrado pelo servidor.');
     if (!suplente && (s.chefe_id ?? null) !== anterior) throw falha(409, 'A chefia da seção mudou ou precisa de confirmação. Atualize a página e confirme a substituição.');
     }
     if (perfil === 'membro') {
       // O membro trabalha numa seção ativa (inclusive na Diretoria Adjunta); não ocupa a chefia.
-      const s = await db.prepare('select ativa from secoes where id = ?').get(secaoId);
+      const s = await db.prepare('select ativa from secoes where id = ? and empresa_id = ?').get(secaoId, emp);
       if (!s?.ativa) throw falha(400, 'Escolha uma seção ativa.');
     }
-    if (perfil === 'administrador' && secaoId !== null) await validarSecaoAdministrador(db, secaoId);
-    if (await db.prepare('select id from usuarios where lower(email) = ?').get(email)) throw falha(409, 'E-mail já cadastrado no Agilis.');
+    if (perfil === 'administrador' && secaoId !== null) await validarSecaoAdministrador(db, secaoId, emp);
+    if (await db.prepare('select id /*global*/ from usuarios where lower(email) = ?').get(email)) throw falha(409, 'E-mail já cadastrado no Agilis.');
   };
   await validar();
   const subject = await admin.criar(email, senha);
@@ -73,13 +77,13 @@ export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe',
   try {
     return await db.transaction(async () => {
       await validar();
-      const id = (await db.prepare('insert into usuarios (nome,email,perfil,secao_id,trocar_senha) values (?,?,?,?,1)').run(nome,email,perfil,secaoId)).lastInsertRowid;
+      const id = (await db.prepare('insert into usuarios (nome,email,perfil,secao_id,trocar_senha,empresa_id) values (?,?,?,?,1,?)').run(nome,email,perfil,secaoId,emp)).lastInsertRowid;
       if (perfil === 'chefe' && !suplente) {
       const alteracao = anterior === null
-        ? await db.prepare('update secoes set chefe_id = ? where id = ? and ativa = 1 and chefe_id is null').run(id,secaoId)
-        : await db.prepare('update secoes set chefe_id = ? where id = ? and ativa = 1 and chefe_id = ?').run(id,secaoId,anterior);
+        ? await db.prepare('update secoes set chefe_id = ? where id = ? and ativa = 1 and chefe_id is null and empresa_id = ?').run(id,secaoId,emp)
+        : await db.prepare('update secoes set chefe_id = ? where id = ? and ativa = 1 and chefe_id = ? and empresa_id = ?').run(id,secaoId,anterior,emp);
       if (alteracao.changes !== 1) throw falha(409, 'A seção foi alterada por outra operação. Atualize a página.');
-      if (anterior !== null) await db.prepare('update usuarios set secao_id = null where id = ? and secao_id = ?').run(anterior,secaoId);
+      if (anterior !== null) await db.prepare('update usuarios set secao_id = null where id = ? and secao_id = ? and empresa_id = ?').run(anterior,secaoId,emp);
       }
       await db.prepare('insert into auth_contas (usuario_id,projeto,subject) values (?,?,?)').run(id,config.supabaseUrl,subject);
       return { id, nome, email, perfil, secao_id: secaoId, ativo: 1, trocar_senha: 1, suplente: suplente && perfil === 'chefe' };
@@ -92,7 +96,7 @@ export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe',
 }
 
 /** Administrador só se vincula a uma seção se ela for a Diretoria Adjunta, ativa. */
-export async function validarSecaoAdministrador(db, secaoId) {
-  const s = await db.prepare('select ativa, tipo from secoes where id = ?').get(secaoId);
+export async function validarSecaoAdministrador(db, secaoId, empresaId = empresaAtual()) {
+  const s = await db.prepare('select ativa, tipo from secoes where id = ? and empresa_id = ?').get(secaoId, empresaId);
   if (!s?.ativa || s.tipo !== DIRETORIA_ADJUNTA) throw falha(400, 'O Administrador só pode ser vinculado à Diretoria Adjunta, ativa.');
 }

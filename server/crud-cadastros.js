@@ -1,8 +1,10 @@
 import { falha } from './helpers.js';
 import { DIRETORIA_ADJUNTA, TIPOS_SECAO } from './logic.js';
+import { empresaAtual } from './empresa.js';
 
 export async function editarHierarquia(db, id, dados) {
-  const rows = await db.prepare('select id,pai_id,tipo,ativa from secoes').all();
+  const rows = await db.prepare('select id,pai_id,tipo,ativa from secoes where empresa_id=?').all(empresaAtual());
+  if (!rows.some(s=>s.id===id)) throw falha(404,'Seção não encontrada.');
   const atual = rows.find(s=>s.id===id);
   const tipo = dados.tipo ?? atual.tipo;
   const pai = 'pai_id' in dados ? (dados.pai_id === '' || dados.pai_id === null ? null : Number(dados.pai_id)) : atual.pai_id;
@@ -26,13 +28,13 @@ export async function editarHierarquia(db, id, dados) {
       no=mapa.get(no.pai_id);
     }
   }
-  await db.prepare('update secoes set tipo=?,pai_id=? where id=?').run(tipo,pai,id);
+  await db.prepare('update secoes set tipo=?,pai_id=? where id=? and empresa_id=?').run(tipo,pai,id,empresaAtual());
 }
 
 export async function excluirCadastro(db, tabela, id) {
   try {
     return await db.transaction(async()=>{
-      const row=await db.prepare(`select * from ${tabela} where id=?`).get(id);
+      const row=await db.prepare(`select * from ${tabela} where id=? and empresa_id=?`).get(id, empresaAtual());
       if(!row) throw falha(404,'Cadastro não encontrado.');
       if(tabela==='usuarios') {
         if(row.perfil==='diretor') throw falha(409,'O Diretor não pode ser excluído.');
@@ -66,19 +68,19 @@ export async function excluirCadastro(db, tabela, id) {
         ];
         const historico=[];
         for (const [origem,coluna,rotulo] of referencias) {
-          const {n}=await db.prepare(`select count(*) as n from ${origem} where ${coluna}=?`).get(id);
+          const {n}=await db.prepare(`select count(*) /*global*/ as n from ${origem} where ${coluna}=?`).get(id);
           if(n) historico.push(`${n} ${rotulo}`);
         }
         if(historico.length) throw falha(409,`Usuário possui histórico: ${historico.join('; ')}. Use Desativar para preservar a autoria desses registros.`);
         // Chefia é uma atribuição atual, não um impedimento histórico.
         // Qualquer falha posterior desfaz também esta liberação.
-        await db.prepare('update secoes set chefe_id=null where chefe_id=?').run(id);
+        await db.prepare('update secoes set chefe_id=null where chefe_id=? and empresa_id=?').run(id, empresaAtual());
         await db.prepare('delete from auth_sessoes_senha where conta_id in (select id from auth_contas where usuario_id=?)').run(id);
         await db.prepare('delete from auth_contas where usuario_id=?').run(id);
         await db.prepare('delete from auth_sessoes where identidade_id in (select id from auth_identidades where usuario_id=?)').run(id);
         await db.prepare('delete from auth_identidades where usuario_id=?').run(id);
       }
-      await db.prepare(`delete from ${tabela} where id=?`).run(id);
+      await db.prepare(`delete from ${tabela} where id=? and empresa_id=?`).run(id, empresaAtual());
       return {ok:true};
     });
   } catch(e) {

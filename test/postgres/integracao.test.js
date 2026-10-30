@@ -379,4 +379,53 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     await assert.rejects(db.prepare("insert into secoes (nome, sigla, tipo, ordem, criada_em, empresa_id) values ('X', 'X', 'centro', 1, '2026-02-01', 99)").run(), { code: '23503' });
     await assert.rejects(db.prepare("insert into empresas (nome, slug, criada_em) values ('Repetida', 'empresa-b', '2026-02-01')").run(), { code: '23505' });
   });
+  await t.test('multi-empresa: duas empresas no PostgreSQL não se enxergam e cada uma tem a sua reunião, configuração e acesso por número', async t => {
+    const [db] = await cluster.banco(t);
+    await seed(db);
+    // Esquema da fase de contração (ainda não publicada): sem as chaves únicas globais de config e de reunião em andamento.
+    await db.exec('drop index if exists uq_reuniao_em_andamento');
+    await db.exec('alter table config drop constraint config_pkey');
+    await db.exec('alter table config add primary key (empresa_id, chave)');
+    await db.prepare("insert into empresas (nome, slug, criada_em) values ('Empresa ZB', 'zb', '2026-09-01')").run();
+    await db.prepare("insert into secoes (nome, sigla, tipo, ordem, criada_em, empresa_id) values ('Centro Alfa ZB', 'ZBA', 'centro', 1, '2026-09-01', 2)").run();
+    const alfa = (await db.prepare("select id from secoes where empresa_id = 2").get()).id;
+    await db.prepare("insert into usuarios (nome, email, perfil, empresa_id) values ('Diretor ZB', 'diretor@zb.invalid', 'diretor', 2)").run();
+    await db.prepare("insert into usuarios (nome, email, perfil, secao_id, empresa_id) values ('Chefe ZB', 'chefe@zb.invalid', 'chefe', ?, 2)").run(alfa);
+    const dirB = (await db.prepare("select id from usuarios where email = 'diretor@zb.invalid'").get()).id;
+    const chefeB = (await db.prepare("select id from usuarios where email = 'chefe@zb.invalid'").get()).id;
+    await db.prepare('update secoes set chefe_id = ? where id = ?').run(chefeB, alfa);
+    const call = await servir(t, db);
+    const DIRETOR_A = 1, acaoA = (await db.prepare('select id from acoes where empresa_id = 1 order by id limit 1').get()).id;
+
+    assert.equal((await call('POST', '/diretrizes', { titulo: 'Diretriz ZB', prazo: '2026-12-31', destino: 'todos' }, dirB)).data.acoes_criadas, 1);
+    const acaoB = (await db.prepare('select id from acoes where empresa_id = 2').get()).id;
+    // Configuração: o upsert por (empresa, chave) funciona e cada empresa tem o seu valor.
+    assert.equal((await call('PUT', '/config', { combinados_frequencia: 'sempre', reuniao_hora: '15:00' }, dirB)).status, 200);
+    assert.equal((await call('PUT', '/config', { combinados_frequencia: 'sempre', reuniao_hora: '09:30' }, DIRETOR_A)).status, 200);
+    assert.equal((await call('PUT', '/config', { combinados_frequencia: 'sempre', reuniao_hora: '09:45' }, DIRETOR_A)).status, 200);
+    assert.equal((await call('GET', '/config', undefined, dirB)).data.reuniao_hora, '15:00');
+    assert.equal((await call('GET', '/config', undefined, DIRETOR_A)).data.reuniao_hora, '09:45');
+    assert.equal((await call('PUT', '/config/ata', { ata_cabecalho: 'Cabeçalho ZB', ata_brasao: '' }, dirB)).status, 200);
+    assert.notEqual((await call('GET', '/config', undefined, DIRETOR_A)).data.ata_cabecalho, 'Cabeçalho ZB');
+    // Uma reunião em andamento por empresa.
+    const reuniaoB = (await call('POST', '/reunioes/iniciar', undefined, dirB)).data.reuniao.id;
+    const reuniaoA = (await call('POST', '/reunioes/iniciar', undefined, DIRETOR_A)).data.reuniao.id;
+    assert.notEqual(reuniaoA, reuniaoB);
+    assert.equal((await call('POST', '/reunioes/iniciar', undefined, dirB)).data.retomada, true);
+    // Leituras e acesso por número.
+    const acaoAntes = await db.prepare('select * from acoes where id = ?').get(acaoA);
+    const listaA = (await call('GET', '/acoes?escopo=todos&situacao=abertas', undefined, DIRETOR_A)).data;
+    const listaB = (await call('GET', '/acoes?escopo=todos&situacao=abertas', undefined, dirB)).data;
+    assert.ok(listaA.length > 3 && listaB.length === 1);
+    assert.ok(listaA.every((a) => a.id !== acaoB) && listaB.every((a) => a.id !== acaoA));
+    assert.equal((await call('GET', `/acoes/${acaoA}`, undefined, dirB)).status, 404);
+    assert.equal((await call('PATCH', `/acoes/${acaoA}`, { prioridade: 'alta' }, chefeB)).status, 404);
+    assert.equal((await call('GET', `/reunioes/${reuniaoA}`, undefined, dirB)).status, 404);
+    assert.equal((await call('POST', `/reunioes/${reuniaoA}/encerrar`, {}, dirB)).status, 404);
+    assert.equal((await call('GET', `/acoes/${acaoB}`, undefined, DIRETOR_A)).status, 404);
+    assert.equal((await call('GET', '/usuarios', undefined, dirB)).data.length, 2);
+    assert.deepEqual((await call('GET', '/secoes', undefined, dirB)).data.map((x) => x.id), [alfa]);
+    assert.equal((await db.prepare('select status from reunioes where id = ?').get(reuniaoA)).status, 'em_andamento');
+    assert.deepEqual(await db.prepare('select * from acoes where id = ?').get(acaoA), acaoAntes, 'a ação da A não foi alterada');
+  });
 });

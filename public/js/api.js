@@ -28,10 +28,23 @@ export function limparSessao() {
   _cache.clear();
   try { localStorage.removeItem('agilis-usuario'); } catch { /* ignora */ }
 }
-export async function entrarSenha(email, senha) {
-  const dados = await post('/auth/entrar', { email, senha });
+export async function entrarSenha(email, senha, empresa) {
+  const dados = await post('/auth/entrar', { empresa, email, senha });
   limparSessao();
   sessao.csrf = dados.csrf;
+}
+/** Empresas da lista da entrada e, se o endereço trouxe um `slug` (mesmo de empresa fora da lista), essa empresa. */
+export async function empresasDaEntrada(slug = '') {
+  const r = await fetch(`/api/auth/empresas${slug ? `?slug=${encodeURIComponent(slug)}` : ''}`, { cache: 'no-store' });
+  if (!r.ok) throw new Error('Não foi possível carregar a lista de empresas.');
+  return r.json();
+}
+const CHAVE_EMPRESA = 'agilis-empresa';
+export function empresaLembrada() {
+  try { return localStorage.getItem(CHAVE_EMPRESA) || ''; } catch { return ''; }
+}
+export function lembrarEmpresa(slug) {
+  try { localStorage.setItem(CHAVE_EMPRESA, slug); } catch { /* armazenamento indisponível: segue sem lembrar */ }
 }
 export async function sair() {
   if (sessao.modo === 'supabase') {

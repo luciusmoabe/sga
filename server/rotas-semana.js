@@ -2,6 +2,7 @@
 import { subarvore } from './db.js';
 import { FUSO_NEGOCIO, HORA_CORTE_PADRAO, agora, ehDiaReuniao, fechamentoDe, refDiaReuniao } from './logic.js';
 import { assinatura, camposLegados, ehCorpoLegado, montarRelato, paraSnapshot } from './relato.js';
+import { empresaAtual } from './empresa.js';
 import { atualizacaoDe, cartoesReuniao, falha, h, marks, painelSemana, permit, texto, ultimaAtualizacao } from './helpers.js';
 
 export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, semanaDe, SELECT_ACAO, acaoOut }) {
@@ -11,28 +12,29 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     // pedidos de prazo pendentes, para a gestão; ações recebidas ainda não abertas, para quem as recebe.
     const recebe = req.user.secao_id && ['chefe', 'administrador'].includes(req.user.perfil);
     const arvore = recebe ? subarvore(db, req.user.secao_id) : null;
-    const [{ dia, hora, config }, secao, pedidos, novas, aValidar] = await Promise.all([
+    const [{ dia, hora, config }, empresa, secao, pedidos, novas, aValidar] = await Promise.all([
       cfgReuniao(),
-      req.user.secao_id ? q1('select id, nome, sigla, tipo from secoes where id = ?', req.user.secao_id) : null,
+      q1('select nome, sigla, slug from empresas where id = ?', empresaAtual()),
+      req.user.secao_id ? q1('select id, nome, sigla, tipo from secoes where id = ? and empresa_id = ?', req.user.secao_id, empresaAtual()) : null,
       ['chefe', 'membro', 'consulta'].includes(req.user.perfil) ? null : q1(
         `select count(*) n from pedidos_prazo p join acoes a on a.id = p.acao_id
-         where p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and (${req.user.perfil === 'administrador' ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'})`),
+         where a.empresa_id = ? and p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and (${req.user.perfil === 'administrador' ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'})`, empresaAtual()),
       recebe ? arvore.then((ids) => q1(
-        `select count(*) n from acoes a where a.secao_id in (${marks(ids)}) and a.recebida_em is not null
+        `select count(*) n from acoes a where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and a.recebida_em is not null
            and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
            and not exists (select 1 from acao_vistas v where v.acao_id = a.id and v.usuario_id = ? and v.vista_em >= a.recebida_em)`,
-        ...ids, req.user.id))
+        empresaAtual(), ...ids, req.user.id))
         // O membro recebe a ação quando o chefe a atribui a ele: nova até ele abrir o detalhe.
         : req.user.perfil === 'membro' ? q1(
-          `select count(*) n from acoes a where a.responsavel_id = ? and a.atribuida_em is not null
+          `select count(*) n from acoes a where a.empresa_id = ? and a.responsavel_id = ? and a.atribuida_em is not null
              and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
              and not exists (select 1 from acao_vistas v where v.acao_id = a.id and v.usuario_id = ? and v.vista_em >= a.atribuida_em)`,
-          req.user.id, req.user.id) : null,
+          empresaAtual(), req.user.id, req.user.id) : null,
       // Ações que o chefe atribuiu a membros e eles concluíram: aguardam a validação dele.
       recebe ? arvore.then((ids) => q1(
         `select count(*) n from acoes a join usuarios r on r.id = a.responsavel_id and r.perfil = 'membro'
-         where a.secao_id in (${marks(ids)}) and a.status = 'concluida' and a.encerrada = 0 and a.arquivada = 0
-           and a.atribuido_por is not null and a.atribuido_por != a.responsavel_id and a.validada_chefe_em is null`, ...ids)) : null,
+         where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and a.status = 'concluida' and a.encerrada = 0 and a.arquivada = 0
+           and a.atribuido_por is not null and a.atribuido_por != a.responsavel_id and a.validada_chefe_em is null`, empresaAtual(), ...ids)) : null,
     ]);
     const semana = refDiaReuniao(agora(), dia, HORA_CORTE_PADRAO);
     return {
@@ -41,6 +43,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
       acoes_a_validar: Number(aValidar?.n ?? 0),
       user: req.user,
       csrf: req.csrf,
+      empresa,
       secao,
       agora: agoraISO(),
       hoje: hoje(),
@@ -63,13 +66,13 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
       return req.user.secao_id;
     }
     const id = Number(req.query.secao_id ?? req.body?.secao_id ?? req.user.secao_id);
-    if (!id || !(await q1('select id from secoes where id = ?', id))) throw falha(400, 'Informe a seção da atualização (secao_id).');
+    if (!id || !(await q1('select id from secoes where id = ? and empresa_id = ?', id, empresaAtual()))) throw falha(400, 'Informe a seção da atualização (secao_id).');
     return id;
   };
   app.get('/api/atualizacao', permit('chefe', 'administrador'), h(async (req) => {
     const secaoId = await secaoDaAtualizacao(req);
     const semana = await semanaDe(req);
-    const anterior = (await q1(`select semana from atualizacoes where secao_id = ? and semana < ? order by semana desc limit 1`, secaoId, semana))?.semana;
+    const anterior = (await q1(`select semana from atualizacoes where secao_id = ? and semana < ? and empresa_id = ? order by semana desc limit 1`, secaoId, semana, empresaAtual()))?.semana;
     const prev = anterior ? await ultimaAtualizacao(db, secaoId, anterior) : null;
     const resumo = req.query.resumo === '1'; // o Início só precisa do relato enviado: poupa as consultas do relato ao vivo
     const [atual, relato] = await Promise.all([ultimaAtualizacao(db, secaoId, semana), resumo ? null : montarRelato(db, secaoId, semana, hoje())]);
@@ -89,7 +92,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
   const enviarRelato = (req, secaoId, semana, b) => {
     const observacoes = texto(b.observacoes, 600);
     return db.transaction(async () => {
-      if (db.isPg) await q1('select id from secoes where id = ? for update', secaoId);
+      if (db.isPg) await q1('select id from secoes where id = ? and empresa_id = ? for update', secaoId, empresaAtual());
       const relato = await montarRelato(db, secaoId, semana, hoje());
       const snapshot = paraSnapshot(relato, observacoes);
       const total = ['concluidas', 'atrasadas', 'vencemAntes', 'programadas', 'impedimentos'].reduce((n, k) => n + relato[k].length, 0);
@@ -97,10 +100,10 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
         throw falha(400, 'Não há ações nem impedimentos para relatar nesta semana. Se houve algo fora das ações, escreva nas observações.');
       }
       const legado = camposLegados(snapshot);
-      const versao = ((await q1('select coalesce(max(versao), 0) v from atualizacoes where secao_id = ? and semana = ?', secaoId, semana)).v) + 1;
-      await run(`insert into atualizacoes (secao_id, semana, versao, feito, proximo, impedimentos, critico, apoio, usuario_id, enviada_em) values (?,?,?,?,?,?,?,?,?,?)`,
+      const versao = ((await q1('select coalesce(max(versao), 0) v from atualizacoes where secao_id = ? and semana = ? and empresa_id = ?', secaoId, semana, empresaAtual())).v) + 1;
+      await run(`insert into atualizacoes (secao_id, semana, versao, feito, proximo, impedimentos, critico, apoio, usuario_id, enviada_em, empresa_id) values (?,?,?,?,?,?,?,?,?,?,?)`,
         secaoId, semana, versao, JSON.stringify(legado.feito), JSON.stringify(legado.proximo), JSON.stringify(legado.impedimentos),
-        legado.critico, legado.apoio, req.user.id, agoraISO());
+        legado.critico, legado.apoio, req.user.id, agoraISO(), empresaAtual());
       return await ultimaAtualizacao(db, secaoId, semana);
     });
   };
@@ -122,20 +125,20 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     return db.transaction(async () => {
       // A seção existe mesmo quando ainda não há atualização desta semana.
       // Travá-la serializa a escolha da próxima versão entre instâncias PostgreSQL.
-      if (db.isPg) await q1('select id from secoes where id = ? for update', secaoId);
-      const versao = ((await q1('select coalesce(max(versao), 0) v from atualizacoes where secao_id = ? and semana = ?', secaoId, semana)).v) + 1;
-      await run(`insert into atualizacoes (secao_id, semana, versao, feito, proximo, impedimentos, critico, apoio, usuario_id, enviada_em) values (?,?,?,?,?,?,?,?,?,?)`,
+      if (db.isPg) await q1('select id from secoes where id = ? and empresa_id = ? for update', secaoId, empresaAtual());
+      const versao = ((await q1('select coalesce(max(versao), 0) v from atualizacoes where secao_id = ? and semana = ? and empresa_id = ?', secaoId, semana, empresaAtual())).v) + 1;
+      await run(`insert into atualizacoes (secao_id, semana, versao, feito, proximo, impedimentos, critico, apoio, usuario_id, enviada_em, empresa_id) values (?,?,?,?,?,?,?,?,?,?,?)`,
         secaoId, semana, versao, JSON.stringify(feito), JSON.stringify(proximo), JSON.stringify(impedimentos),
-        b.critico && impedimentos.length ? 1 : 0, texto(b.apoio, 600), req.user.id, agoraISO());
+        b.critico && impedimentos.length ? 1 : 0, texto(b.apoio, 600), req.user.id, agoraISO(), empresaAtual());
       return await ultimaAtualizacao(db, secaoId, semana);
     });
   }));
 
   const historicoDe = async (secaoId, limite = 12) =>
     (await q(`select a.*, u.nome as usuario_nome from atualizacoes a left join usuarios u on u.id = a.usuario_id
-       where a.secao_id = ?
-       and a.versao = (select max(b.versao) from atualizacoes b where b.secao_id = a.secao_id and b.semana = a.semana)
-       order by a.semana desc limit ?`, secaoId, limite)).map(atualizacaoDe);
+       where a.secao_id = ? and a.empresa_id = ?
+       and a.versao = (select max(b.versao) from atualizacoes b where b.secao_id = a.secao_id and b.semana = a.semana and b.empresa_id = a.empresa_id)
+       order by a.semana desc limit ?`, secaoId, empresaAtual(), limite)).map(atualizacaoDe);
   app.get('/api/historico', permit('chefe', 'administrador'), h(async (req) => (
     req.user.perfil === 'administrador' || req.user.secao_id ? await historicoDe(await secaoDaAtualizacao(req)) : [])));
 
@@ -143,7 +146,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
   // (cada envio normalmente vira uma versão nova, nunca apagada); existe para corrigir um relato de
   // teste ou enviado por engano. Sem cascata: nenhuma outra tabela referencia atualizacoes.
   app.delete('/api/atualizacoes/:id', permit('administrador'), h(async (req) => {
-    const r = await run('delete from atualizacoes where id = ?', Number(req.params.id));
+    const r = await run('delete from atualizacoes where id = ? and empresa_id = ?', Number(req.params.id), empresaAtual());
     if (!r.changes) throw falha(404, 'Atualização não encontrada.');
     return { ok: true };
   }));
@@ -175,14 +178,14 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     const todas = req.user.perfil === 'administrador';
     // Consultas independentes em paralelo (o tempo da tela é o número de idas em série ao banco).
     const [s, semana, ids] = await Promise.all([
-      q1('select * from secoes where id = ? and pai_id is null', id), semanaDe(req), subarvore(db, id),
+      q1('select * from secoes where id = ? and pai_id is null and empresa_id = ?', id, empresaAtual()), semanaDe(req), subarvore(db, id),
     ]);
     if (!s) throw falha(404, 'Centro não encontrado.');
     const [painel, historico, acoes, tempo] = await Promise.all([
       painelSemana(db, semana, hoje()),
       historicoDe(id),
-      q(`${SELECT_ACAO} where a.secao_id in (${marks(ids)}) and (${todas ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'}) and a.encerrada = 0 and a.arquivada = 0
-                     order by case a.status when 'concluida' then 1 else 0 end, a.prazo`, ...ids),
+      q(`${SELECT_ACAO} where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and (${todas ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'}) and a.encerrada = 0 and a.arquivada = 0
+                     order by case a.status when 'concluida' then 1 else 0 end, a.prazo`, empresaAtual(), ...ids),
       q1(`select coalesce(sum(t.minutos), 0) m from tempo t join acoes a on a.id = t.acao_id where a.secao_id in (${marks(ids)})`, ...ids),
     ]);
     const item = painel.find((i) => i.secao.id === id);
