@@ -428,4 +428,15 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     assert.equal((await db.prepare('select status from reunioes where id = ?').get(reuniaoA)).status, 'em_andamento');
     assert.deepEqual(await db.prepare('select * from acoes where id = ?').get(acaoA), acaoAntes, 'a ação da A não foi alterada');
   });
+  await t.test('empresa:criar reconhece no PostgreSQL se o esquema já passou pela contração', async t => {
+    const [db] = await cluster.banco(t);
+    await seed(db);
+    const { esquemaContraido } = await import('../../server/criar-empresa.js');
+    assert.equal(await esquemaContraido(db), false);
+    await db.exec('drop index if exists uq_reuniao_em_andamento');
+    assert.equal(await esquemaContraido(db), false, 'a chave única de config.chave ainda existe');
+    await db.exec('alter table config drop constraint config_pkey');
+    await db.exec('alter table config add primary key (empresa_id, chave)');
+    assert.equal(await esquemaContraido(db), true);
+  });
 });
