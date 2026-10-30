@@ -1,6 +1,6 @@
 // Estrutura da organização: seções em árvore e cadastro de usuários e acessos.
 import { subarvore, nivel } from './db.js';
-import { DIRETORIA_ADJUNTA, LIMITE_NIVEIS, TIPOS_SECAO } from './logic.js';
+import { DIRETORIA_ADJUNTA, LIMITE_NIVEIS, TAM_SENHA, TIPOS_SECAO } from './logic.js';
 
 const SEM_CHEFE = 'A Diretoria Adjunta não tem chefe: quem faz parte dela é Administrador, cadastrado pelo servidor.';
 import { falha, h, permit, texto } from './helpers.js';
@@ -169,7 +169,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
       dados.email=email; dados.email_confirm=true;
     }
     if(b.senha) {
-      if(typeof b.senha!=='string' || b.senha.length<12 || b.senha.length>128) throw falha(400,'Senha deve ter entre 12 e 128 caracteres.');
+      if(typeof b.senha!=='string' || b.senha.length<TAM_SENHA.min || b.senha.length>TAM_SENHA.max) throw falha(400,`A senha deve ter entre ${TAM_SENHA.min} e ${TAM_SENHA.max} caracteres.`);
       dados.password=b.senha;
     }
     if(!Object.keys(dados).length) throw falha(400,'Informe novo e-mail ou senha.');

@@ -10,7 +10,7 @@ Idioma do produto, dos textos da interface, dos commits e dos comentários: port
 - `SGC_NOW=2026-09-22T09:30:00` muda o "agora" do servidor. Use em testes e demonstrações; nunca chame `new Date()` direto nas regras, use `agora()` de `server/logic.js`.
 - Sempre rode `npm test` depois de mexer em `server/`. Para a interface não há teste automatizado: suba o servidor e confira no navegador (telas de 1920x1080 para o Modo Reunião e 390 px para o chefe).
 - Datas: use as funções de `server/logic.js` e `public/js/datas.js`. O fuso de negócio é `America/Bahia`; datas civis usam aritmética UTC, e timestamps sem offset são interpretados nesse fuso. Não use getters locais de `Date` nas regras.
-- Migrações: veja `MIGRACOES.md`. PostgreSQL verifica a versão ao iniciar e exige execução explícita do migrador. SQLite aplica as migrações ao iniciar. Nunca remova dados duplicados automaticamente para instalar uma constraint.
+- Migrações: veja `MIGRACOES.md`. PostgreSQL verifica a versão ao iniciar e exige execução explícita do migrador; banco mais novo que o código só gera aviso (migrações são aditivas, ver `MIGRACOES.md`), migração pendente impede iniciar. SQLite aplica as migrações ao iniciar. Nunca remova dados duplicados automaticamente para instalar uma constraint.
 - Integração PostgreSQL: `PG_BIN=/caminho/bin npm run test:postgres` cria um cluster descartável, sem usar `DATABASE_URL`. Veja `TESTES_POSTGRESQL.md`. Execute ao alterar transações, migrações ou SQL compartilhado; `npm test` continua sem exigir PostgreSQL.
 
 ## Arquitetura

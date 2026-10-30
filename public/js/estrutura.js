@@ -2,7 +2,7 @@
 import { get, patch, post, put, del } from './api.js';
 import { atualizarSessao, ehAdmin } from './estado.js';
 import { abrirForm, confirmar, esc, on, toast } from './ui.js';
-import { DIRETORIA_ADJUNTA, HORA_FECHAMENTO, ROTULO_PERFIL, ROTULO_TIPO } from './regras.js';
+import { DIRETORIA_ADJUNTA, HORA_FECHAMENTO, ROTULO_PERFIL, ROTULO_TIPO, TAM_SENHA } from './regras.js';
 import { ligarConfiguracaoAta } from './ata-cabecalho.js';
 
 const TIPO = ROTULO_TIPO;
@@ -198,7 +198,7 @@ export async function estrutura(raiz, { refresh, painel }) {
     const u=usuarios.find(x=>x.id===Number(el.dataset.loginU));
     formulario({titulo:`Login de ${u.nome}`,corpo:`
       <div class="campo"><label for="lu-email">Novo e-mail (opcional)</label><input id="lu-email" name="email" type="email" autocomplete="off"></div>
-      <div class="campo"><label for="lu-senha">Nova senha (opcional)</label><input id="lu-senha" name="senha" type="password" autocomplete="new-password" minlength="12" maxlength="128"></div>
+      <div class="campo"><label for="lu-senha">Nova senha (opcional)</label><input id="lu-senha" name="senha" type="password" autocomplete="new-password" minlength="${TAM_SENHA.min}" maxlength="128"></div>
       <p>As sessões atuais serão encerradas e, ao alterar a senha, a pessoa precisará criar a própria no próximo acesso. Entregue a nova senha diretamente a ela.</p>`,
       aoEnviar:async(d,form)=>{try{await patch(`/usuarios/${u.id}/login`,d);salvo('Login atualizado. Se alterou a sua própria conta, entre novamente.');}finally{form.querySelector('[name="senha"]').value='';d.senha='';}}
     });
@@ -281,7 +281,7 @@ export async function estrutura(raiz, { refresh, painel }) {
           titulo: 'Novo usuário com acesso', rotulo: 'Criar usuário e login',
           corpo: `<div class="campo"><label for="ca-nome">Nome</label><input id="ca-nome" name="nome" maxlength="120" required></div>
             <div class="campo"><label for="ca-email">E-mail de login</label><input id="ca-email" name="email" type="email" maxlength="160" autocomplete="off" required></div>
-            <div class="campo"><label for="ca-senha">Senha inicial</label><input id="ca-senha" name="senha" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><div class="dica">De 12 a 128 caracteres. É provisória: a pessoa será obrigada a criar a própria senha no primeiro acesso. Entregue-a diretamente a ela.</div></div>
+            <div class="campo"><label for="ca-senha">Senha inicial</label><input id="ca-senha" name="senha" type="password" minlength="${TAM_SENHA.min}" maxlength="128" autocomplete="new-password" required><div class="dica">De ${TAM_SENHA.min} a ${TAM_SENHA.max} caracteres. É provisória: a pessoa será obrigada a criar a própria senha no primeiro acesso. Entregue-a diretamente a ela.</div></div>
             <div class="campo"><label for="ca-secao">Seção</label><select id="ca-secao" name="secao_id" required><option value="">Escolha uma seção</option>${secoes.filter(s => s.ativa && !ehDA(s)).map(s => `<option value="${s.id}">${esc(s.nome)}${s.sigla ? ` (${esc(s.sigla)})` : ''}${s.chefe_id ? ` — chefe atual: ${esc(s.chefe_nome || 'atribuído')}` : ''}</option>`).join('')}</select><div class="dica">Todas as seções ativas estão disponíveis. Se já houver chefe, escolha substituí-lo ou cadastrar como suplente.</div></div>
             <div class="campo"><label for="ca-perfil">Perfil</label><select id="ca-perfil" name="perfil">${ehAdmin() ? '<option value="diretor">Diretor</option>' : ''}<option value="chefe">Chefe de seção (vê a sua seção e as subordinadas)</option><option value="apoio">Apoio do Diretor (sem seção)</option><option value="consulta">Consulta (sem seção; só lê as ações de todos os Centros)</option></select></div>
             <div class="escolha"><label><input type="checkbox" id="ca-suplente" name="suplente" value="1"> Cadastrar como suplente (mantém o chefe atual; os dois passam a poder responder pela seção)</label></div>

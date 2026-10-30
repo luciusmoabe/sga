@@ -14,7 +14,7 @@ Regras de segurança para toda a execução:
 1. Em **Authentication → Providers**, mantenha só e-mail e senha.
 2. Em **Authentication**, desligue o cadastro público (*Allow new users to sign up*). As contas são criadas pelo Agilis.
 3. Em **Authentication → URL Configuration**, informe a origem do Agilis como Site URL: `http://localhost:3000` na fase local e a URL HTTPS da Vercel na fase seguinte.
-4. Confira a política de senha do projeto. Ela vale para as senhas provisórias e para as trocas: se exigir mais que 12 caracteres ou complexidade, use senhas que a cumpram (veja o item de diagnóstico sobre "senha recusada").
+4. Confira a política de senha do projeto. Ela vale para as senhas provisórias e para as trocas: se exigir mais que 8 caracteres ou complexidade, use senhas que a cumpram (veja o item de diagnóstico sobre "senha recusada").
 5. Não ative MFA obrigatório nesta fase: o login do Agilis não pede segundo fator, e uma conta com MFA obrigatório não conclui o login.
 6. Em **Project Settings → API**, separe: a URL do projeto, a chave pública (*publishable* ou *anon*) e a chave `service_role`.
 7. Em **Project Settings → Database**, copie a string de conexão do PostgreSQL. Para o migrador e o comando do Administrador, prefira a conexão direta (porta 5432) ou o *Session pooler*; evite o *Transaction pooler* (porta 6543). A conexão direta usa IPv6 em vários planos: se o computador não conectar, use o *Session pooler*, que aceita IPv4.
@@ -90,7 +90,7 @@ A migração 8 (perfil Administrador e `usuarios.trocar_senha`) já foi validada
 ## 4. Criar o primeiro Administrador
 
 ```powershell
-$env:SGC_ADMIN_SENHA_INICIAL = "senha provisória de 12 a 128 caracteres"
+$env:SGC_ADMIN_SENHA_INICIAL = "senha provisória de 8 a 128 caracteres"
 npm run admin:criar -- --postgres "Nome do Administrador" administrador@exemplo.gov.br
 Remove-Item Env:SGC_ADMIN_SENHA_INICIAL
 ```

@@ -90,8 +90,17 @@ test('migrações: versão desconhecida e erros de acesso são propagados', asyn
   t.after(() => db.close());
   await aplicarMigracoes(db);
   await db.prepare('insert into schema_migrations (id, nome, aplicada_em) values (?, ?, ?)').run(99, 'futura', '2026-09-22');
-  await assert.rejects(verificarMigracoes(db), /incompatível/);
+  // O banco mais novo não derruba a aplicação (volta de versão); o migrador, porém, recusa trabalhar com ele.
+  await verificarMigracoes(db);
   await assert.rejects(aplicarMigracoes(db), /incompatível/);
+  // Versão já conhecida com outro nome é incompatibilidade de verdade.
+  await db.prepare('delete from schema_migrations where id = 99').run();
+  await db.prepare("update schema_migrations set nome = 'outra' where id = 5").run();
+  await assert.rejects(verificarMigracoes(db), /Migração 5 incompatível/);
+  await db.prepare("update schema_migrations set nome = 'login_email_senha' where id = 5").run();
+  await db.prepare('insert into schema_migrations (id, nome, aplicada_em) values (?, ?, ?)').run(99, 'futura', '2026-09-22');
+  await db.prepare('delete from schema_migrations where id = 3').run();
+  await assert.rejects(verificarMigracoes(db), /Migrações pendentes/);
   await assert.rejects(verificarMigracoes({ prepare: () => ({ all: async () => { throw new Error('Acesso negado'); } }) }), /Acesso negado/);
 });
 

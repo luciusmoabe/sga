@@ -296,12 +296,18 @@ async function registros(db) {
   return db.prepare('select id, nome from schema_migrations order by id').all();
 }
 
-function conferir(aplicadas) {
+/** Confere o que o banco já aplicou. Com `toleraNovas`, versões mais novas que a última conhecida por esta aplicação
+ *  passam (e voltam na lista): é o caso de um banco migrado antes de a versão nova do código ser publicada, ou de uma
+ *  volta para a versão anterior. Versões antigas com nome diferente continuam sendo erro. */
+function conferir(aplicadas, { toleraNovas = false } = {}) {
+  const ultima = Math.max(...MIGRACOES.map(m => m.id));
+  const novas = [];
   for (const registro of aplicadas) {
-    if (!MIGRACOES.some(m => m.id === registro.id && m.nome === registro.nome)) {
-      throw new Error(`Migração ${registro.id} incompatível com esta versão da aplicação.`);
-    }
+    if (MIGRACOES.some(m => m.id === registro.id && m.nome === registro.nome)) continue;
+    if (toleraNovas && registro.id > ultima) { novas.push(registro.id); continue; }
+    throw new Error(`Migração ${registro.id} incompatível com esta versão da aplicação.`);
   }
+  return novas;
 }
 
 export async function aplicarMigracoes(db) {
@@ -333,7 +339,10 @@ export async function verificarMigracoes(db) {
     }
     throw err;
   }
-  conferir(aplicadas);
+  // Um banco mais novo que o código não derruba a aplicação: as migrações são aditivas (ver MIGRACOES.md), então a
+  // versão anterior segue funcionando depois de uma migração ou de uma volta (rollback). Só migração pendente impede.
+  const novas = conferir(aplicadas, { toleraNovas: true });
+  if (novas.length) console.warn(`Banco com migrações mais novas que esta versão da aplicação (${novas.join(', ')}); seguindo.`);
   if (MIGRACOES.some(m => !aplicadas.some(a => a.id === m.id))) {
     throw new Error('Migrações pendentes. Execute npm run migrate com o destino explícito antes de iniciar.');
   }

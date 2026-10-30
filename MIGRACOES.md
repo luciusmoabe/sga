@@ -8,6 +8,10 @@ As migrações incrementais ficam em `server/migrations.js`. Cada versão aplica
 - PostgreSQL: verifica as versões ao iniciar, sem executar DDL automaticamente. Se houver migrações pendentes, a inicialização falha com uma mensagem orientando a execução do migrador.
 - PostgreSQL novo precisa ter o esquema base de `server/schema.sql` provisionado antes da migração. Não use o script de carga de demonstração como migração de um banco existente.
 
+## Banco mais novo que o código
+
+A verificação ao iniciar (PostgreSQL) **não falha** quando o banco tem migrações mais novas do que a versão da aplicação conhece: registra um aviso e segue. Isso permite migrar o banco antes de publicar o código novo e voltar para a versão anterior (rollback) sem tirar o sistema do ar. Em troca, **toda migração deve ser aditiva** (coluna ou tabela nova, com valor padrão ou opcional), para a versão anterior continuar funcionando com ela. Mudança destrutiva (renomear ou apagar coluna, restringir dado existente) exige janela combinada e publicação coordenada. Migração pendente (o código conhece versões que o banco ainda não tem) continua impedindo a inicialização, e o migrador continua recusando um banco com versões que ele não conhece.
+
 ## Execução explícita
 
 SQLite, indicando o arquivo:

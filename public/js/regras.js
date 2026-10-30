@@ -17,7 +17,7 @@ export const PRIORIDADES = ['alta', 'media', 'baixa'];
  *  A Consulta só lê as ações de todos os Centros (as mesmas que o Diretor vê), sem alterar nada nem ver relatos e reuniões. */
 export const PERFIS = ['diretor', 'apoio', 'chefe', 'administrador', 'consulta'];
 export const ROTULO_PERFIL = { diretor: 'Diretor', apoio: 'Apoio do Diretor', chefe: 'Chefe de seção', administrador: 'Administrador', consulta: 'Consulta' };
-export const TAM_SENHA = { min: 12, max: 128 };
+export const TAM_SENHA = { min: 8, max: 128 };
 
 /** Tipos de seção. A Diretoria Adjunta fica no primeiro nível, sem chefe nem subseções; no resto é acompanhada como
  *  as demais seções (ações, Painel, relato e reunião). Quem é dela tem o perfil Administrador. */

@@ -126,7 +126,7 @@ Regras de contas:
 Depois de migrar o banco (versão 8), execute no servidor, com `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` no ambiente:
 
 ```powershell
-$env:SGC_ADMIN_SENHA_INICIAL = "senha provisória de 12 a 128 caracteres"
+$env:SGC_ADMIN_SENHA_INICIAL = "senha provisória de 8 a 128 caracteres"
 npm run admin:criar -- --sqlite data/sgc.db "Nome Completo" administrador@orgao.gov.br
 # PostgreSQL: use --postgres e SGC_MIGRATION_DATABASE_URL explícita
 ```
@@ -144,11 +144,11 @@ O vínculo não muda perfil nem acesso; nenhuma tela ou rota da API cria, promov
 
 ### Senha inicial e troca obrigatória
 
-Contas criadas pelo Diretor ou pelo Administrador, e contas cuja senha foi redefinida por eles (botão Login), nascem com `usuarios.trocar_senha = 1`. Enquanto isso, a API só responde `GET /bootstrap`, `POST /auth/trocar-senha` e `POST /auth/sair` (as demais rotas respondem 403 com `trocar_senha: true`), e a interface mostra somente a tela "Crie a sua senha". A troca (`POST /api/auth/trocar-senha`) confirma a senha atual no Supabase, grava a nova pela API administrativa (é preciso `SUPABASE_SERVICE_ROLE_KEY` no servidor), libera a conta e encerra as outras sessões dela. O mesmo endpoint atende a troca voluntária pelo botão "Alterar senha" do menu; usuários não podem redefinir a própria senha pelo botão Login da gestão. A senha nova precisa ter de 12 a 128 caracteres e ser diferente da atual. Como a senha provisória fica conhecida por quem cadastrou, ela não deve ser reaproveitada.
+Contas criadas pelo Diretor ou pelo Administrador, e contas cuja senha foi redefinida por eles (botão Login), nascem com `usuarios.trocar_senha = 1`. Enquanto isso, a API só responde `GET /bootstrap`, `POST /auth/trocar-senha` e `POST /auth/sair` (as demais rotas respondem 403 com `trocar_senha: true`), e a interface mostra somente a tela "Crie a sua senha". A troca (`POST /api/auth/trocar-senha`) confirma a senha atual no Supabase, grava a nova pela API administrativa (é preciso `SUPABASE_SERVICE_ROLE_KEY` no servidor), libera a conta e encerra as outras sessões dela. O mesmo endpoint atende a troca voluntária pelo botão "Alterar senha" do menu; usuários não podem redefinir a própria senha pelo botão Login da gestão. A senha nova precisa ter de 8 a 128 caracteres e ser diferente da atual. Como a senha provisória fica conhecida por quem cadastrou, ela não deve ser reaproveitada.
 
 ## Cadastro de chefes pelo Diretor
 
-Em Estrutura → Usuários → Novo chefe com acesso, o Diretor informa nome, e-mail, senha inicial (12–128 caracteres) e seção ativa. Se ela já tiver chefe, o Diretor confirma explicitamente a substituição. O servidor cria a conta confirmada via Auth Admin API, cadastra o perfil fixo `chefe`, vincula o UUID e atribui a seção em transação. Não envia convite nem devolve ou armazena a senha no banco Agilis. A senha não tem troca obrigatória no primeiro acesso nesta versão.
+Em Estrutura → Usuários → Novo chefe com acesso, o Diretor informa nome, e-mail, senha inicial (8–128 caracteres) e seção ativa. Se ela já tiver chefe, o Diretor confirma explicitamente a substituição. O servidor cria a conta confirmada via Auth Admin API, cadastra o perfil fixo `chefe`, vincula o UUID e atribui a seção em transação. Não envia convite nem devolve ou armazena a senha no banco Agilis. A senha não tem troca obrigatória no primeiro acesso nesta versão.
 
 Configure `SUPABASE_SERVICE_ROLE_KEY` no servidor com a chave legada `service_role` do mesmo projeto Supabase. Na Vercel, cadastre-a em Production e faça redeploy. É uma chave administrativa exclusiva do backend; mantenha `SUPABASE_PUBLISHABLE_KEY`/`SUPABASE_ANON_KEY` para login. Sem a chave administrativa, os logins existentes continuam funcionando, mas a criação retorna indisponibilidade.
 
