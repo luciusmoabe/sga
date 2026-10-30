@@ -9,6 +9,7 @@ import { rotasEstrutura } from './rotas-estrutura.js';
 import { rotasSemana } from './rotas-semana.js';
 import { rotasReunioes } from './reunioes.js';
 import { rotasAvisos } from './rotas-avisos.js';
+import { rotasPlataforma } from './rotas-plataforma.js';
 import { rotasCabecalhoAta } from './ata-cabecalho.js';
 import { cabecalhosSeguranca } from './seguranca-http.js';
 import { configurarAuth, instalarAuth } from './auth.js';
@@ -51,6 +52,12 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
     if (req.user?.perfil !== 'consulta' || (req.method === 'GET' && LEITURA_CONSULTA.some((r) => r.test(req.path)))) return next();
     next(falha(403, 'O perfil Consulta só permite ler as ações dos Centros.'));
   });
+  // Perfil Plataforma: administra as empresas e não toca em dados de negócio. Lista fechada, como as outras: só o bootstrap e as
+  // rotas /plataforma respondem; qualquer outra rota (atual ou futura) responde 403 a ele.
+  app.use('/api', (req, res, next) => {
+    if (req.user?.perfil !== 'plataforma' || (req.method === 'GET' && req.path === '/bootstrap') || req.path.startsWith('/plataforma/')) return next();
+    next(falha(403, 'O perfil Plataforma só administra as empresas.'));
+  });
   // Membro da equipe: lê as ações e tarefas da sua seção e age só no que é dele. Lista fechada, como a da Consulta: o
   // que não está aqui (relatos, reuniões, atas, combinados, estrutura, contas, aceite, validação, arquivar, redirecionar e
   // pedir prazo) responde 403 mesmo que a rota, por descuido, não confira o perfil. Quem pode o quê em cada ação é
@@ -75,6 +82,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   rotasSemana(app, { ...ctx, SELECT_ACAO, acaoOut });
   rotasReunioes(app, { ...ctx, criarDiretriz });
   rotasAvisos(app, ctx);
+  rotasPlataforma(app, { ...ctx, auth, adminAuth: contas });
   rotasCabecalhoAta(app, ctx);
 
   // ---------- Erros ----------

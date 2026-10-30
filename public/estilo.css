@@ -1327,3 +1327,10 @@ button.cal-item:hover { border-color: var(--line-str); background: var(--pale); 
 .ata-editor .ql-editor p { margin-bottom: 10px; }
 .ata-editor .ql-editor li { margin-bottom: 4px; }
 @media (max-width: 760px) { .ata-editor .ql-toolbar.ql-snow { top: 56px; } .ata-editor .ql-toolbar.ql-snow .ql-formats { margin-right: 2px; } }
+
+/* Plataforma: dados de acesso da empresa recém-criada */
+.acesso-novo { background: var(--pale); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 12px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.88rem; user-select: all; }
+.marcar { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.marcar input { width: auto; flex: none; }
+.senha-gerada { display: flex; gap: 8px; align-items: stretch; }
+.senha-gerada input { flex: 1; min-width: 0; }

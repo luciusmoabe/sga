@@ -15,6 +15,7 @@
     "check:auth": "node server/verificar-auth.js",
     "admin:criar": "node server/criar-administrador.js",
     "empresa:criar": "node server/criar-empresa.js",
+    "plataforma:criar": "node server/criar-plataforma.js",
     "admin:secao": "node server/secao-administrador.js",
     "test": "node --test test/*.test.js",
     "test:postgres": "node --test test/postgres/*.test.js"

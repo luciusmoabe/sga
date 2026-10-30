@@ -12,6 +12,7 @@ import { configuracaoAta } from './ata-cabecalho.js';
 import { atas, reuniaoDetalhe, reunioes } from './atas.js';
 import { inicioReuniao, viewReuniao } from './reuniao.js';
 import { avisos } from './avisos.js';
+import { empresas } from './plataforma.js';
 import { equipe } from './equipe.js';
 import { acoesDosCentros, lePorTodosOsCentros } from './consulta.js';
 import { DIRETORIA_ADJUNTA, ROTULO_PERFIL } from './regras.js';
@@ -45,6 +46,8 @@ const ROTAS = {
   equipe: { f: equipe, perfis: ['chefe', 'administrador'], titulo: 'Minha equipe' },
   historico: { f: historico, perfis: ['chefe'], titulo: 'Histórico' },
   atas: { f: atas, perfis: ['chefe'], titulo: 'Atas' },
+  // Perfil Plataforma: cria e administra as empresas (não vê dados de negócio).
+  empresas: { f: empresas, perfis: ['plataforma'], titulo: 'Empresas' },
 };
 
 // Ícones do menu: SVG embutido (sem fonte de ícones nem CDN de terceiros), um traço simples por rota.
@@ -66,6 +69,7 @@ const ICONES = {
   'minhas-acoes': '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5,5 4,6.5 6.5,3.5"/><line x1="9" y1="5" x2="17.5" y2="5"/><polyline points="2.5,11 4,12.5 6.5,9.5"/><line x1="9" y1="11" x2="17.5" y2="11"/><line x1="2.5" y1="16" x2="17.5" y2="16"/></svg>',
   historico: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10a6.5 6.5 0 1 0 1.9-4.6"/><polyline points="2.5,3.5 3.5,6.5 6.5,5.5"/><polyline points="10,7 10,10.3 12.5,11.8"/></svg>',
   atas: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h7l3.5 3.5v11.5H5z"/><path d="M12 2.5v3.5h3.5"/><line x1="7.5" y1="10" x2="14" y2="10"/><line x1="7.5" y1="13.5" x2="14" y2="13.5"/></svg>',
+  empresas: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 17.5v-12l7-2v14"/><path d="M10.5 8.5h6v9"/><line x1="6" y1="7.5" x2="8" y2="7.5"/><line x1="6" y1="10.5" x2="8" y2="10.5"/><line x1="6" y1="13.5" x2="8" y2="13.5"/><line x1="2.5" y1="17.5" x2="17.5" y2="17.5"/></svg>',
   avisos: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3c-2.5 0-4 2-4 4.5V11l-1.5 2.5h11L14 11V7.5C14 5 12.5 3 10 3z"/><path d="M8 15.5a2 2 0 0 0 4 0"/></svg>',
 };
 
@@ -101,6 +105,8 @@ const MENU_CHEFE = [
 // Membro da equipe: lê as ações da sua seção e executa as que o chefe atribuiu a ele (ou que ele criou).
 const MENU_MEMBRO = [['#Minha seção'], ['minhas-acoes', 'Minhas ações'], ['agenda', 'Agenda']];
 // Consulta: só lê as ações dos Centros.
+// Plataforma: cria e administra as empresas.
+const MENU_PLATAFORMA = [['#Plataforma'], ['empresas', 'Empresas']];
 const MENU_CONSULTA = [['#Consulta'], ['acoes-centros', 'Ações dos Centros'], ['agenda', 'Agenda']];
 // O Administrador tem acesso total às abas de Configuração.
 const MENU_ADMIN = MENU_GESTAO.map((m) => (m[0] === '#Organização' ? ['#Administração'] : m[0] === 'estrutura' ? ['estrutura', 'Configuração'] : m[0] === 'avisos' ? ['avisos', 'Avisos'] : m));
@@ -118,7 +124,7 @@ function lerRota() {
   return { rota, id, q: new URLSearchParams(qs || '') };
 }
 // Início da seção também é a tela de entrada do Administrador da Diretoria Adjunta (mesma tela do chefe).
-const casaDe = () => (est.user.perfil === 'consulta' ? '#/acoes-centros' : est.user.perfil === 'membro' ? '#/minhas-acoes'
+const casaDe = () => (est.user.perfil === 'plataforma' ? '#/empresas' : est.user.perfil === 'consulta' ? '#/acoes-centros' : est.user.perfil === 'membro' ? '#/minhas-acoes'
   : est.user.perfil === 'chefe' || (est.user.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA) ? '#/inicio' : '#/painel');
 
 
@@ -297,7 +303,7 @@ function casca() {
   const daDiretoriaAdjunta = u.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA;
   // O chefe com a permissão do Diretor ganha "Ações dos Centros", logo abaixo das próprias ações.
   const chefe = lePorTodosOsCentros() ? MENU_CHEFE.flatMap((m) => (m[0] === 'minhas-acoes' ? [m, ['acoes-centros', 'Ações dos Centros']] : [m])) : MENU_CHEFE;
-  const base = u.perfil === 'chefe' ? chefe : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? MENU_CONSULTA : u.perfil === 'membro' ? MENU_MEMBRO : MENU_GESTAO;
+  const base = u.perfil === 'chefe' ? chefe : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? MENU_CONSULTA : u.perfil === 'membro' ? MENU_MEMBRO : u.perfil === 'plataforma' ? MENU_PLATAFORMA : MENU_GESTAO;
   const menu = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['equipe', 'Minha equipe'], ['atualizacao', 'Minha atualização']] : []), ...base]
     .filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
   app.innerHTML = `<div class="app"><aside class="lateral">
@@ -327,6 +333,7 @@ const ABAS_MOVEL = {
   gestao: [['painel', 'Painel'], ['agenda', 'Agenda'], ['acoes', 'Ações'], ['prazos', 'Prazos']],
   consulta: [['acoes-centros', 'Ações'], ['agenda', 'Agenda']],
   membro: [['minhas-acoes', 'Ações'], ['agenda', 'Agenda']],
+  plataforma: [['empresas', 'Empresas']],
 };
 const ICONE_MAIS = '<svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.5" cy="10" r="1.2"/><circle cx="10" cy="10" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/></svg>';
 // Iniciais do primeiro e do último nome, sem parênteses, partículas nem posto/graduação
@@ -339,7 +346,7 @@ const iniciais = (nome) => {
 };
 
 function cascaMovel(u, menu) {
-  const abas = ABAS_MOVEL[['chefe', 'consulta', 'membro'].includes(u.perfil) ? u.perfil : 'gestao'];
+  const abas = ABAS_MOVEL[['chefe', 'consulta', 'membro', 'plataforma'].includes(u.perfil) ? u.perfil : 'gestao'];
   const rotuloPerfil = `${PERFIL[u.perfil]}${est.boot?.secao ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}`;
   return `<header class="topo-movel">
       <img src="/imagens/logo-agilis.png" alt="Agilis" class="topo-movel-logo">

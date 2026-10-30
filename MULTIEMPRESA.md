@@ -24,7 +24,7 @@ O Agilis nasceu para um órgão só. Este documento registra o plano para atende
 | 0 | Backup, ensaio da migração numa cópia e contagem de registros antes e depois (`scripts/contagem-registros.js`) | script pronto; falta rodar em produção |
 | 1 | **Banco, só acrescenta** (migração 22): tabela `empresas`, Empresa 1, `empresa_id` nas tabelas raiz, chaves únicas por empresa ao lado das globais | publicada |
 | 2 | **Servidor:** todo SQL filtra pela empresa de quem está logado; login com escolha da empresa; **testes de isolamento** (duas empresas, toda rota provada contra acesso cruzado) | pronta e testada localmente (sem migração nova); ainda não publicada |
-| 3 | Plataforma: `npm run empresa:criar` (empresa + primeiro Diretor) e depois a tela "Empresas" | comando pronto e testado (SQLite e PostgreSQL); a tela depende de um perfil novo (migração 23) e ainda não existe |
+| 3 | Plataforma: `npm run empresa:criar` (empresa + primeiro Diretor) e depois a tela "Empresas" | comando e tela "Empresas" prontos e testados; a tela exige o perfil `plataforma` (migração 24, ainda não aplicada em produção) e uma conta criada por `npm run plataforma:criar` |
 | 4 | Identidade: seletor na entrada, nome na barra e no título da aba, ata por empresa (cabeçalho e os dois brasões) | pronta (sem migração); logo da empresa na barra fica para depois |
 | 5 | **Contração:** troca as chaves únicas globais pelas por empresa (migração 23). **Só depois disso pode existir a 2ª empresa.** Remover o padrão 1 de `empresa_id` fica como endurecimento à parte (exige que todo INSERT, o seed e os testes informem a empresa) | migração 23 pronta e testada (SQLite e PostgreSQL); falta aplicar em produção |
 

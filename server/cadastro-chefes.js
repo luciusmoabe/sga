@@ -37,9 +37,9 @@ export function administradorAuth(config, { env = process.env, fetchImpl = fetch
 // `suplente` cadastra um segundo Chefe para a mesma seção, com os mesmos poderes do titular (mesmo secao_id),
 // para responder na ausência dele: não mexe em secoes.chefe_id, então não há substituição nem confirmação.
 // `secaoAdministrador` só vem do comando do servidor: vincula o novo Administrador à Diretoria Adjunta.
-// `empresaId` só vem dos comandos do servidor (fora de uma requisição; padrão 1, o órgão atual); numa requisição vale sempre a empresa de quem cadastra.
-export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe', { permitidos = ['chefe', 'apoio'], suplente = false, secaoAdministrador = null, empresaId = 1 } = {}) {
-  const emp = temEmpresa() ? empresaAtual() : Number(empresaId);
+// `empresaId` só vem dos comandos do servidor e da plataforma, que criam contas em OUTRA empresa; sem ele vale a empresa de quem cadastra (numa requisição) ou a 1, o órgão atual.
+export async function cadastrarChefe(db, config, admin, dados, perfil = 'chefe', { permitidos = ['chefe', 'apoio'], suplente = false, secaoAdministrador = null, empresaId = null } = {}) {
+  const emp = empresaId != null ? Number(empresaId) : (temEmpresa() ? empresaAtual() : 1);
   if (!Number.isInteger(emp) || emp < 1) throw new Error('Cadastro de conta sem empresa.');
   if (!permitidos.includes(perfil)) {
     throw falha(400, permitidos.length === 1 ? 'Este cadastro é só de membro da equipe.'

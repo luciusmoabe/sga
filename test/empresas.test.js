@@ -44,7 +44,7 @@ test('migração 22 mantém todos os dados do órgão atual, sem alterar nenhum,
   const antes = await fotografia(db);
   assert.ok(Object.values(antes).filter((l) => l.length).length >= 12, 'o cenário tem dados em várias tabelas');
 
-  assert.deepEqual(await aplicarMigracoes(db), [22, 23]);
+  assert.deepEqual(await aplicarMigracoes(db), [22, 23, 24]);
 
   const depois = await fotografia(db);
   assert.deepEqual(Object.keys(depois), Object.keys(antes), 'nenhuma tabela some');
@@ -86,7 +86,7 @@ test('depois da contração só valem as chaves únicas por empresa, e os dados 
   for (const nome of ['uq_config_empresa_chave', 'uq_reuniao_em_andamento_empresa', 'uq_reuniao_em_andamento']) assert.ok(indices22.includes(nome), `${nome} existe na versão 22`);
   const antes = { config: await db.prepare('select * from config order by chave').all(), reunioes: await db.prepare('select * from reunioes').all() };
 
-  assert.deepEqual(await aplicarMigracoes(db), [23]);
+  assert.deepEqual(await aplicarMigracoes(db), [23, 24]);
   const indices = (await db.prepare("select name from sqlite_master where type = 'index'").all()).map((i) => i.name);
   assert.ok(!indices.includes('uq_reuniao_em_andamento'), 'a chave global de reunião em andamento caiu');
   assert.ok(indices.includes('uq_reuniao_em_andamento_empresa') && RAIZES.filter((r) => r !== 'config').every((r) => indices.includes(`idx_${r}_empresa`)));

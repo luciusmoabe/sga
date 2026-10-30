@@ -12,9 +12,11 @@ import { openDb } from './db.js';
 import { origemValida } from './auth.js';
 import { verificarMigracoes } from './migrations.js';
 import { administradorAuth, cadastrarChefe } from './cadastro-chefes.js';
+import { falha } from './helpers.js';
 
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const RESERVADOS = new Set(['api', 'admin', 'plataforma', 'www', 'entrar', 'sair', 'imagens', 'fontes', 'js']);
+export const SLUG_VALIDO = SLUG;
+export const SLUG_RESERVADOS = new Set(['api', 'admin', 'plataforma', 'www', 'entrar', 'sair', 'imagens', 'fontes', 'js']);
 
 /** O esquema já perdeu as chaves únicas globais (config.chave e uma reunião em andamento no sistema inteiro)? */
 export async function esquemaContraido(db) {
@@ -30,23 +32,23 @@ export async function esquemaContraido(db) {
   return Number(chave.n) === 0;
 }
 
-export async function criarEmpresa(db, config, admin, { nome, slug, sigla = null, listada = true, diretor, email, senha }, { ignorarContracao = false } = {}) {
+export async function criarEmpresa(db, config, admin, { nome, slug, sigla = null, listada = true, diretor, email, senha, perfil = 'diretor' }, { ignorarContracao = false, permitirReservado = false } = {}) {
   await verificarMigracoes(db);
   nome = String(nome || '').trim();
   slug = String(slug || '').trim().toLowerCase();
   sigla = sigla ? String(sigla).trim().toUpperCase().slice(0, 12) : null;
-  if (!nome || nome.length > 160) throw new Error('Informe o nome da empresa, com até 160 caracteres.');
-  if (!SLUG.test(slug) || slug.length < 2 || slug.length > 40 || RESERVADOS.has(slug)) {
-    throw new Error('O identificador da empresa (slug) usa só letras minúsculas, números e hífens (2 a 40 caracteres), e não pode ser um nome reservado.');
+  if (!nome || nome.length > 160) throw falha(400, 'Informe o nome da empresa, com até 160 caracteres.');
+  if (!SLUG.test(slug) || slug.length < 2 || slug.length > 40 || (SLUG_RESERVADOS.has(slug) && !permitirReservado)) {
+    throw falha(400, 'O identificador da empresa (slug) usa só letras minúsculas, números e hífens (2 a 40 caracteres), e não pode ser um nome reservado.');
   }
   if ((await db.prepare('select count(*) as n from empresas').get()).n > 0 && !ignorarContracao && !(await esquemaContraido(db))) {
-    throw new Error('Ainda não é possível criar uma 2ª empresa: o esquema do banco não passou pela contração (fase 5 de MULTIEMPRESA.md).');
+    throw falha(409, 'Ainda não é possível criar uma 2ª empresa: o esquema do banco não passou pela contração (fase 5 de MULTIEMPRESA.md).');
   }
-  if (await db.prepare('select id from empresas where slug = ?').get(slug)) throw new Error('Já existe uma empresa com este identificador.');
+  if (await db.prepare('select id from empresas where slug = ?').get(slug)) throw falha(409, 'Já existe uma empresa com este identificador.');
   const id = (await db.prepare('insert into empresas (nome, sigla, slug, listada_no_login, criada_em) values (?,?,?,?,?)')
     .run(nome, sigla, slug, listada ? 1 : 0, new Date().toISOString())).lastInsertRowid;
   try {
-    const usuario = await cadastrarChefe(db, config, admin, { nome: diretor, email, senha }, 'diretor', { permitidos: ['diretor'], empresaId: id });
+    const usuario = await cadastrarChefe(db, config, admin, { nome: diretor, email, senha }, perfil, { permitidos: [perfil], empresaId: id });
     return { empresa: { id, nome, sigla, slug, listada_no_login: listada ? 1 : 0 }, diretor: usuario };
   } catch (e) {
     // A empresa ainda não tem nenhum dado: desfaz, para a repetição do comando não esbarrar no identificador.
