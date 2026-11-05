@@ -92,6 +92,20 @@ export const oTipo = (v, tipo) => `${artigo(v.tipos[tipo].genero, { m: 'o', f: '
 export const doTopo = (v) => `${artigo(v.topo.genero, { m: 'do', f: 'da' })} ${v.topo.nome}`;
 /** "o Superintendente" / "a Superintendente". */
 export const oTopo = (v) => `${artigo(v.topo.genero, { m: 'o', f: 'a' })} ${v.topo.nome}`;
+/** "O Superintendente" / "A Superintendente" (começo de frase). */
+export const OTopo = (v) => `${artigo(v.topo.genero, { m: 'O', f: 'A' })} ${v.topo.nome}`;
+/** "ao Superintendente" / "à Superintendente". */
+export const aoTopo = (v) => `${artigo(v.topo.genero, { m: 'ao', f: 'à' })} ${v.topo.nome}`;
+/** "pelo Superintendente" / "pela Superintendente". */
+export const peloTopo = (v) => `${artigo(v.topo.genero, { m: 'pelo', f: 'pela' })} ${v.topo.nome}`;
+
+/** Troca, num texto, as marcas {topo}, {topo:o}, {topo:O}, {topo:do}, {topo:ao} e {topo:pelo} pelo nome do topo da empresa, com o
+ *  artigo certo. Serve às mensagens do servidor, escritas uma vez e ajustadas à empresa de quem as recebe. */
+export function resolverTopo(texto, v) {
+  if (typeof texto !== 'string' || !texto.includes('{topo')) return texto;
+  const formas = { o: oTopo, O: OTopo, do: doTopo, ao: aoTopo, pelo: peloTopo };
+  return texto.replace(/\{topo(?::(o|O|do|ao|pelo))?\}/g, (_, f) => (f ? formas[f](v) : v.topo.nome));
+}
 
 /** Rótulo do perfil: o Diretor e o Apoio acompanham o nome do topo; os demais seguem fixos. */
 export function rotuloPerfil(v, perfil) {

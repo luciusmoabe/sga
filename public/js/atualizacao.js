@@ -1,6 +1,7 @@
 // Minha atualização: o relato semanal é montado pelo servidor a partir das ações da seção e das subseções.
 // O chefe confere, resolve o que travou e envia. Ao enviar, o servidor congela uma cópia: o que mudar depois só
 // aparece para a reunião se ele enviar de novo.
+import { aoTopo, oTopo } from './vocab.js';
 import { get, put } from './api.js';
 import { est } from './estado.js';
 import { $, addDias, br, dataHora, diaSemana, esc, on, STATUS, toast, vazio } from './ui.js';
@@ -9,12 +10,12 @@ import { HORA_FECHAMENTO } from './regras.js';
 
 const semSecao = (raiz) => {
   raiz.innerHTML = `<div class="cabeca"><h1>Sem seção atribuída</h1></div><div class="cartao">${vazio(
-    'Você ainda não está vinculado a uma seção', 'Peça ao Diretor para atribuí-lo a uma seção na tela Estrutura.')}</div>`;
+    'Você ainda não está vinculado a uma seção', `Peça ${aoTopo()} para atribuí-lo a uma seção na tela Estrutura.`)}</div>`;
 };
 
 const pilulaStatus = (a) => `<span class="pilula st-${a.status}">${STATUS[a.status]}</span>`;
 const pilulaInterna = (a) => (a.interna && !a.compartilhada
-  ? ' <span class="pilula" title="Não aparece ao Diretor: entra só na contagem">Interna</span>' : '');
+  ? ` <span class="pilula" title="Não aparece ${aoTopo()}: entra só na contagem">Interna</span>` : '');
 
 const linhaAcao = (a, { concluida = false } = {}) => `<div class="item relato-item" data-acao="${a.id}">
   <span><b>${esc(a.titulo)}</b> <span class="suave pequeno">${esc(a.secao_sigla)} · ${concluida ? `concluída em ${dataHora(a.concluida_em).slice(0, 10)}` : `prazo ${br(a.prazo)}`}</span>

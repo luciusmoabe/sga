@@ -149,3 +149,13 @@ test('API: tipo que a empresa não usa não aceita unidades novas, e não se des
   assert.equal((await call(DIRETOR, 'PUT', '/config/vocabulario', { vocabulario: SGTO })).status, 200);
   assert.equal((await call(DIRETOR, 'POST', '/secoes', { nome: 'Assessoria nova', tipo: 'diretoria_adjunta' })).status, 409, 'já existe uma Adjunta (ativa ou não): a regra de no máximo uma continua');
 });
+
+test('API: as mensagens falam do topo com o nome e o gênero que a empresa escolheu', async (t) => {
+  const { call } = await demo(t);
+  const msg = async () => (await call(ANA, 'POST', '/acoes', { titulo: 'x', prazo: '2026-12-31', demanda_diretor: 'sim' })).data.erro;
+  assert.equal(await msg(), 'Informe se a ação é demanda do Diretor.', 'o padrão é o do órgão atual');
+  await call(DIRETOR, 'PUT', '/config/vocabulario', { vocabulario: { ...SGTO, topo: { nome: 'Superintendente', genero: 'm' } } });
+  assert.equal(await msg(), 'Informe se a ação é demanda do Superintendente.');
+  await call(DIRETOR, 'PUT', '/config/vocabulario', { vocabulario: { ...SGTO, topo: { nome: 'Secretária', genero: 'f' } } });
+  assert.equal(await msg(), 'Informe se a ação é demanda da Secretária.');
+});

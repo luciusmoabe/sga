@@ -42,7 +42,7 @@ export async function excluirCadastro(db, tabela, id) {
       const row=await db.prepare(`select * from ${tabela} where id=? and empresa_id=?`).get(id, empresaAtual());
       if(!row) throw falha(404,'Cadastro não encontrado.');
       if(tabela==='usuarios') {
-        if(row.perfil==='diretor') throw falha(409,'O Diretor não pode ser excluído.');
+        if(row.perfil==='diretor') throw falha(409,'Não é possível excluir a conta {topo:do}.');
         if(row.perfil==='administrador') throw falha(409,'O Administrador não pode ser excluído por aqui.');
         const referencias = [
           ['acoes','criado_por','ações criadas'],

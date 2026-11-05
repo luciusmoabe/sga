@@ -1,4 +1,5 @@
 // Detalhe de uma ação, compartilhado por Diretor, Apoio e Chefe.
+import { aoTopo, doTopo, oTopo, peloTopo } from './vocab.js';
 import { del, get, patch, post } from './api.js';
 import { ehAdmin, ehDiretor, est, podeOperar } from './estado.js';
 import { abrirForm, br, confirmar, dataHora, esc, fmtMin, on, pilulaStatus, PRIO, toast } from './ui.js';
@@ -17,7 +18,7 @@ export function abrirNovoImpedimento(a, aoConcluir) {
     titulo: 'Registrar impedimento',
     corpo: `<p class="suave pequeno">Ação: <b>${esc(a.titulo)}</b></p>
       <div class="campo"><label for="ni-desc">O que está impedindo?</label><textarea id="ni-desc" name="descricao" required maxlength="600"></textarea></div>
-      <div class="campo"><label for="ni-apoio">Apoio de que você precisa (opcional)</label><textarea id="ni-apoio" name="apoio" maxlength="600" placeholder="O que o Diretor pode fazer para ajudar?"></textarea></div>
+      <div class="campo"><label for="ni-apoio">Apoio de que você precisa (opcional)</label><textarea id="ni-apoio" name="apoio" maxlength="600" placeholder="O que ${oTopo()} pode fazer para ajudar?"></textarea></div>
       <div class="escolha"><label><input type="checkbox" name="critico" value="1"> Impedimento crítico (coloca a seção em vermelho)</label></div>
       ${a.status === 'em_andamento' ? '<div class="escolha"><label><input type="checkbox" name="bloquear" value="1"> A ação está bloqueada (o status muda para "Bloqueada")</label></div>'
         : '<p class="suave pequeno">Para marcar a ação como bloqueada, ela precisa estar em andamento.</p>'}`,
@@ -84,7 +85,7 @@ const tarefaCamposHTML = (responsaveis, it = {}) => `
 /** Badges do topo e bloco das tarefas: extraídos para poder atualizar só essas partes do diálogo
  *  (marcar/adicionar/excluir tarefa não fecha e reabre a tela toda). */
 const badgesHTML = (a) => `${pilulaStatus(a)}
-  ${a.demandada_diretor ? '<span class="pilula diretor">Demandada pelo Diretor</span>' : ''}
+  ${a.demandada_diretor ? `<span class="pilula diretor">Demandada ${peloTopo()}</span>` : ''}
   ${a.apresentada ? `<span class="pilula" title="Título e detalhamento não mudam mais; o prazo pode ser alterado">Apresentada em reunião (${br(a.apresentada_em)})</span>` : ''}
   <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade]}</span>
   ${a.esforco ? `<span class="pilula" title="Estimativa de esforço, usada nos indicadores de produtividade">Esforço ${ROTULO_ESFORCO[a.esforco]}</span>` : ''}
@@ -131,8 +132,8 @@ export async function confirmarPrazoNasSecoes({ todos, secoes, prazo }) {
 // ---------- Origem da ação: demanda do Diretor ou de entidade fora da subordinação a ele ----------
 /** Uma origem só: nunca as duas. O nome da entidade é obrigatório quando a marcação está ligada. */
 export const origemCamposHTML = ({ diretor = false, externo = '' } = {}) => `
-  <div class="escolha"><label><input type="checkbox" name="demanda_diretor" value="1" ${diretor ? 'checked' : ''}> Demanda do Diretor</label></div>
-  <div class="escolha" style="margin-top:8px"><label><input type="checkbox" name="demanda_externa" value="1" ${externo ? 'checked' : ''}> Demanda de entidade fora da subordinação ao Diretor</label></div>
+  <div class="escolha"><label><input type="checkbox" name="demanda_diretor" value="1" ${diretor ? 'checked' : ''}> Demanda ${doTopo()}</label></div>
+  <div class="escolha" style="margin-top:8px"><label><input type="checkbox" name="demanda_externa" value="1" ${externo ? 'checked' : ''}> Demanda de entidade fora da subordinação ${aoTopo()}</label></div>
   <div class="campo origem-externa" style="margin-top:8px" ${externo ? '' : 'hidden'}><label for="origem-externo">Quem demandou</label>
     <input id="origem-externo" name="demandante_externo" maxlength="120" value="${esc(externo)}" placeholder="Ex.: Tribunal de Contas do Estado"></div>`;
 /** Liga as duas marcações entre si (marcar uma desmarca a outra) e mostra o campo do nome só quando preciso. */
@@ -153,7 +154,7 @@ export function lerOrigem(d) {
   const externa = d.demanda_externa === '1';
   const nome = (d.demandante_externo || '').trim();
   if (externa && !nome) throw new Error('Informe o nome da entidade que demandou a ação.');
-  if (externa && d.demanda_diretor === '1') throw new Error('Escolha uma origem só: demanda do Diretor ou de entidade externa.');
+  if (externa && d.demanda_diretor === '1') throw new Error(`Escolha uma origem só: demanda ${doTopo()} ou de entidade externa.`);
   return { demanda_diretor: d.demanda_diretor === '1', demandante_externo: externa ? nome : null };
 }
 
@@ -189,12 +190,12 @@ export function abrirEditarAcao(a, aoConcluir) {
   abrirForm({
     titulo: soPrazo && !a.pode_mudar_demanda ? 'Alterar prazo' : 'Editar ação',
     corpo: `${soPrazo ? `<p class="suave pequeno">Ação: <b>${esc(a.titulo)}</b></p>
-      <div class="info">O título e o detalhamento desta ação estão preservados.${a.pode_mudar_prazo ? ' O prazo pode ser alterado, e o anterior fica guardado.' : ''}${a.pode_mudar_demanda ? ' Você pode corrigir a marcação de demanda do Diretor.' : ''}</div>`
+      <div class="info">O título e o detalhamento desta ação estão preservados.${a.pode_mudar_prazo ? ' O prazo pode ser alterado, e o anterior fica guardado.' : ''}${a.pode_mudar_demanda ? ` Você pode corrigir a marcação de demanda ${doTopo()}.` : ''}</div>`
       : `<div class="campo"><label for="ea-titulo">Título da ação</label><input id="ea-titulo" name="titulo" required maxlength="160" value="${esc(a.titulo)}"></div>
       <div class="campo"><label for="ea-detalhe">Detalhamento (opcional)</label><textarea id="ea-detalhe" name="detalhe" maxlength="2000">${esc(a.detalhe || '')}</textarea></div>`}
       <div class="campo"><label for="ea-prazo">Prazo</label><input id="ea-prazo" type="date" name="prazo" required value="${esc(a.prazo)}" ${a.pode_mudar_prazo ? '' : 'disabled'}>
         <div class="dica">${a.prazo !== a.prazo_original ? `Prazo original: ${br(a.prazo_original)}. ` : ''}A mudança de prazo fica registrada no histórico da ação.</div></div>
-      ${a.pode_mudar_demanda ? `${origemCamposHTML({ diretor: !!a.demanda_diretor, externo: a.demandante_externo || '' })}<p class="suave pequeno">A origem será informada pela seção e a alteração ficará no histórico.${a.interna ? ' Ao marcar uma origem, esta ação deixará de ser interna e ficará visível ao Diretor.' : ''}</p>` : ''}`,
+      ${a.pode_mudar_demanda ? `${origemCamposHTML({ diretor: !!a.demanda_diretor, externo: a.demandante_externo || '' })}<p class="suave pequeno">A origem será informada pela seção e a alteração ficará no histórico.${a.interna ? ` Ao marcar uma origem, esta ação deixará de ser interna e ficará visível ${aoTopo()}.` : ''}</p>` : ''}`,
     aoAbrir: (dlg) => ligarOrigem(dlg),
     rotulo: soPrazo && !a.pode_mudar_demanda ? 'Alterar prazo' : 'Salvar alterações',
     aoEnviar: async (d) => {
@@ -265,7 +266,7 @@ const validacaoHTML = (a) => {
       ${chefeAgindo ? '<div class="linha" style="margin-top:8px"><button type="button" class="btn btn-ok" data-validar>Validar</button><button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>' : ''}</div>`;
   }
   if (a.aguardando_validacao === 'diretor') {
-    return `<div class="aviso-validacao"><b>Aguardando o aceite do Diretor.</b>${a.validada_chefe ? ` <span class="suave pequeno">O chefe já validou${a.validada_chefe_por_nome ? ` (${esc(a.validada_chefe_por_nome)})` : ''}.</span>` : ''}
+    return `<div class="aviso-validacao"><b>Aguardando o aceite ${doTopo()}.</b>${a.validada_chefe ? ` <span class="suave pequeno">O chefe já validou${a.validada_chefe_por_nome ? ` (${esc(a.validada_chefe_por_nome)})` : ''}.</span>` : ''}
       ${ehDiretor() ? '<div class="linha" style="margin-top:8px"><button type="button" class="btn btn-ok" data-encerrar>Aceitar e encerrar</button><button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>' : ''}</div>`;
   }
   return a.validada_chefe && a.status === 'concluida' ? `<p class="pequeno suave">Validada pelo chefe${a.validada_chefe_por_nome ? ` (${esc(a.validada_chefe_por_nome)})` : ''} em ${dataHora(a.validada_chefe_em)}.</p>` : '';
@@ -290,7 +291,7 @@ export async function abrirAcao(id, aoMudar) {
       <div class="banner-origem diretor">
         <span class="banner-origem-icone">🎯</span>
         <div>
-          <strong>Demandada pelo Diretor</strong>
+          <strong>Demandada ${peloTopo()}</strong>
           ${a.demanda_diretor && !a.diretriz_id ? '<div class="detalhes">Origem informada pela seção.</div>' : ''}
           <div class="detalhes">Determinada em ${dataHora(a.demandado_em || a.criada_em)}${a.demandado_por_nome ? ` por ${esc(a.demandado_por_nome)}` : ''}${a.reuniao_semana ? ` · Reunião de ${br(a.reuniao_semana)}` : ''}</div>
         </div>
@@ -299,7 +300,7 @@ export async function abrirAcao(id, aoMudar) {
         <span class="banner-origem-icone">🏛️</span>
         <div>
           <strong>Demanda de ${esc(a.demandante_externo)}</strong>
-          <div class="detalhes">Entidade fora da subordinação ao Diretor · a ação fica visível a ele</div>
+          <div class="detalhes">Entidade fora da subordinação ${aoTopo()} · a ação fica visível a ele</div>
         </div>
       </div>` : (a.interna ? `
       <div class="banner-origem">
@@ -355,7 +356,7 @@ export async function abrirAcao(id, aoMudar) {
       </div>
     ` : `
       <div class="suave pequeno" style="margin-top:14px;padding-top:8px;border-top:1px solid var(--line)">
-        <i>Esta ação foi demandada pelo Diretor e não pode ser excluída nem arquivada pela seção.</i>
+        <i>Esta ação foi demandada ${peloTopo()} e não pode ser excluída nem arquivada pela seção.</i>
       </div>
     `}
     ${a.pode_excluir ? '<button type="button" class="btn btn-perigo" style="margin-top:12px" data-excluir>Excluir ação</button>' : ''}

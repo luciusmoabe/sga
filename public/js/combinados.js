@@ -1,4 +1,5 @@
 // Combinados da reunião: cadastro completo para Diretor e Apoio, leitura para os chefes.
+import { OTopo, oTopo } from './vocab.js';
 import { get, patch, post, put } from './api.js';
 import { ehGestao, podeOperar } from './estado.js';
 import { abrirForm, esc, on, plural, toast, vazio } from './ui.js';
@@ -17,7 +18,7 @@ export async function combinados(raiz, { refresh }) {
   let n = 0;
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>Combinados da reunião</h1>
-      <div class="sub">${edita ? 'Aparecem em uma tela curta quando a reunião começa. Mudanças valem a partir da próxima reunião.' : gere ? 'Aparecem em uma tela curta quando a reunião começa. Você consulta; quem altera é o Diretor ou o Apoio.' : 'Como conduzimos a reunião semanal.'}</div></div></div>
+      <div class="sub">${edita ? 'Aparecem em uma tela curta quando a reunião começa. Mudanças valem a partir da próxima reunião.' : gere ? `Aparecem em uma tela curta quando a reunião começa. Você consulta; quem altera é ${oTopo()} ou o Apoio.` : 'Como conduzimos a reunião semanal.'}</div></div></div>
     ${gere && c.aviso ? `<div class="aviso">${esc(c.aviso)}</div>` : ''}
     <div class="cartao">
       ${c.itens.length ? `<ol class="combinados">${c.itens.map((i) => {
@@ -33,7 +34,7 @@ export async function combinados(raiz, { refresh }) {
               <button class="btn btn-fantasma btn-mini" data-acao="alternar">${i.ativo ? 'Desativar' : 'Ativar'}</button>
               <button class="btn btn-fantasma btn-mini" data-acao="arquivar">Arquivar</button>`}</span>` : ''}
         </li>`;
-      }).join('')}</ol>` : vazio('Nenhum combinado ativo', edita ? 'Adicione o primeiro abaixo.' : 'O Diretor ainda não cadastrou combinados.')}
+      }).join('')}</ol>` : vazio('Nenhum combinado ativo', edita ? 'Adicione o primeiro abaixo.' : `${OTopo()} ainda não cadastrou combinados.`)}
     </div>
     ${edita ? `<div class="espaco"></div>
     <div class="dois" style="align-items:start">

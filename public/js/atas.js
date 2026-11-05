@@ -1,5 +1,5 @@
 // Reuniões e atas: histórico para Diretor e Apoio, leitura das atas enviadas para os chefes.
-import { todasAs } from './vocab.js';
+import { oTopo, todasAs } from './vocab.js';
 import { del, get, post, put } from './api.js';
 import { est, podeOperar } from './estado.js';
 import { br, confirmar, dataHora, diaSemana, esc, on, plural, toast, vazio } from './ui.js';
@@ -61,7 +61,7 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
     <div class="cartao">
       <div class="linha entre"><h2>Ata</h2>${['rascunho', 'enviada'].includes(r.status) ? '<button type="button" class="btn btn-sec nao-imprimir" id="pdf-ata">Baixar PDF</button>' : ''}</div>
       ${['rascunho', 'enviada'].includes(r.status) ? htmlCabecalhoAta(cabecalho) : ''}
-      ${r.status === 'rascunho' && !podeOperar() ? `<div class="info nao-imprimir">Ata em rascunho: o Diretor ou o Apoio ainda vai revisá-la e enviá-la aos chefes.</div><div class="ata">${renderizarAta(r.ata_texto)}</div>`
+      ${r.status === 'rascunho' && !podeOperar() ? `<div class="info nao-imprimir">Ata em rascunho: ${oTopo()} ou o Apoio ainda vai revisá-la e enviá-la aos chefes.</div><div class="ata">${renderizarAta(r.ata_texto)}</div>`
       : r.status === 'rascunho' ? `<div class="info nao-imprimir">A ata foi montada a partir do que foi registrado na reunião. Revise, ajuste se precisar e envie aos chefes. Nesta versão do protótipo, "enviar" libera a leitura na tela Atas; não há e-mail.</div>
         ${campoEditorAta(r.ata_texto)}
         <details class="nao-imprimir"><summary>Pré-visualização de leitura</summary><div class="ata" id="ata-previa">${renderizarAta(r.ata_texto)}</div></details>

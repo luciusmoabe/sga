@@ -15,7 +15,8 @@ import { rotasCabecalhoAta } from './ata-cabecalho.js';
 import { cabecalhosSeguranca } from './seguranca-http.js';
 import { configurarAuth, instalarAuth } from './auth.js';
 import { administradorAuth } from './cadastro-chefes.js';
-import { escopoDaEmpresa, instalarLintDeEmpresa } from './empresa.js';
+import { comEmpresa, escopoDaEmpresa, instalarLintDeEmpresa } from './empresa.js';
+import { completarVocabulario, resolverTopo } from '../public/js/vocabulario.js';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -89,10 +90,17 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
 
   // ---------- Erros ----------
   app.use('/api', (req, res, next) => next(falha(404, 'Rota não encontrada.')));
-  app.use((err, req, res, next) => {
+  app.use(async (err, req, res, next) => {
     const status = err.status || 500;
     if (status >= 500) console.error(err);
-    res.status(status).json({ erro: status >= 500 ? 'Erro interno. Tente novamente.' : err.message, ...(err.extra || {}) });
+    let erro = status >= 500 ? 'Erro interno. Tente novamente.' : err.message;
+    // As mensagens escrevem o topo da empresa como {topo:o}, {topo:do}…; aqui viram o nome que a empresa de quem recebe escolheu.
+    if (typeof erro === 'string' && erro.includes('{topo')) {
+      let v;
+      try { v = req.user ? await comEmpresa(req.user.empresa_id, () => ctx.vocabularioAtual()) : completarVocabulario(null); } catch { v = completarVocabulario(null); }
+      erro = resolverTopo(erro, v);
+    }
+    res.status(status).json({ erro, ...(err.extra || {}) });
   });
 
   return app;

@@ -64,7 +64,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
   // o Administrador da Diretoria Adjunta envia o relato da própria seção (tela "Minha atualização").
   const secaoDaAtualizacao = async (req) => {
     if (req.user.perfil !== 'administrador') {
-      if (!req.user.secao_id) throw falha(409, 'Você ainda não está vinculado a uma seção. Peça ao Diretor para atribuí-lo.');
+      if (!req.user.secao_id) throw falha(409, 'Você ainda não está vinculado a uma seção. Peça {topo:ao} para atribuí-lo.');
       return req.user.secao_id;
     }
     const id = Number(req.query.secao_id ?? req.body?.secao_id ?? req.user.secao_id);

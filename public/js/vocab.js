@@ -15,6 +15,12 @@ export const todasAs = (tipo, emFrase = false) => (emFrase ? minuscula(V.todasAs
 export const dosPlural = (tipo) => V.dosPlural(vocab(), tipo);
 export const esteTipo = (tipo) => V.esteTipo(vocab(), tipo);
 export const oTipo = (tipo) => V.oTipo(vocab(), tipo);
+/** O topo da empresa (o perfil Diretor) com o artigo certo: o Diretor, do Diretor, ao Diretor, pelo Diretor. */
+export const oTopo = () => V.oTopo(vocab());
+export const OTopo = () => V.OTopo(vocab());
+export const doTopo = () => V.doTopo(vocab());
+export const aoTopo = () => V.aoTopo(vocab());
+export const peloTopo = () => V.peloTopo(vocab());
 export const rotuloPerfilDe = (perfil) => V.rotuloPerfil(vocab(), perfil);
 /** Objeto que se lê como `PERFIL[perfil]`, sempre com os nomes atuais da empresa. */
 export const PERFIL_DA_EMPRESA = new Proxy({}, { get: (_, perfil) => (typeof perfil === 'string' ? rotuloPerfilDe(perfil) : undefined) });

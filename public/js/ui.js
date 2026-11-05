@@ -1,4 +1,5 @@
 // Utilidades de interface: formatação, diálogos, avisos e o Trilho da Semana.
+import { aoTopo, doTopo, oTopo } from './vocab.js';
 import { agora, isoDe } from './estado.js';
 import { instante, parseData, partesNoFuso, somarDias } from './datas.js';
 import { HORA_FECHAMENTO } from './regras.js';
@@ -42,8 +43,8 @@ export const pilulaStatus = (a) =>
   (a.atrasada ? ' <span class="pilula atraso">Atrasada</span>' : '') +
   (a.impedimento_critico ? ' <span class="pilula atraso">Impedimento crítico</span>' : a.impedimentos_abertos ? ' <span class="pilula st-bloqueada">Impedimento aberto</span>' : '') +
   (a.checklist_total ? ` <span class="pilula" title="Tarefas feitas">☑ ${a.checklist_feitos}/${a.checklist_total}</span>` : '') +
-  (a.aguardando_validacao ? ` <span class="pilula validacao" title="A ação foi concluída e espera a conferência de quem a delegou">${a.aguardando_validacao === 'chefe' ? 'Aguardando validação do chefe' : 'Aguardando aceite do Diretor'}</span>` : '') +
-  (a.demandante_externo ? ` <span class="pilula externa" title="Demanda de entidade fora da subordinação ao Diretor">Demanda externa: ${esc(a.demandante_externo)}</span>` : '') +
+  (a.aguardando_validacao ? ` <span class="pilula validacao" title="A ação foi concluída e espera a conferência de quem a delegou">${a.aguardando_validacao === 'chefe' ? 'Aguardando validação do chefe' : `Aguardando aceite ${doTopo()}`}</span>` : '') +
+  (a.demandante_externo ? ` <span class="pilula externa" title="Demanda de entidade fora da subordinação ${aoTopo()}">Demanda externa: ${esc(a.demandante_externo)}</span>` : '') +
   (a.encerrada ? ' <span class="pilula enc">Encerrada</span>' : '');
 export const vazio = (titulo, texto = '') => `<div class="vazio"><b>${esc(titulo)}</b>${esc(texto)}</div>`;
 

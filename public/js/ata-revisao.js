@@ -1,4 +1,5 @@
 import { get, post } from './api.js';
+import { aoTopo, oTopo } from './vocab.js';
 import { podeOperar } from './estado.js';
 import { abrirForm, dataHora, esc, on, toast } from './ui.js';
 
@@ -15,7 +16,7 @@ export function ligarRevisaoAta(raiz, r, { lerTextoAta } = {}) {
   const desenhar = () => {
     painel.innerHTML = `<h2>Sugestões de revisão da ata</h2>
       <p class="suave pequeno">Pedidos de correção, inclusão ou supressão ficam registrados com a resposta da gestão. A ata só muda após revisão pela gestão, e as versões publicadas são preservadas.</p>
-      ${r.pode_sugerir ? '<button type="button" class="btn btn-sec" data-sugerir-ata>Sugerir revisão</button>' : !podeOperar() ? '<p class="info">Sua presença não está registrada nesta reunião. Peça ao Diretor ou ao Apoio para registrar sua presença na tela da reunião. Nas atas antigas, a presença não é presumida.</p>' : ''}
+      ${r.pode_sugerir ? '<button type="button" class="btn btn-sec" data-sugerir-ata>Sugerir revisão</button>' : !podeOperar() ? `<p class="info">Sua presença não está registrada nesta reunião. Peça ${aoTopo()} ou ao Apoio para registrar sua presença na tela da reunião. Nas atas antigas, a presença não é presumida.</p>` : ''}
       ${r.sugestoes.length ? r.sugestoes.map((s) => `<article class="item" style="display:block;margin-top:12px"><div class="linha entre"><b>${TIPOS[s.tipo]} · ${esc(s.usuario_nome)}</b><span class="pilula">${STATUS[s.status]}</span></div>
         <p style="white-space:pre-wrap">${esc(s.texto)}</p><small class="suave">${dataHora(s.criada_em)}</small>
         ${s.resposta ? `<p style="white-space:pre-wrap"><b>Resposta:</b> ${esc(s.resposta)}</p><small class="suave">${esc(s.respondida_por_nome || '')} · ${dataHora(s.respondida_em)}</small>` : podeOperar() ? `<button type="button" class="btn btn-sec btn-mini" data-responder-ata="${s.id}">Revisar e responder</button>` : ''}</article>`).join('') : '<p class="suave pequeno">Nenhuma sugestão registrada.</p>'}

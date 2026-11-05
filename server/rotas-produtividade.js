@@ -16,7 +16,7 @@ export function rotasProdutividade(app, { db, hoje, visiveisAcoes }) {
     if (diasEntre(de, ate) + 1 > DIAS_MAX_PERIODO) throw falha(400, `O período deve ter no máximo ${DIAS_MAX_PERIODO} dias.`);
     const secao = req.query.secao === undefined ? null : Number(req.query.secao);
     if (secao !== null && !Number.isSafeInteger(secao)) throw falha(400, 'Unidade inválida.');
-    if (req.user.perfil === 'chefe' && !req.user.secao_id) throw falha(409, 'Você ainda não está vinculado a uma seção. Peça ao Diretor para atribuí-lo.');
+    if (req.user.perfil === 'chefe' && !req.user.secao_id) throw falha(409, 'Você ainda não está vinculado a uma seção. Peça {topo:ao} para atribuí-lo.');
     const unidades = await unidadesDoUsuario(db, req.user, secao);
     if (unidades === null || (secao !== null && !unidades.length)) throw falha(404, 'Unidade não encontrada.');
     const r = await calcularProdutividade(db, { visiveis: await visiveisAcoes(req.user), de, ate, hoje: agora, unidades });

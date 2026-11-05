@@ -5,6 +5,7 @@
 // as seções (a seção aparece em destaque, em selo).
 // Acessibilidade: cada dia é um botão com a descrição por extenso ("28 de outubro: 2 ações, 1 tarefa, 1 atrasada"),
 // as marcas diferem pela forma (círculo = ação, quadrado = tarefa) e o atraso também vem em texto, não só em cor.
+import { aoTopo, oTopo } from './vocab.js';
 import { get, patch } from './api.js';
 import { est } from './estado.js';
 import { $, addDias, br, esc, on, pilulaStatus, plural, PRIO, toast, vazio } from './ui.js';
@@ -22,7 +23,7 @@ export async function agenda(raiz) {
   const gestao = !['chefe', 'membro'].includes(est.user.perfil); // Diretor, Apoio, Administrador e Consulta veem todas as seções
   if (!gestao && !est.user.secao_id) {
     raiz.innerHTML = `<div class="cabeca"><h1>Agenda</h1></div><div class="cartao">${vazio(
-      'Você ainda não está vinculado a uma seção', 'Peça ao Diretor para atribuí-lo a uma seção na tela Estrutura.')}</div>`;
+      'Você ainda não está vinculado a uma seção', `Peça ${aoTopo()} para atribuí-lo a uma seção na tela Estrutura.`)}</div>`;
     return;
   }
   const hoje = est.boot.hoje;

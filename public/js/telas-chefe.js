@@ -1,4 +1,5 @@
 // Telas do chefe de seção: início, atualização semanal, ações e histórico.
+import { aoTopo, doTopo, oTopo, peloTopo } from './vocab.js';
 import { del, get, patch, post } from './api.js';
 import { est } from './estado.js';
 import {
@@ -11,7 +12,7 @@ import { relatoHTML } from './telas-diretor.js';
 
 const semSecao = (raiz) => {
   raiz.innerHTML = `<div class="cabeca"><h1>Sem seção atribuída</h1></div><div class="cartao">${vazio(
-    'Você ainda não está vinculado a uma seção', 'Peça ao Diretor para atribuí-lo a uma seção na tela Estrutura.')}</div>`;
+    'Você ainda não está vinculado a uma seção', `Peça ${aoTopo()} para atribuí-lo a uma seção na tela Estrutura.`)}</div>`;
 };
 
 // ---------- Precisa de atenção ----------
@@ -48,7 +49,7 @@ function quadroAtencaoHTML(abertas, semana) {
   return `<aside class="atencao-quadro" aria-labelledby="atencao-titulo">
     <p class="atencao-sobre">Um momento para atualizar</p>
     <h2 id="atencao-titulo">Precisa de atenção</h2>
-    ${itens.length ? `<p class="atencao-lead">Estas ações estão atrasadas, vencem até a reunião ou estão há algum tempo sem andamento registrado. Atualizar o status mantém o Diretor a par antes da reunião.</p>
+    ${itens.length ? `<p class="atencao-lead">Estas ações estão atrasadas, vencem até a reunião ou estão há algum tempo sem andamento registrado. Atualizar o status mantém ${oTopo()} a par antes da reunião.</p>
       <ul class="atencao-lista">${itens.slice(0, MAX).map(({ a, m }) => `<li data-atencao="${a.id}">
         <div class="atencao-item-titulo">${esc(a.titulo)}</div>
         <div class="pequeno"><span class="${m.classe}">${m.texto}</span> · ${pilulaStatus(a)}</div>
@@ -152,9 +153,9 @@ export async function inicio(raiz, { refresh }) {
     <div class="espaco"></div>
     <div class="cartao"><div class="linha entre"><h2>Próximas ações</h2><a href="#/minhas-acoes">Ver todas</a></div>
       ${abertas.length ? `<table><tbody>${abertas.slice(0, 4).map((a) => `<tr class="clicavel" data-acao="${a.id}" tabindex="0">
-        <td><b>${esc(a.titulo)}</b>${a.demandada_diretor ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">Demandada pelo Diretor em ${br(a.demandado_em || a.criada_em)}</div>` : ''}</td>
+        <td><b>${esc(a.titulo)}</b>${a.demandada_diretor ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">Demandada ${peloTopo()} em ${br(a.demandado_em || a.criada_em)}</div>` : ''}</td>
         <td class="num">${br(a.prazo)}</td><td>${pilulaStatus(a)}</td></tr>`).join('')}</tbody></table>`
-        : vazio('Nenhuma ação em aberto', 'Quando o Diretor direcionar algo, aparecerá aqui.')}</div>
+        : vazio('Nenhuma ação em aberto', `Quando ${oTopo()} direcionar algo, aparecerá aqui.`)}</div>
     </div>${quadroAtencaoHTML(abertas, semana)}</div>`;
   ligarAtencao(raiz, abertas, refresh);
   const abrir = (el) => abrirAcao(el.dataset.acao, refresh).catch((e) => toast(e.message, 'erro'));
@@ -223,14 +224,14 @@ export async function minhasAcoes(raiz) {
             ${seloNova(a)}
             ${a.atrasada ? '<span class="pilula atraso">Atrasada</span>' : ''}
             ${seloParada(a)}
-            ${a.demandada_diretor ? '<span class="pilula diretor" title="Ações demandadas pelo Diretor não podem ser arquivadas nem excluídas pela seção">Demandada pelo Diretor</span>' : ''}
+            ${a.demandada_diretor ? `<span class="pilula diretor" title="Ações demandadas ${peloTopo()} não podem ser arquivadas nem excluídas pela seção">Demandada ${peloTopo()}</span>` : ''}
             <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade].toLowerCase()}</span>
             ${a.pedido_pendente ? '<span class="pilula">Pedido de prazo enviado</span>' : ''}
             ${a.impedimento_critico ? '<span class="pilula atraso">Impedimento crítico</span>' : a.impedimentos_abertos ? '<span class="pilula st-bloqueada">Impedimento aberto</span>' : ''}
             ${a.checklist_total ? `<span class="pilula" title="Tarefas feitas">☑ ${a.checklist_feitos}/${a.checklist_total}</span>` : ''}
             ${a.responsavel_nome ? `<span class="pilula" title="Responsável pela execução">Responsável: ${esc(a.responsavel_nome)}</span>` : ''}
-            ${a.demandante_externo ? `<span class="pilula externa" title="Demanda de entidade fora da subordinação ao Diretor">Demanda externa: ${esc(a.demandante_externo)}</span>` : ''}
-            ${a.aguardando_validacao ? `<span class="pilula validacao">${a.aguardando_validacao === 'chefe' ? 'Aguardando validação do chefe' : 'Aguardando aceite do Diretor'}</span>` : ''}
+            ${a.demandante_externo ? `<span class="pilula externa" title="Demanda de entidade fora da subordinação ${aoTopo()}">Demanda externa: ${esc(a.demandante_externo)}</span>` : ''}
+            ${a.aguardando_validacao ? `<span class="pilula validacao">${a.aguardando_validacao === 'chefe' ? 'Aguardando validação do chefe' : `Aguardando aceite ${doTopo()}`}</span>` : ''}
             ${a.arquivada ? '<span class="pilula enc">Arquivada</span>' : ''}
             ${a.apresentada ? '<span class="pilula" title="Título e detalhamento não mudam mais; o prazo pode ser alterado">Apresentada em reunião</span>' : ''}
           </div>
@@ -255,7 +256,7 @@ export async function minhasAcoes(raiz) {
               ${a.pode_excluir ? '<button type="button" class="btn btn-sec btn-mini perigo-texto" data-excluir>Excluir ação</button>' : ''}
             </div></details>` : ''}
         </footer>
-      </article>`).join('') : `<div class="cartao">${vazio('Nenhuma ação nesta visão', aba === 'arquivadas' ? 'Nenhuma ação arquivada.' : ehMembro && escopo === 'minhas' ? 'Quando o chefe atribuir uma ação a você, ou você criar uma, ela aparecerá aqui.' : 'Quando o Diretor ou você criarem ações, elas aparecerão aqui.')}</div>`}`;
+      </article>`).join('') : `<div class="cartao">${vazio('Nenhuma ação nesta visão', aba === 'arquivadas' ? 'Nenhuma ação arquivada.' : ehMembro && escopo === 'minhas' ? 'Quando o chefe atribuir uma ação a você, ou você criar uma, ela aparecerá aqui.' : `Quando ${oTopo()} ou você criarem ações, elas aparecerão aqui.`)}</div>`}`;
     for (const [id, v] of digitado) { const i = raiz.querySelector(`[data-id="${id}"] [data-min]`); if (i) i.value = v; }
     if (foco) raiz.querySelector(`[data-id="${foco}"] [data-min]`)?.focus({ preventScroll: true });
   };
@@ -336,7 +337,7 @@ export async function minhasAcoes(raiz) {
           <select id="na-resp" name="responsavel_id"><option value="">Eu mesmo (sem delegar)</option>${equipe.map((m) => `<option value="${m.id}">${esc(m.nome)}</option>`).join('')}</select>
           <div class="dica">Ao concluir, a ação de um membro da equipe aguarda a sua validação.</div></div>` : ''}
         <div class="campo"><label>De onde veio esta demanda?</label><div class="dica" style="margin-bottom:6px">Deixe em branco se foi uma decisão da própria seção.</div>${origemCamposHTML()}</div>
-        ${est.user.perfil === 'chefe' ? '<div class="escolha" style="margin-top:8px"><label><input type="checkbox" name="interna" value="1"> Ação interna da subseção (não exibida na pauta executiva do Diretor)</label></div>' : ''}`,
+        ${est.user.perfil === 'chefe' ? `<div class="escolha" style="margin-top:8px"><label><input type="checkbox" name="interna" value="1"> Ação interna da subseção (não exibida na pauta executiva ${doTopo()})</label></div>` : ''}`,
       rotulo: 'Criar ação',
       aoAbrir: (dlg) => ligarOrigem(dlg),
       aoEnviar: async (d) => {
@@ -391,7 +392,7 @@ export async function minhasAcoes(raiz) {
         <div class="campo"><label for="np">Novo prazo</label><input id="np" type="date" name="novo_prazo" min="${addDias(a.prazo, 1)}" value="${addDias(a.prazo, 7)}"></div>
         <div class="campo"><label for="jp">Motivo</label><textarea id="jp" name="justificativa" placeholder="Explique o que justifica o novo prazo"></textarea></div>`,
       rotulo: 'Enviar pedido',
-      aoEnviar: async (d) => { await post(`/acoes/${a.id}/pedido-prazo`, d); toast('Pedido enviado ao Diretor.'); recarregar().catch(erro); },
+      aoEnviar: async (d) => { await post(`/acoes/${a.id}/pedido-prazo`, d); toast(`Pedido enviado ${aoTopo()}.`); recarregar().catch(erro); },
     });
   });
 }

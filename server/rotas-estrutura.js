@@ -172,12 +172,12 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
       const t=await q1('select perfil, secao_id from usuarios where id=? and empresa_id=?',id,empresaAtual());
       const ids=req.user.secao_id ? await subarvore(db,req.user.secao_id) : [];
       if(!t || t.perfil!=='membro' || !ids.includes(t.secao_id)) throw falha(403,'Você redefine o acesso apenas dos membros da sua equipe.');
-      if(b.email) throw falha(403,'Para trocar o e-mail de um membro, peça ao Diretor. Você pode redefinir a senha.');
+      if(b.email) throw falha(403,'Para trocar o e-mail de um membro, peça {topo:ao}. Você pode redefinir a senha.');
     }
     const conta=await q1('select * from auth_contas where usuario_id=? and projeto=?',id,auth.supabaseUrl);
     if(!conta) throw falha(404,'Usuário sem login vinculado.');
     const alvo=await q1('select perfil from usuarios where id=? and empresa_id=?',id,empresaAtual());
-    if(req.user.perfil!=='administrador' && ['diretor','administrador'].includes(alvo?.perfil)) throw falha(403,'Somente o Administrador altera o acesso do Diretor e de outros Administradores.');
+    if(req.user.perfil!=='administrador' && ['diretor','administrador'].includes(alvo?.perfil)) throw falha(403,'Somente o Administrador altera o acesso {topo:do} e de outros Administradores.');
     const dados={};
     if(b.email) {
       const email=String(b.email).trim().toLowerCase();
@@ -221,10 +221,10 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     const muda = 'perfil' in b || 'ativo' in b || 'secao_id' in b;
     if (u.perfil === 'administrador' && !porAdmin) throw falha(403, 'Somente o Administrador altera esta conta.');
     if (u.perfil === 'administrador' && muda) throw falha(400, 'O perfil e o acesso do Administrador só mudam pelo servidor, para que o sistema nunca fique sem administrador.');
-    if (u.perfil === 'diretor' && !porAdmin && muda) throw falha(400, 'Perfil e acesso do Diretor são protegidos: peça ao Administrador.');
+    if (u.perfil === 'diretor' && !porAdmin && muda) throw falha(400, 'Perfil e acesso {topo:do} são protegidos: peça ao Administrador.');
     const perfil=b.perfil ?? u.perfil;
     const permitidos = porAdmin ? ['diretor','chefe','apoio','membro','consulta'] : ['chefe','apoio','membro','consulta'];
-    if (perfil !== u.perfil && !permitidos.includes(perfil)) throw falha(400, porAdmin ? 'Escolha Diretor, Apoio do Diretor, Chefe de seção, Membro da equipe ou Consulta.' : 'Escolha Chefe, Apoio, Membro da equipe ou Consulta.');
+    if (perfil !== u.perfil && !permitidos.includes(perfil)) throw falha(400, porAdmin ? 'Escolha Diretor, Apoio {topo:do}, Chefe de seção, Membro da equipe ou Consulta.' : 'Escolha Chefe, Apoio, Membro da equipe ou Consulta.');
     // Leitura das ações de todos os Centros: só faz sentido para o chefe (a gestão já vê tudo; a Consulta existe para isso).
     if ('ver_outros_centros' in b && typeof b.ver_outros_centros !== 'boolean') throw falha(400, 'Informe se a pessoa pode consultar as ações de todos os Centros.');
     if (b.ver_outros_centros === true && perfil !== 'chefe') throw falha(400, 'A consulta às ações de todos os Centros vale só para o perfil Chefe de seção.');
@@ -270,7 +270,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
   // ---------- Equipe: membros da própria seção ----------
   // O chefe (e o Administrador vinculado a uma seção) cadastra, consulta e desativa os membros da equipe da sua seção e
   // das subseções. Excluir conta e mudar perfil continuam com o Diretor e o Administrador.
-  const semSecao = () => { throw falha(409, 'Você ainda não está vinculado a uma seção. Peça ao Diretor para atribuí-lo a uma seção.'); };
+  const semSecao = () => { throw falha(409, 'Você ainda não está vinculado a uma seção. Peça {topo:ao} para atribuí-lo a uma seção.'); };
   const MEMBRO_DA_EQUIPE = `select u.id, u.nome, u.email, u.ativo, u.trocar_senha, u.secao_id, s.sigla as secao_sigla,
       (select count(*) from acoes a where a.responsavel_id = u.id and a.empresa_id = u.empresa_id and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0) as acoes_abertas,
       (select count(*) from auth_contas c where c.usuario_id = u.id) as tem_login

@@ -1,5 +1,6 @@
 // Minha equipe: o chefe cadastra, consulta e desativa os membros da equipe da própria seção (e das subseções).
 // O membro lê as ações da seção e executa só as que o chefe atribuiu a ele ou que ele criou; a validação do que ele conclui é do chefe.
+import { aoTopo, oTopo } from './vocab.js';
 import { get, patch, post } from './api.js';
 import { est } from './estado.js';
 import { TAM_SENHA } from './regras.js';
@@ -12,7 +13,7 @@ const situacao = (m) => (!m.ativo ? '<span class="pilula enc">Inativo</span>'
 export async function equipe(raiz, { refresh }) {
   if (!est.user.secao_id) {
     raiz.innerHTML = `<div class="cabeca"><h1>Minha equipe</h1></div><div class="cartao">${vazio(
-      'Você ainda não está vinculado a uma seção', 'Peça ao Diretor para atribuí-lo a uma seção.')}</div>`;
+      'Você ainda não está vinculado a uma seção', `Peça ${aoTopo()} para atribuí-lo a uma seção.`)}</div>`;
     return;
   }
   const lista = await get('/equipe');
