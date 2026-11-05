@@ -462,10 +462,26 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     await db.prepare("insert into usuarios (nome, email, perfil) values ('Antigo', 'a@a.invalid', 'diretor')").run();
     await assert.rejects(db.prepare("insert into usuarios (nome, perfil) values ('P', 'plataforma')").run(), { code: '23514' });
     const antes = await db.prepare('select * from usuarios order by id').all();
-    assert.deepEqual(await aplicarMigracoes(db), [24]);
+    assert.deepEqual(await aplicarMigracoes(db), [24, 25]);
     assert.deepEqual(await db.prepare('select * from usuarios order by id').all(), antes);
     await db.prepare("insert into usuarios (nome, perfil) values ('P', 'plataforma')").run();
     await assert.rejects(db.prepare("insert into usuarios (nome, perfil) values ('Q', 'outro')").run(), { code: '23514' });
+    assert.deepEqual(await aplicarMigracoes(db), []);
+  });
+  await t.test('migração 25 acrescenta esforço, devoluções e início da execução sem alterar as ações existentes', async t => {
+    const [db] = await cluster.banco(t);
+    await aplicarMigracoes(db, { ate: 24 });
+    await db.prepare("insert into secoes (nome, tipo, criada_em) values ('Centro', 'centro', '2026-01-01')").run();
+    const secao = (await db.prepare('select id from secoes').get()).id;
+    await db.prepare("insert into acoes (secao_id, titulo, prazo, prazo_original, prioridade, criada_em) values (?, 'Antiga', '2026-12-31', '2026-12-31', 'media', '2026-01-01')").run(secao);
+    const antes = await db.prepare('select * from acoes').all();
+    assert.deepEqual(await aplicarMigracoes(db), [25]);
+    const depois = await db.prepare('select * from acoes').all();
+    const { esforco, devolucoes, iniciada_em, ...resto } = depois[0];
+    assert.deepEqual(resto, antes[0], 'as colunas antigas ficam como estavam');
+    assert.deepEqual([esforco, Number(devolucoes), iniciada_em], [null, 0, null]);
+    await db.prepare("update acoes set esforco = 'grande', devolucoes = 2, iniciada_em = '2026-02-01T10:00:00'").run();
+    await assert.rejects(db.prepare("update acoes set esforco = 'enorme'").run(), { code: '23514' });
     assert.deepEqual(await aplicarMigracoes(db), []);
   });
 });
