@@ -7,7 +7,7 @@ import {
 } from './ui.js';
 import { abrirAcao, confirmarPrazoNasSecoes } from './acao-comum.js';
 import { itensDoRelato, resumoInternas } from './relato-vista.js';
-import { DIAS_SEM_MOVIMENTO, DIRETORIA_ADJUNTA } from './regras.js';
+import { DIAS_SEM_MOVIMENTO, DIRETORIA_ADJUNTA, ehUnidadeDeAcompanhamento } from './regras.js';
 
 const NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const nomeDiaReuniao = () => NOMES_DIA[est.boot?.reuniao_dia ?? 2];
@@ -139,7 +139,7 @@ const cienciaSecoes = (x) => {
 export async function direcionar(raiz, { refresh }) {
   const [secoes, dirs] = await Promise.all([get('/secoes'), get('/diretrizes')]);
   // O Diretor Adjunto não direciona ações para a própria seção: as dela ele cria em "Minhas ações".
-  const centros = secoes.filter((s) => !s.pai_id && s.ativa && !(ehAdmin() && s.id === est.user.secao_id));
+  const centros = secoes.filter((s) => ehUnidadeDeAcompanhamento(s.tipo) && s.ativa && !(ehAdmin() && s.id === est.user.secao_id));
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>Direcionar ação</h1><div class="sub">Para ${todasAs('centro', true)}, quando o assunto é comum, ou para seções específicas. Todo pedido tem prazo.</div></div></div>
     <div class="dois" style="align-items:start">
@@ -219,7 +219,7 @@ export async function direcionar(raiz, { refresh }) {
 
 // ---------- Ações ----------
 export async function acoes(raiz, _p) {
-  const secoes = (await get('/secoes')).filter((s) => !s.pai_id && s.ativa);
+  const secoes = (await get('/secoes')).filter((s) => ehUnidadeDeAcompanhamento(s.tipo) && s.ativa);
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>Ações</h1><div class="sub">Todas as ações direcionadas às seções. Abra uma ação para ver o detalhe.</div></div></div>
     <div class="cartao"><div class="linha filtros-acoes" style="margin-bottom:12px">

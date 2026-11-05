@@ -5,7 +5,7 @@ import { abrirForm, br, confirmar, dataHora, esc, fmtMin, on, pilulaStatus, PRIO
 
 /** Avisa a casca que as contagens dos selos do menu mudaram (ex.: ação nova aberta). */
 export const selosMudaram = () => window.dispatchEvent(new Event('sgc:selos'));
-import { DIRETORIA_ADJUNTA, porDataDaTarefa } from './regras.js';
+import { TIPOS_DE_DIRETRIZ_GERAL, porDataDaTarefa } from './regras.js';
 
 // ---------- Impedimentos (formulários usados também pela atualização semanal e por Minhas ações) ----------
 /** Ação em que ainda faz sentido registrar impedimento. */
@@ -96,15 +96,15 @@ const checklistBlocoHTML = (a, responsaveis) => `
 // ---------- Ao direcionar: ações já planejadas para o mesmo prazo ----------
 /** Antes de direcionar, mostra as ações em aberto com o mesmo prazo nas seções alvo (e nas subseções delas),
  *  para o Diretor ou o Diretor Adjunto decidir se direciona mesmo assim. Devolve true para seguir.
- *  `secoes` são os ids escolhidos; com `todos`, valem os Centros e a Coordenação (sem a Diretoria Adjunta). */
+ *  `secoes` são os ids escolhidos; com `todos`, valem os Centros e as Coordenações, onde estiverem na árvore (sem a Diretoria Adjunta). */
 export async function confirmarPrazoNasSecoes({ todos, secoes, prazo }) {
   if (!prazo) return true;
   const [todasSecoes, acoes] = await Promise.all([get('/secoes'), get(`/acoes?situacao=abertas&prazo=${encodeURIComponent(prazo)}`)]);
   if (!acoes.length) return true;
-  const alvos = todos ? todasSecoes.filter((s) => !s.pai_id && s.ativa && s.tipo !== DIRETORIA_ADJUNTA).map((s) => s.id) : secoes;
+  const alvos = todos ? todasSecoes.filter((s) => s.ativa && TIPOS_DE_DIRETRIZ_GERAL.includes(s.tipo)).map((s) => s.id) : secoes;
   // Cada seção da árvore aponta para o alvo acima dela (o alvo aponta para si mesmo).
   const alvoDe = new Map();
-  const marcar = (id, alvo) => { alvoDe.set(id, alvo); todasSecoes.filter((s) => s.pai_id === id).forEach((f) => marcar(f.id, alvo)); };
+  const marcar = (id, alvo) => { alvoDe.set(id, alvo); todasSecoes.filter((s) => s.pai_id === id && s.tipo === 'subsecao').forEach((f) => marcar(f.id, alvo)); };
   alvos.forEach((id) => marcar(id, id));
   const porAlvo = new Map();
   for (const a of acoes) {

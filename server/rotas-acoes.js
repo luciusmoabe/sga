@@ -195,7 +195,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
   const responsaveisDa = (a) => q(`with recursive acima(id, pai_id) as (
         select id, pai_id from secoes where id = ? and empresa_id = ? union all select s.id, s.pai_id from secoes s join acima on s.id = acima.pai_id where s.empresa_id = ?
       ), abaixo(id) as (
-        select cast(? as integer) union select s.id from secoes s join abaixo on s.pai_id = abaixo.id where s.empresa_id = ?
+        select cast(? as integer) union select s.id from secoes s join abaixo on s.pai_id = abaixo.id where s.tipo = 'subsecao' and s.empresa_id = ?
       )
       select u.id, u.nome, s.sigla as secao_sigla from usuarios u join secoes s on s.id = u.secao_id
       where u.empresa_id = ? and u.ativo = 1 and u.secao_id in (select id from acima union select id from abaixo) order by u.nome, u.id`,
@@ -219,7 +219,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
   /** Quem pode executar uma ação da seção: chefes e membros da seção e das subseções (e, na Diretoria Adjunta, os
    *  Administradores vinculados a ela). É a lista de onde o chefe escolhe o responsável pela ação. */
   const executoresDa = (a) => q(`with recursive abaixo(id) as (
-        select cast(? as integer) union select s.id from secoes s join abaixo on s.pai_id = abaixo.id where s.empresa_id = ?
+        select cast(? as integer) union select s.id from secoes s join abaixo on s.pai_id = abaixo.id where s.tipo = 'subsecao' and s.empresa_id = ?
       )
       select u.id, u.nome, u.perfil, s.sigla as secao_sigla from usuarios u join secoes s on s.id = u.secao_id
       where u.empresa_id = ? and u.ativo = 1 and u.perfil in ('chefe', 'membro', 'administrador') and u.secao_id in (select id from abaixo)
@@ -303,16 +303,17 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const destino = b.destino === 'todos' ? 'todos' : 'especificos';
     let alvos;
     if (destino === 'todos') {
-      // "Todos os Centros" não inclui a Diretoria Adjunta, que não é Centro: ela recebe quando escolhida.
-      alvos = (await q("select id from secoes where pai_id is null and ativa = 1 and tipo != 'diretoria_adjunta' and empresa_id = ?", empresaAtual())).map((r) => r.id);
+      // "Todos os Centros" vale para as unidades de acompanhamento que não são a Diretoria Adjunta (Centros e Coordenações, onde
+      // estiverem na árvore): a Adjunta recebe quando escolhida.
+      alvos = (await q("select id from secoes where tipo in ('centro','coordenacao') and ativa = 1 and empresa_id = ?", empresaAtual())).map((r) => r.id);
     } else {
       const ids = [...new Set((b.secoes || []).map(Number))];
       const validados = [];
       for (const i of ids) {
-        if (await q1('select 1 from secoes where id = ? and pai_id is null and ativa = 1 and empresa_id = ?', i, empresaAtual())) validados.push(i);
+        if (await q1("select 1 from secoes where id = ? and tipo in ('centro','coordenacao','diretoria_adjunta') and ativa = 1 and empresa_id = ?", i, empresaAtual())) validados.push(i);
       }
       alvos = validados;
-      if (alvos.length !== ids.length) throw falha(400, `Escolha só unidades de primeiro nível ativas (${tiposDeDestino(await vocabularioAtual())}).`);
+      if (alvos.length !== ids.length) throw falha(400, `Escolha só unidades de acompanhamento ativas (${tiposDeDestino(await vocabularioAtual())}).`);
     }
     if (!alvos.length) throw falha(400, 'Escolha ao menos uma seção para receber a ação.');
     // O Diretor Adjunto (Administrador vinculado à Diretoria Adjunta) não direciona ações para a própria seção:
@@ -387,8 +388,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       if (!ehISO(prazo)) throw falha(400, 'Informe o prazo da ação.');
       if (prazo < hoje()) throw falha(400, 'O prazo desta ação já passou. Informe um novo prazo para as seções acrescentadas.');
       for (const s of ids) {
-        if (!(await q1('select 1 from secoes where id = ? and pai_id is null and ativa = 1 and empresa_id = ?', s, empresaAtual()))) {
-          throw falha(400, `Escolha só unidades de primeiro nível ativas (${tiposDeDestino(await vocabularioAtual())}).`);
+        if (!(await q1("select 1 from secoes where id = ? and tipo in ('centro','coordenacao','diretoria_adjunta') and ativa = 1 and empresa_id = ?", s, empresaAtual()))) {
+          throw falha(400, `Escolha só unidades de acompanhamento ativas (${tiposDeDestino(await vocabularioAtual())}).`);
         }
       }
       if (req.user.perfil === 'administrador' && req.user.secao_id && ids.includes(req.user.secao_id)) {

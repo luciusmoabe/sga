@@ -2,7 +2,7 @@ import { falha } from './helpers.js';
 import { DIRETORIA_ADJUNTA, TIPOS_SECAO } from './logic.js';
 import { empresaAtual } from './empresa.js';
 
-export async function editarHierarquia(db, id, dados) {
+export async function editarHierarquia(db, id, dados, { niveis = 3, nomeAdjunta = 'a Diretoria Adjunta' } = {}) {
   const rows = await db.prepare('select id,pai_id,tipo,ativa from secoes where empresa_id=?').all(empresaAtual());
   if (!rows.some(s=>s.id===id)) throw falha(404,'Seção não encontrada.');
   const atual = rows.find(s=>s.id===id);
@@ -14,9 +14,14 @@ export async function editarHierarquia(db, id, dados) {
   if ((tipo === DIRETORIA_ADJUNTA) !== (atual.tipo === DIRETORIA_ADJUNTA)) {
     throw falha(400, 'Uma seção não vira nem deixa de ser Diretoria Adjunta. Crie uma seção nova do tipo desejado.');
   }
-  if (tipo === 'subsecao' && !rows.some(s=>s.id===pai && s.ativa)) throw falha(400,'Escolha uma seção superior ativa.');
-  if (tipo === 'subsecao' && rows.find(s=>s.id===pai)?.tipo === DIRETORIA_ADJUNTA) throw falha(400,'A Diretoria Adjunta não tem subseções.');
-  if (tipo !== 'subsecao' && pai !== null) throw falha(400,'Este tipo de unidade fica no primeiro nível.');
+  const paiRow = rows.find(s=>s.id===pai);
+  if (pai !== null && (!paiRow || !paiRow.ativa)) throw falha(400,'Escolha uma seção superior ativa.');
+  if (tipo === 'subsecao' && pai === null) throw falha(400,'Escolha uma seção superior ativa.');
+  // Centro e Coordenação ficam no primeiro nível ou diretamente sob a Diretoria Adjunta; esta fica sempre no primeiro nível.
+  if (tipo === DIRETORIA_ADJUNTA && pai !== null) throw falha(400,'Este tipo de unidade fica no primeiro nível.');
+  if ((tipo === 'centro' || tipo === 'coordenacao') && pai !== null && paiRow.tipo !== DIRETORIA_ADJUNTA) {
+    throw falha(400,`Este tipo de unidade fica no primeiro nível ou diretamente sob ${nomeAdjunta}.`);
+  }
   atual.pai_id=pai; atual.tipo=tipo;
   const mapa=new Map(rows.map(s=>[s.id,s]));
   for (const s of rows) {
@@ -24,7 +29,7 @@ export async function editarHierarquia(db, id, dados) {
     while(no) {
       if(vistos.has(no.id)) throw falha(400,'Uma seção não pode ficar abaixo de si mesma ou de suas subseções.');
       vistos.add(no.id);
-      if(vistos.size>3) throw falha(400,'A estrutura aceita até 3 níveis abaixo do Departamento.');
+      if(vistos.size>niveis) throw falha(400,`A estrutura aceita até ${niveis} níveis.`);
       no=mapa.get(no.pai_id);
     }
   }

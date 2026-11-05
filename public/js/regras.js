@@ -21,10 +21,16 @@ export const ROTULO_PERFIL = { diretor: 'Diretor', apoio: 'Apoio do Diretor', ch
 export const PERFIS_DE_SECAO = ['chefe', 'membro'];
 export const TAM_SENHA = { min: 8, max: 128 };
 
-/** Tipos de seção. A Diretoria Adjunta fica no primeiro nível, sem chefe nem subseções; no resto é acompanhada como
- *  as demais seções (ações, Painel, relato e reunião). Quem é dela tem o perfil Administrador. */
+/** Tipos de seção. A Diretoria Adjunta fica no primeiro nível e não tem chefe (os Centros e Coordenações podem ficar abaixo
+ *  dela); no resto é acompanhada como as demais seções (ações, Painel, relato e reunião). Quem é dela tem o perfil Administrador. */
 export const DIRETORIA_ADJUNTA = 'diretoria_adjunta';
 export const TIPOS_SECAO = ['centro', 'coordenacao', 'subsecao', DIRETORIA_ADJUNTA];
+/** Unidades de acompanhamento (cartão no Modo Reunião, linha do Painel e do semáforo): a Diretoria Adjunta, o Centro e a
+ *  Coordenação de primeiro nível, onde estiverem na árvore. A Subseção nunca é cartão: entra na soma da unidade acima. */
+export const TIPOS_DE_ACOMPANHAMENTO = ['centro', 'coordenacao', DIRETORIA_ADJUNTA];
+/** Para quem a diretriz "todos" vale: os cartões, menos a Diretoria Adjunta (que recebe quando escolhida). */
+export const TIPOS_DE_DIRETRIZ_GERAL = ['centro', 'coordenacao'];
+export const ehUnidadeDeAcompanhamento = (tipo) => TIPOS_DE_ACOMPANHAMENTO.includes(tipo);
 export const ROTULO_TIPO = { centro: 'Centro', coordenacao: 'Coordenação', subsecao: 'Subseção', [DIRETORIA_ADJUNTA]: 'Diretoria Adjunta' };
 
 /** Ação em curso sem nenhuma movimentação (status, tempo, checklist, impedimento, comentário, prazo) há este número

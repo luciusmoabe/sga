@@ -6,10 +6,14 @@ import { ROTULO_PERFIL } from './regras.js';
 
 export const TIPOS_DO_VOCABULARIO = ['centro', 'coordenacao', 'subsecao', 'diretoria_adjunta'];
 export const MAX_NOME = 40;
+export const NIVEIS_PADRAO = 3;
+export const NIVEIS_MIN = 2;
+export const NIVEIS_MAX = 6;
 /** Tipos que uma empresa pode não usar. O Centro (unidade de primeiro nível) e a Subseção sempre existem. */
 export const TIPOS_OPCIONAIS = ['coordenacao', 'diretoria_adjunta'];
 
 export const VOCABULARIO_PADRAO = Object.freeze({
+  niveis: NIVEIS_PADRAO, // níveis da árvore de seções (a Diretoria Adjunta conta como um)
   topo: Object.freeze({ nome: 'Diretor', genero: 'm' }),
   tipos: Object.freeze({
     centro: Object.freeze({ singular: 'Centro', plural: 'Centros', genero: 'm', usa: true }),
@@ -34,7 +38,8 @@ export function completarVocabulario(bruto) {
       usa: TIPOS_OPCIONAIS.includes(t) ? e.usa !== false : true,
     };
   }
-  return { topo, tipos };
+  const niveis = Number.isInteger(b.niveis) && b.niveis >= NIVEIS_MIN && b.niveis <= NIVEIS_MAX ? b.niveis : NIVEIS_PADRAO;
+  return { niveis, topo, tipos };
 }
 
 /** Confere o que a pessoa enviou ao salvar: nomes preenchidos, curtos e sem repetição. Lança Error com mensagem em português. */
@@ -64,7 +69,9 @@ export function validarVocabulario(bruto) {
     nomes.push(tipos[t].singular.toLowerCase());
   }
   if (new Set(nomes).size !== nomes.length) throw new Error('Dois tipos de unidade não podem ter o mesmo nome.');
-  return { topo, tipos };
+  const niveis = bruto.niveis === undefined ? NIVEIS_PADRAO : bruto.niveis;
+  if (!Number.isInteger(niveis) || niveis < NIVEIS_MIN || niveis > NIVEIS_MAX) throw new Error(`Os níveis da estrutura vão de ${NIVEIS_MIN} a ${NIVEIS_MAX}.`);
+  return { niveis, topo, tipos };
 }
 
 const artigo = (g, { m, f }) => (g === 'f' ? f : m);

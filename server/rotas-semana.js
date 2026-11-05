@@ -180,7 +180,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     const todas = req.user.perfil === 'administrador';
     // Consultas independentes em paralelo (o tempo da tela é o número de idas em série ao banco).
     const [s, semana, ids] = await Promise.all([
-      q1('select * from secoes where id = ? and pai_id is null and empresa_id = ?', id, empresaAtual()), semanaDe(req), subarvore(db, id),
+      q1("select * from secoes where id = ? and tipo in ('centro','coordenacao','diretoria_adjunta') and empresa_id = ?", id, empresaAtual()), semanaDe(req), subarvore(db, id),
     ]);
     if (!s) throw falha(404, 'Unidade não encontrada.');
     const [painel, historico, acoes, tempo] = await Promise.all([

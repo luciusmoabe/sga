@@ -320,12 +320,13 @@ const filtroEmpresa = (alias = '') => (temEmpresa()
   ? { sql: ` and ${alias}empresa_id = ?`, args: [empresaAtual()] }
   : { sql: '', args: [] });
 
-/** Ids da seção e descendentes, consultados no banco para todas as instâncias. */
+/** Ids da unidade e das subseções abaixo dela (a Subseção entra na soma da unidade acima; Centro, Coordenação e Diretoria
+ *  Adjunta abaixo de outra unidade são unidades à parte, não descendentes para este fim). Consultado no banco. */
 export async function subarvore(db, id) {
   const f = filtroEmpresa('s.');
   const rows = await db.prepare(
     `with recursive t(id) as (
-       select cast(? as integer) union select s.id from secoes s join t on s.pai_id = t.id where 1 = 1${f.sql}
+       select cast(? as integer) union select s.id from secoes s join t on s.pai_id = t.id where s.tipo = 'subsecao'${f.sql}
      ) select id from t`,
   ).all(id, ...f.args);
   return rows.map(r => r.id);

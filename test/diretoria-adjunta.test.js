@@ -38,14 +38,18 @@ async function demo(t) {
   return { db, call, criarDA };
 }
 
-test('o Diretor cadastra uma única Diretoria Adjunta, sem chefe e sem subseções', async (t) => {
+test('o Diretor cadastra uma única Diretoria Adjunta, sem chefe; Centros, Coordenações e Subseções podem ficar abaixo dela', async (t) => {
   const { call, criarDA } = await demo(t);
   assert.equal((await call(DIRETOR, 'POST', '/secoes', { nome: 'DA', tipo: 'diretoria_adjunta', chefe_id: ANA_CPE })).status, 400, 'sem chefe');
   const da = await criarDA();
   assert.equal((await call(ADMIN, 'POST', '/secoes', { nome: 'Outra', tipo: 'diretoria_adjunta' })).status, 409, 'só uma');
   assert.equal((await call(APOIO, 'POST', '/secoes', { nome: 'X', tipo: 'diretoria_adjunta' })).status, 403);
 
-  assert.equal((await call(DIRETOR, 'POST', '/secoes', { nome: 'Sub', tipo: 'subsecao', pai_id: da })).status, 400, 'sem subseções');
+  assert.equal((await call(DIRETOR, 'POST', '/secoes', { nome: 'Sub', tipo: 'subsecao', pai_id: da })).status, 201, 'a Adjunta pode ter subseções');
+  assert.equal((await call(DIRETOR, 'POST', '/secoes', { nome: 'Centro da Adjunta', tipo: 'centro', pai_id: da })).status, 201, 'e Centros');
+  assert.equal((await call(DIRETOR, 'POST', '/secoes', { nome: 'Coordenação da Adjunta', tipo: 'coordenacao', pai_id: da })).status, 201, 'e Coordenações');
+  assert.equal((await call(DIRETOR, 'POST', '/secoes', { nome: 'Centro sob Centro', tipo: 'centro', pai_id: CPE })).status, 400, 'Centro só no primeiro nível ou sob a Adjunta');
+  assert.equal((await call(DIRETOR, 'POST', '/secoes', { nome: 'Adjunta sob Centro', tipo: 'diretoria_adjunta', pai_id: CPE })).status, 409, 'só uma Adjunta');
   assert.equal((await call(DIRETOR, 'PATCH', `/secoes/${da}`, { chefe_id: ANA_CPE })).status, 400, 'não recebe chefe');
   assert.equal((await call(DIRETOR, 'PATCH', `/secoes/${da}`, { tipo: 'centro' })).status, 400, 'não deixa de ser DA');
   assert.equal((await call(DIRETOR, 'PATCH', `/secoes/${CPE}`, { tipo: 'diretoria_adjunta' })).status, 400, 'Centro não vira DA');

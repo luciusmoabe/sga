@@ -14,6 +14,7 @@ import {
 const DIRETOR = 1, APOIO = 2, ANA = 3, ADMIN = 10;
 
 const SGTO = {
+  niveis: 3,
   topo: { nome: 'Superintendente', genero: 'm' },
   tipos: {
     centro: { singular: 'Diretoria', plural: 'Diretorias', genero: 'f', usa: true },

@@ -1,11 +1,11 @@
 // Estrutura da organização: seções em árvore e cadastro de usuários e acessos.
 import { subarvore, nivel } from './db.js';
-import { DIRETORIA_ADJUNTA, LIMITE_NIVEIS, TAM_SENHA, TIPOS_SECAO } from './logic.js';
+import { DIRETORIA_ADJUNTA, TAM_SENHA, TIPOS_SECAO } from './logic.js';
 
 const SEM_CHEFE = 'A Diretoria Adjunta não tem chefe: quem faz parte dela é Administrador, cadastrado pelo servidor.';
 import { falha, h, marks, permit, texto } from './helpers.js';
 import { empresaAtual } from './empresa.js';
-import { usaTipo } from '../public/js/vocabulario.js';
+import { oTipo, usaTipo } from '../public/js/vocabulario.js';
 
 const NAO_USADO = 'Esta empresa não usa este tipo de unidade. Escolha outro tipo ou ative-o em Configuração, "Nomes das unidades".';
 import { editarHierarquia, excluirCadastro } from './crud-cadastros.js';
@@ -59,15 +59,18 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
       if (await q1('select id from secoes where tipo = ? and empresa_id = ?', DIRETORIA_ADJUNTA, empresaAtual())) throw falha(409, 'A Diretoria Adjunta já está cadastrada.');
       if (b.chefe_id) throw falha(400, SEM_CHEFE);
     }
+    const voc = await vocabularioAtual();
     let pai = null;
     if (b.tipo === 'subsecao') {
       pai = await q1('select * from secoes where id = ? and ativa = 1 and empresa_id = ?', Number(b.pai_id), empresaAtual());
       if (!pai) throw falha(400, 'Escolha a seção à qual a subseção ficará ligada.');
-      if (pai.tipo === DIRETORIA_ADJUNTA) throw falha(400, 'A Diretoria Adjunta não tem subseções.');
-      if (await nivel(db, pai.id) + 1 > LIMITE_NIVEIS) throw falha(400, `A estrutura aceita até ${LIMITE_NIVEIS} níveis abaixo do Departamento.`);
     } else if (b.pai_id) {
-      throw falha(400, 'Este tipo de unidade fica no primeiro nível.');
+      // Centro e Coordenação ficam no primeiro nível ou diretamente sob a Diretoria Adjunta; esta fica sempre no primeiro nível.
+      if (b.tipo === DIRETORIA_ADJUNTA) throw falha(400, 'Este tipo de unidade fica no primeiro nível.');
+      pai = await q1('select * from secoes where id = ? and ativa = 1 and empresa_id = ?', Number(b.pai_id), empresaAtual());
+      if (!pai || pai.tipo !== DIRETORIA_ADJUNTA) throw falha(400, `Este tipo de unidade fica no primeiro nível ou diretamente sob ${oTipo(voc, DIRETORIA_ADJUNTA)}.`);
     }
+    if (pai && await nivel(db, pai.id) + 1 > voc.niveis) throw falha(400, `A estrutura aceita até ${voc.niveis} níveis.`);
     const chefe = await validarChefe(b.chefe_id);
     const ordemRow = pai
       ? await q1('select coalesce(max(ordem), 0) + 1 o from secoes where pai_id = ? and empresa_id = ?', pai.id, empresaAtual())
@@ -90,7 +93,8 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     const b = req.body || {};
     if ('tipo' in b || 'pai_id' in b) {
       if ('tipo' in b && b.tipo !== s.tipo && !usaTipo(await vocabularioAtual(), b.tipo)) throw falha(400, NAO_USADO);
-      await editarHierarquia(db,id,b);
+      const voc = await vocabularioAtual();
+      await editarHierarquia(db,id,b,{ niveis: voc.niveis, nomeAdjunta: oTipo(voc, DIRETORIA_ADJUNTA) });
       Object.assign(s, await q1('select * from secoes where id=? and empresa_id=?',id,empresaAtual()));
     }
     if ('nome' in b) {
@@ -130,13 +134,13 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
         if (await q1('select 1 from secoes where pai_id = ? and ativa = 1 and empresa_id = ?', id, empresaAtual())) throw falha(409, 'Desative antes as subseções que ficam abaixo desta seção.');
         const abertas = (await q1(`select count(*) n from acoes where secao_id = ? and empresa_id = ? and status != 'concluida' and encerrada = 0 and arquivada = 0`, id, empresaAtual()))?.n ?? 0;
         if (abertas > 0) {
-          if (b.reatribuir && s.pai_id) {
+          if (b.reatribuir && s.pai_id && s.tipo === 'subsecao') {
             await run(`update acoes set secao_id = ? where secao_id = ? and empresa_id = ? and status != 'concluida' and encerrada = 0 and arquivada = 0`, s.pai_id, id, empresaAtual());
           } else {
-            const e = falha(409, s.pai_id
+            const e = falha(409, s.pai_id && s.tipo === 'subsecao'
               ? `Esta seção tem ${abertas} ação(ões) aberta(s). Reatribua-as à seção acima para desativar.`
               : `Esta seção tem ${abertas} ação(ões) aberta(s). Conclua ou encerre antes de desativar.`);
-            e.extra = { acoes_abertas: abertas, pode_reatribuir: !!s.pai_id };
+            e.extra = { acoes_abertas: abertas, pode_reatribuir: !!s.pai_id && s.tipo === 'subsecao' };
             throw e;
           }
         }

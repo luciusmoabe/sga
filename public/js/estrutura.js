@@ -1,6 +1,6 @@
 // Estrutura: o Diretor cria e organiza as seções em árvore (Centros, Coordenação e subseções) e o cadastro mínimo de usuários.
 import { PERFIL_DA_EMPRESA, TIPO_DA_EMPRESA, dosPlural, nomePlural, nomeTipo, oTipo, rotuloPerfilDe, todasAs, usaTipo, vocab } from './vocab.js';
-import { VOCABULARIO_PADRAO } from './vocabulario.js';
+import { NIVEIS_MAX, NIVEIS_MIN, VOCABULARIO_PADRAO } from './vocabulario.js';
 import { get, patch, post, put, del } from './api.js';
 import { atualizarSessao, ehAdmin } from './estado.js';
 import { abrirForm, confirmar, esc, on, toast } from './ui.js';
@@ -14,7 +14,7 @@ const ehDA = (s) => s?.tipo === DIRETORIA_ADJUNTA;
 const PERFIL = PERFIL_DA_EMPRESA;
 // Contas do Diretor e do Administrador só o Administrador altera; a conta do Administrador só muda pelo servidor.
 const protegidoParaMim = (u) => u.perfil === 'administrador' || (u.perfil === 'diretor' && !ehAdmin());
-const LIMITE = 3;
+const limiteDeNiveis = () => vocab().niveis;
 const ui = { painel: 'secoes', buscaSecao: '', estadoSecao: 'todas', buscaUsuario: '', perfil: 'todos', estadoUsuario: 'todos', recolhidas: new Set() };
 
 // Formulários usam validação nativa e mostram somente campos aplicáveis.
@@ -39,6 +39,7 @@ function formulario(opcoes) {
     vincular('#eu-perfil','#eu-secao',v=>['chefe','membro'].includes(v));
     vincular('#eu-perfil','#eu-ver',v=>v==='chefe');
     vincular('#r-tipo','#r-pai',v=>v==='subsecao',true);
+    vincular('#r-tipo','#r-pai-da',v=>v==='centro'||v==='coordenacao',true);
     opcoes.aoAbrir?.(dlg,form);
   }});
 }
@@ -65,6 +66,7 @@ function painelNomes() {
           <td colspan="2"><input name="topo-nome" value="${esc(v.topo.nome)}" maxlength="40" required aria-label="Nome do perfil de quem dirige a empresa"></td>
           <td>${campoGenero('topo-genero', v.topo.genero)}</td><td></td></tr>
       </tbody></table></div>
+      <div class="campo" style="max-width:260px;margin-top:12px"><label for="nomes-niveis">Níveis da estrutura</label><input id="nomes-niveis" name="niveis" type="number" min="${NIVEIS_MIN}" max="${NIVEIS_MAX}" value="${v.niveis}" required><div class="dica">Quantos níveis a árvore de seções pode ter, de ${NIVEIS_MIN} a ${NIVEIS_MAX}. A Diretoria Adjunta conta como um nível.</div></div>
       <div class="erro-form oculto" role="alert" id="erro-nomes"></div>
       <div class="linha" style="gap:8px;margin-top:12px"><button class="btn btn-primario" type="submit" id="btn-salvar-nomes">Salvar nomes</button><button class="btn btn-sec" type="button" id="padrao-nomes">Voltar ao padrão</button></div>
     </form>`;
@@ -97,7 +99,7 @@ export async function estrutura(raiz, { refresh, painel }) {
         : `<span class="estrutura-legenda">Responsável</span><span>${esc(s.chefe_nome || 'Não atribuído')}</span>`}</div>
       <span class="estrutura-status ${s.ativa ? 'ativo' : ''}">${s.ativa ? 'Ativa' : 'Inativa'}</span>
       <div class="estrutura-acoes"><button class="btn btn-sec btn-mini" data-a="renomear" aria-label="Editar ${esc(s.nome)}">Editar</button>
-        ${opcoes(s.nome, `${ehDA(s) ? '<span class="estrutura-menu-nota">Membros: Administradores vinculados pelo servidor (npm run admin:secao)</span>' : '<button data-a="chefe">Gerenciar chefia</button>'}${s.ativa && s.nivel < LIMITE && !ehDA(s) ? '<button data-a="sub">Adicionar subseção</button>' : ''}<button data-a="reuniao">${s.na_reuniao ? 'Tirar da reunião' : 'Incluir na reunião'}</button><button data-a="cima">Mover para cima</button><button data-a="baixo">Mover para baixo</button><button data-a="${s.ativa ? 'desativar' : 'reativar'}">${s.ativa ? 'Desativar' : 'Reativar'} seção</button><button class="estrutura-perigo" data-a="excluir-secao">Excluir seção</button>`)}</div>
+        ${opcoes(s.nome, `${ehDA(s) ? '<span class="estrutura-menu-nota">Membros: Administradores vinculados pelo servidor (npm run admin:secao)</span>' : '<button data-a="chefe">Gerenciar chefia</button>'}${s.ativa && s.nivel < limiteDeNiveis() ? '<button data-a="sub">Adicionar subseção</button>' : ''}<button data-a="reuniao">${s.na_reuniao ? 'Tirar da reunião' : 'Incluir na reunião'}</button><button data-a="cima">Mover para cima</button><button data-a="baixo">Mover para baixo</button><button data-a="${s.ativa ? 'desativar' : 'reativar'}">${s.ativa ? 'Desativar' : 'Reativar'} seção</button><button class="estrutura-perigo" data-a="excluir-secao">Excluir seção</button>`)}</div>
       </div>${sub ? `<ul id="filhas-${s.id}" ${aberta ? '' : 'hidden'}>${sub}</ul>` : ''}</li>`;
   };
   const linhaUsuario = u => `<tr>
@@ -121,7 +123,7 @@ export async function estrutura(raiz, { refresh, painel }) {
       <button data-painel="nomes" aria-controls="estrutura-nomes">Nomes das unidades</button>
     </nav>
     <section id="estrutura-secoes" class="estrutura-painel" aria-labelledby="titulo-secoes">
-      <div class="estrutura-barra"><div><h2 id="titulo-secoes">Organização das seções</h2><p class="suave">${[nomePlural('centro'), usaTipo('coordenacao') && nomePlural('coordenacao').toLowerCase(), nomePlural('subsecao').toLowerCase()].filter(Boolean).join(', ')} em até três níveis${usaTipo('diretoria_adjunta') ? `, e ${oTipo('diretoria_adjunta')}` : ''}.</p></div><button class="btn btn-primario" data-a="nova">+ Nova seção</button></div>
+      <div class="estrutura-barra"><div><h2 id="titulo-secoes">Organização das seções</h2><p class="suave">${[nomePlural('centro'), usaTipo('coordenacao') && nomePlural('coordenacao').toLowerCase(), nomePlural('subsecao').toLowerCase()].filter(Boolean).join(', ')} em até ${limiteDeNiveis()} níveis${usaTipo('diretoria_adjunta') ? `, e ${oTipo('diretoria_adjunta')}` : ''}.</p></div><button class="btn btn-primario" data-a="nova">+ Nova seção</button></div>
       <div class="estrutura-filtros"><div class="campo"><label for="buscar-secao">Buscar seção ou responsável</label><input id="buscar-secao" type="search" placeholder="Nome, sigla ou responsável" value="${esc(ui.buscaSecao)}"></div><div class="campo"><label for="estado-secao">Situação</label><select id="estado-secao"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="inativas">Inativas</option></select></div></div>
       <div id="lista-secoes"></div>
     </section>
@@ -193,7 +195,7 @@ export async function estrutura(raiz, { refresh, painel }) {
     const f = formNomes.elements;
     const tipos = {};
     for (const t of ['centro', 'coordenacao', 'subsecao', 'diretoria_adjunta']) tipos[t] = { singular: f[`${t}-singular`].value, plural: f[`${t}-plural`].value, genero: f[`${t}-genero`].value, ...(f[`${t}-usa`] ? { usa: f[`${t}-usa`].checked } : {}) };
-    return { topo: { nome: f['topo-nome'].value, genero: f['topo-genero'].value }, tipos };
+    return { niveis: Number(f.niveis.value), topo: { nome: f['topo-nome'].value, genero: f['topo-genero'].value }, tipos };
   };
   formNomes?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -308,9 +310,10 @@ export async function estrutura(raiz, { refresh, painel }) {
           corpo: `<div class="campo"><label for="r-nome">Nome</label><input id="r-nome" name="nome" required maxlength="120" value="${esc(s.nome)}"></div>
                   <div class="campo"><label for="r-sigla">Sigla</label><input id="r-sigla" name="sigla" maxlength="12" value="${esc(s.sigla || '')}"></div>
                   <div class="escolha"><label><input type="checkbox" name="na_reuniao" value="1" ${s.na_reuniao ? 'checked' : ''}> Aparece na reunião (cartões do Modo Reunião, pauta e ata)</label>${filhos(s.id).length ? '<div class="dica">Fora da reunião, as subseções desta seção também ficam de fora.</div>' : ''}</div>
-                  ${ehDA(s) ? `<p class="suave pequeno">${nomeTipo('diretoria_adjunta')}: fica no primeiro nível, sem chefe nem subseções.</p>` : `<div class="campo"><label for="r-tipo">Tipo</label><select id="r-tipo" name="tipo">${Object.entries(tiposComNome()).filter(([k])=>k!==DIRETORIA_ADJUNTA && (usaTipo(k) || s.tipo===k)).map(([k,v])=>`<option value="${k}" ${s.tipo===k?'selected':''}>${v}</option>`).join('')}</select></div>
-                  <div class="campo"><label for="r-pai">Seção superior</label><select id="r-pai" name="pai_id" required><option value="">Escolha uma seção</option>${secoes.filter(x=>x.ativa && !ehDA(x) && !descendentes.has(x.id) && x.nivel < LIMITE).map(x=>`<option value="${x.id}" ${s.pai_id===x.id?'selected':''}>${esc(x.nome)}</option>`).join('')}</select></div>`}`,
-          aoEnviar: async (d) => { d.na_reuniao = d.na_reuniao === '1'; if(ehDA(s)) { delete d.tipo; delete d.pai_id; } else if(d.tipo !== 'subsecao') d.pai_id=null; await patch(`/secoes/${id}`, d); salvo('Seção atualizada.'); },
+                  ${ehDA(s) ? `<p class="suave pequeno">${nomeTipo('diretoria_adjunta')}: fica no primeiro nível e não tem chefe. Os Centros e as Coordenações podem ficar abaixo dela.</p>` : `<div class="campo"><label for="r-tipo">Tipo</label><select id="r-tipo" name="tipo">${Object.entries(tiposComNome()).filter(([k])=>k!==DIRETORIA_ADJUNTA && (usaTipo(k) || s.tipo===k)).map(([k,v])=>`<option value="${k}" ${s.tipo===k?'selected':''}>${v}</option>`).join('')}</select></div>
+                  ${secoes.some(ehDA) ? `<div class="campo"><label for="r-pai-da">Ligada a</label><select id="r-pai-da" name="pai_da"><option value="">Diretamente ao primeiro nível</option>${secoes.filter(ehDA).map(x=>`<option value="${x.id}" ${s.pai_id===x.id?'selected':''}>${esc(x.nome)}</option>`).join('')}</select></div>` : ''}
+                  <div class="campo"><label for="r-pai">Seção superior</label><select id="r-pai" name="pai_id" required><option value="">Escolha uma seção</option>${secoes.filter(x=>x.ativa && !descendentes.has(x.id) && x.nivel < limiteDeNiveis()).map(x=>`<option value="${x.id}" ${s.pai_id===x.id?'selected':''}>${esc(x.nome)}</option>`).join('')}</select></div>`}`,
+          aoEnviar: async (d) => { d.na_reuniao = d.na_reuniao === '1'; if(ehDA(s)) { delete d.tipo; delete d.pai_id; } else if(d.tipo !== 'subsecao') d.pai_id = d.pai_da ? Number(d.pai_da) : null; delete d.pai_da; await patch(`/secoes/${id}`, d); salvo('Seção atualizada.'); },
         });
       } else if (a === 'chefe') {
         formulario({
@@ -323,10 +326,11 @@ export async function estrutura(raiz, { refresh, painel }) {
         formulario({
           titulo: a === 'sub' ? `Nova subseção em ${s.nome}` : 'Nova seção',
           corpo: `${a === 'nova' ? `<div class="campo"><label>Tipo</label><div class="escolha"><label><input type="radio" name="tipo" value="centro" checked> ${nomeTipo('centro')}</label>${usaTipo('coordenacao') ? `<label><input type="radio" name="tipo" value="coordenacao"> ${nomeTipo('coordenacao')}</label>` : ''}${secoes.some(ehDA) || !usaTipo('diretoria_adjunta') ? '' : `<label><input type="radio" name="tipo" value="${DIRETORIA_ADJUNTA}"> ${nomeTipo('diretoria_adjunta')}</label>`}</div></div>` : ''}
+            ${a === 'nova' && secoes.some((x) => ehDA(x) && x.ativa) ? `<div class="campo" id="n-pai-da-campo"><label for="n-pai-da">Ligada a</label><select id="n-pai-da" name="pai_da"><option value="">Diretamente ao primeiro nível</option>${secoes.filter((x) => ehDA(x) && x.ativa).map((x) => `<option value="${x.id}">${esc(x.nome)}</option>`).join('')}</select></div>` : ''}
             <div class="campo"><label for="n-nome">Nome</label><input id="n-nome" name="nome" required maxlength="120" placeholder="Ex.: ${nomeTipo('centro')} de Estudos Econômicos"></div>
             <div class="campo"><label for="n-sigla">Sigla (opcional)</label><input id="n-sigla" name="sigla" maxlength="12"></div>
             <div class="campo"><label for="n-chefe">Chefe (opcional)</label><select id="n-chefe" name="chefe_id">${opcoesChefe(null)}</select></div>
-            <p class="suave pequeno" id="n-dica-da" hidden>${oTipo('diretoria_adjunta')[0].toUpperCase() + oTipo('diretoria_adjunta').slice(1)} não tem chefe nem subseções. Recebe ações e envia relato como as demais seções; quem faz parte dela tem o perfil Administrador e é vinculado pelo servidor.</p>`,
+            <p class="suave pequeno" id="n-dica-da" hidden>${oTipo('diretoria_adjunta')[0].toUpperCase() + oTipo('diretoria_adjunta').slice(1)} não tem chefe. Recebe ações e envia relato como as demais seções; quem faz parte dela tem o perfil Administrador e é vinculado pelo servidor.</p>`,
           aoAbrir: (dlg, form) => {
             // Diretoria Adjunta não tem chefe: troca o campo pela explicação.
             const ajustar = () => {
@@ -334,11 +338,13 @@ export async function estrutura(raiz, { refresh, painel }) {
               const chefe = form.querySelector('#n-chefe');
               chefe.closest('.campo').hidden = da; chefe.disabled = da;
               form.querySelector('#n-dica-da').hidden = !da;
+              const ligada = form.querySelector('#n-pai-da');
+              if (ligada) { ligada.closest('.campo').hidden = da; ligada.disabled = da; if (da) ligada.value = ''; }
             };
             form.querySelectorAll('input[name=tipo]').forEach((r) => r.addEventListener('change', ajustar));
           },
           aoEnviar: async (d) => {
-            await post('/secoes', { nome: d.nome, sigla: d.sigla, chefe_id: d.chefe_id || null, tipo: a === 'sub' ? 'subsecao' : d.tipo, pai_id: a === 'sub' ? Number(id) : null });
+            await post('/secoes', { nome: d.nome, sigla: d.sigla, chefe_id: d.chefe_id || null, tipo: a === 'sub' ? 'subsecao' : d.tipo, pai_id: a === 'sub' ? Number(id) : (d.pai_da ? Number(d.pai_da) : null) });
             salvo('Seção criada.');
           },
         });

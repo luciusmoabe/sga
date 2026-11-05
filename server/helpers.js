@@ -56,16 +56,17 @@ export const ultimaAtualizacao = async (db, secaoId, semana) => {
   return atualizacaoDe(row);
 };
 
-/** Ids de cada seção ativa do primeiro nível e de suas subseções, numa única consulta recursiva
- *  (antes eram N consultas, uma por Centro). `union` descarta repetições e protege contra ciclos.
+/** Ids de cada unidade de acompanhamento ativa (Diretoria Adjunta, Centro e Coordenação, onde estiverem na árvore) e das
+ *  subseções abaixo dela, numa única consulta recursiva. A recursão só desce por Subseções: Centro ou Coordenação abaixo da
+ *  Adjunta é outra unidade, com cartão próprio. `union` descarta repetições e protege contra ciclos.
  *  Com `reuniao`, só o que aparece na reunião: uma seção fora dela leva junto as subseções abaixo. */
 export async function arvoresDosCentros(db, { reuniao = false } = {}) {
   const filtro = reuniao ? ' and na_reuniao = 1' : '';
   const emp = empresaAtual();
   const rows = await db.prepare(
     `with recursive t(centro_id, id) as (
-       select id, id from secoes where pai_id is null and ativa = 1 and empresa_id = ?${filtro}
-       union select t.centro_id, s.id from secoes s join t on s.pai_id = t.id where s.empresa_id = ?${reuniao ? ' and s.na_reuniao = 1' : ''}
+       select id, id from secoes where tipo in ('centro','coordenacao','diretoria_adjunta') and ativa = 1 and empresa_id = ?${filtro}
+       union select t.centro_id, s.id from secoes s join t on s.pai_id = t.id where s.tipo = 'subsecao' and s.empresa_id = ?${reuniao ? ' and s.na_reuniao = 1' : ''}
      ) select centro_id, id from t order by centro_id, id`,
   ).all(emp, emp);
   const arvores = new Map();
@@ -76,7 +77,7 @@ export async function arvoresDosCentros(db, { reuniao = false } = {}) {
   return arvores;
 }
 
-/** Painel da semana: uma linha por Centro/Coordenação, somando as subseções abaixo.
+/** Painel da semana: uma linha por unidade de acompanhamento (Adjunta, Centro, Coordenação), somando as subseções abaixo.
  *  Poucas consultas e todas independentes rodam em paralelo: com o banco distante, o tempo da tela
  *  é o número de idas em série (não de consultas). `arvoresPre` evita repetir a árvore quando o chamador já a tem;
  *  as seções do primeiro nível fora dela (fora da reunião, por exemplo) não entram. */
@@ -84,11 +85,16 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
   const [todosCentros, arvores] = await Promise.all([
     db.prepare(
       `select s.*, u.nome as chefe_nome from secoes s left join usuarios u on u.id = s.chefe_id
-       where s.pai_id is null and s.ativa = 1 and s.empresa_id = ? order by s.ordem, s.id`,
+       where s.tipo in ('centro','coordenacao','diretoria_adjunta') and s.ativa = 1 and s.empresa_id = ?`,
     ).all(empresaAtual()),
     arvoresPre ?? arvoresDosCentros(db),
   ]);
-  const centros = todosCentros.filter((c) => arvores.has(c.id));
+  // Ordem de leitura: a unidade vem antes das que ficam abaixo dela (a Diretoria Adjunta, antes dos seus Centros). O pai de uma
+  // unidade de acompanhamento é sempre outra unidade de acompanhamento (a Adjunta) ou nada, então a ordem sai das próprias linhas.
+  const porId = new Map(todosCentros.map((c) => [c.id, c]));
+  const chave = (c) => { const pai = c.pai_id != null ? porId.get(c.pai_id) : null; return pai ? [pai.ordem, pai.id, 1, c.ordem, c.id] : [c.ordem, c.id, 0, 0, 0]; };
+  const comparar = (a, b) => { const x = chave(a), y = chave(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
+  const centros = todosCentros.filter((c) => arvores.has(c.id)).sort(comparar);
   if (!centros.length) return [];
 
   const ate = addDays(hoje, 2);

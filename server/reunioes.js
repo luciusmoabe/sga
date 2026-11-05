@@ -120,6 +120,12 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
   app.put('/api/config/vocabulario', permit('diretor', 'administrador'), h(async (req) => {
     let v;
     try { v = validarVocabulario(req.body?.vocabulario); } catch (e) { throw falha(400, e.message); }
+    // Não dá para reduzir os níveis abaixo da profundidade que a árvore já tem.
+    const todas = await q('select id, pai_id from secoes where empresa_id = ?', empresaAtual());
+    const paiDe = new Map(todas.map((s) => [s.id, s.pai_id]));
+    const fundura = (id) => { let n = 1; for (let p = paiDe.get(id); p; p = paiDe.get(p)) n++; return n; };
+    const atual = Math.max(0, ...todas.map((s) => fundura(s.id)));
+    if (v.niveis < atual) throw falha(409, `A estrutura atual tem ${atual} níveis. Reorganize as unidades antes de limitar a ${v.niveis}.`);
     // Não dá para deixar de usar um tipo que ainda tem unidade ativa: ela ficaria escondida das telas.
     for (const tipo of TIPOS_OPCIONAIS) {
       if (v.tipos[tipo].usa) continue;
