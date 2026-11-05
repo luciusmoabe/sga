@@ -211,7 +211,8 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
           <label><input type="radio" name="destino" value="escolher"> Escolher seções</label></div></div>
         <div class="campo oculto" id="na-alvos"><div class="escolha">${S.cartoes.map((x) => `<label><input type="checkbox" name="secao" value="${x.secao.id}"> ${esc(x.secao.sigla || x.secao.nome)}</label>`).join('')}</div></div>
         <div class="dois"><div class="campo"><label for="na-p">Prazo</label><input id="na-p" type="date" name="prazo" min="${hoje()}" value="${addDias(hoje(), 7)}"></div>
-        <div class="campo"><label for="na-pr">Prioridade</label><select id="na-pr" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div></div>`,
+        <div class="campo"><label for="na-pr">Prioridade</label><select id="na-pr" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div>
+        <div class="campo"><label for="na-esf">Esforço (opcional)</label><select id="na-esf" name="esforco"><option value="">Não estimado</option><option value="pequena">Pequeno</option><option value="media">Médio</option><option value="grande">Grande</option></select></div></div>`,
       rotulo: 'Direcionar ação',
       aoAbrir: (dlg, form) => on(form, 'change', 'input[name=destino]', () => $('#na-alvos', dlg).classList.toggle('oculto', form.destino.value !== 'escolher')),
       aoEnviar: async (d, form) => {
@@ -220,7 +221,7 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
         if (!(await confirmarPrazoNasSecoes({ todos: d.destino === 'todos', secoes: alvos, prazo: d.prazo }))) {
           throw new Error('Direcionamento não confirmado. Revise o prazo ou as seções e tente de novo.');
         }
-        const r = await post(`/reunioes/${S.id}/acoes`, { titulo: d.titulo, destino: d.destino === 'todos' ? 'todos' : 'especificos', secoes: alvos, prazo: d.prazo, prioridade: d.prioridade });
+        const r = await post(`/reunioes/${S.id}/acoes`, { titulo: d.titulo, destino: d.destino === 'todos' ? 'todos' : 'especificos', secoes: alvos, prazo: d.prazo, prioridade: d.prioridade, ...(d.esforco ? { esforco: d.esforco } : {}) });
         S.novas.push({ titulo: d.titulo, n: r.acoes_criadas });
         toast(`Ação direcionada a ${plural(r.acoes_criadas, 'seção', 'seções')}.`);
         await recarregar();

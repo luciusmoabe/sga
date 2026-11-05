@@ -10,6 +10,7 @@ import { rotasSemana } from './rotas-semana.js';
 import { rotasReunioes } from './reunioes.js';
 import { rotasAvisos } from './rotas-avisos.js';
 import { rotasPlataforma } from './rotas-plataforma.js';
+import { rotasProdutividade } from './rotas-produtividade.js';
 import { rotasCabecalhoAta } from './ata-cabecalho.js';
 import { cabecalhosSeguranca } from './seguranca-http.js';
 import { configurarAuth, instalarAuth } from './auth.js';
@@ -78,7 +79,8 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   });
 
   rotasEstrutura(app, { ...ctx, auth, adminAuth: contas });
-  const { criarDiretriz, SELECT_ACAO, acaoOut } = rotasAcoes(app, ctx);
+  const { criarDiretriz, SELECT_ACAO, acaoOut, visiveisAcoes } = rotasAcoes(app, ctx);
+  rotasProdutividade(app, { ...ctx, visiveisAcoes });
   rotasSemana(app, { ...ctx, SELECT_ACAO, acaoOut });
   rotasReunioes(app, { ...ctx, criarDiretriz });
   rotasAvisos(app, ctx);

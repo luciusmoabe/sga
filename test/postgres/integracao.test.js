@@ -149,7 +149,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     const [a, b] = await cluster.banco();
     await assert.rejects(verificarMigracoes(a), /Migrações pendentes/);
     const resultados = await Promise.all([aplicarMigracoes(a), aplicarMigracoes(b)]);
-    assert.deepEqual(resultados.flat().sort((x, y) => x - y), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]);
+    assert.deepEqual(resultados.flat().sort((x, y) => x - y), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]);
     await verificarMigracoes(b);
     assert.deepEqual(await aplicarMigracoes(a), []);
   });
@@ -164,7 +164,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     assert.equal((await db.prepare("select to_regclass('uq_pedido_pendente_acao') as nome").get()).nome, null);
     assert.equal((await db.prepare("select count(*) n from information_schema.columns where table_name = 'acoes' and column_name = 'arquivada'").get()).n, 0);
     await db.exec('drop table uq_reuniao_em_andamento');
-    assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]);
+    assert.deepEqual(await aplicarMigracoes(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]);
   });
 
   await t.test('versão 11 recria a restrição de tipo e aceita a Diretoria Adjunta sem perder seções', async () => {
@@ -444,7 +444,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     await db.prepare("insert into reunioes (data, semana, iniciada_em, status) values ('2026-09-22', '2026-09-22', '2026-09-22T10:00:00', 'em_andamento')").run();
     const antes = await db.prepare('select * from config order by chave').all();
     assert.equal((await db.prepare("select count(*) n from pg_indexes where indexname = 'uq_reuniao_em_andamento'").get()).n, 1);
-    assert.deepEqual(await aplicarMigracoes(db), [23, 24]);
+    assert.deepEqual(await aplicarMigracoes(db), [23, 24, 25]);
     assert.deepEqual(await db.prepare('select * from config order by chave').all(), antes);
     assert.equal((await db.prepare("select count(*) n from pg_indexes where indexname = 'uq_reuniao_em_andamento'").get()).n, 0);
     const { esquemaContraido } = await import('../../server/criar-empresa.js');

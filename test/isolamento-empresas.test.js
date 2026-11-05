@@ -96,7 +96,7 @@ const vaza = (dados, alheios, proprios) => {
 const LEITURAS = [
   '/bootstrap', '/secoes', '/usuarios', '/equipe', '/acoes?escopo=todos&situacao=abertas', '/acoes?escopo=todos&situacao=concluidas',
   '/acoes?escopo=todos&situacao=arquivadas', '/acoes?situacao=abertas', '/tarefas', '/diretrizes', '/pedidos-prazo?status=todos', '/painel', '/pauta',
-  '/reunioes', '/combinados?todos=1&arquivados=1', '/config', '/avisos', '/avisos/atual', '/atualizacao', '/historico',
+  '/reunioes', '/combinados?todos=1&arquivados=1', '/config', '/avisos', '/avisos/atual', '/atualizacao', '/historico', '/produtividade?de=2026-01-01&ate=2026-09-18',
 ];
 
 test('as leituras de cada empresa nunca trazem dados da outra', async (t) => {

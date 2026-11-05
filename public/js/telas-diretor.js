@@ -156,6 +156,7 @@ export async function direcionar(raiz, { refresh }) {
           <div class="campo"><label for="d-prazo">Prazo</label><input id="d-prazo" type="date" name="prazo" min="${hoje()}" value="${addDias(hoje(), 7)}" required></div>
           <div class="campo"><label for="d-prio">Prioridade</label><select id="d-prio" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div>
         </div>
+        <div class="campo"><label for="d-esf">Esforço estimado (opcional)</label><select id="d-esf" name="esforco"><option value="">Não estimado</option><option value="pequena">Pequeno</option><option value="media">Médio</option><option value="grande">Grande</option></select><div class="dica">Pesa a entrega nos indicadores de produtividade. Sem estimativa, vale médio.</div></div>
         <button class="btn btn-primario" type="submit">Direcionar ação</button>
       </form>
       <div class="cartao"><h2>Últimas ações direcionadas</h2>
@@ -202,6 +203,7 @@ export async function direcionar(raiz, { refresh }) {
     erro.classList.add('oculto');
     const corpo = {
       titulo: form.titulo.value, detalhe: form.detalhe.value, destino: form.destino.value, prazo: form.prazo.value, prioridade: form.prioridade.value,
+      ...(form.esforco.value ? { esforco: form.esforco.value } : {}),
       secoes: [...form.querySelectorAll('input[name=secao]:checked')].map((c) => Number(c.value)),
     };
     try {

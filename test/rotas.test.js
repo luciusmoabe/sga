@@ -30,6 +30,7 @@ const ESPERADAS = [
   'GET /api/painel',
   'GET /api/pauta',
   'GET /api/plataforma/empresas',
+  'GET /api/produtividade',
   'PATCH /api/plataforma/empresas/:id',
   'POST /api/plataforma/empresas',
   'GET /api/pedidos-prazo',

@@ -159,7 +159,7 @@ test('migração 24: o perfil plataforma entra na restrição sem perder nenhum 
   await db.prepare("insert into usuarios (nome, email, perfil) values ('Antigo', 'a@a.invalid', 'diretor')").run();
   await assert.rejects(db.prepare("insert into usuarios (nome, perfil) values ('P', 'plataforma')").run(), /CHECK/);
   const antes = await db.prepare('select * from usuarios order by id').all();
-  assert.deepEqual(await aplicarMigracoes(db), [24]);
+  assert.deepEqual(await aplicarMigracoes(db), [24, 25]);
   assert.deepEqual(await db.prepare('select * from usuarios order by id').all(), antes);
   await db.prepare("insert into usuarios (nome, perfil) values ('P', 'plataforma')").run();
   await assert.rejects(db.prepare("insert into usuarios (nome, perfil) values ('Q', 'outro')").run(), /CHECK/);

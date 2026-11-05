@@ -1,6 +1,6 @@
 // Rotas de diretrizes, ações e pedidos de novo prazo.
 import { subarvore } from './db.js';
-import { DIAS_SEM_MOVIMENTO, PERFIS_DE_SECAO, PRIORIDADES, STATUS, TRANSICOES, addDays, br, ehISO, porDataDaTarefa } from './logic.js';
+import { DIAS_SEM_MOVIMENTO, ESFORCOS, PERFIS_DE_SECAO, PRIORIDADES, STATUS, TRANSICOES, addDays, br, ehISO, porDataDaTarefa } from './logic.js';
 import { falha, h, marks, permit, texto } from './helpers.js';
 import { empresaAtual } from './empresa.js';
 import { listaDe, nomePlural, nomeTipo, usaTipo } from '../public/js/vocabulario.js';
@@ -236,6 +236,13 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
   };
   /** Quem atribui deixa registrado o quê e quando; a pessoa que assume a própria ação não "delega" a si mesma. */
   const atribuicao = (user, rid, quando) => (rid && rid !== user.id ? { atribuido_por: user.id, atribuida_em: quando } : { atribuido_por: null, atribuida_em: null });
+  /** Estimativa de esforço: `undefined` se não veio, `null` para limpar, ou 'pequena', 'media' ou 'grande'. */
+  const lerEsforco = (valor) => {
+    if (valor === undefined) return undefined;
+    if (valor === null || valor === '') return null;
+    if (!ESFORCOS.includes(valor)) throw falha(400, 'Esforço inválido: use pequeno, médio ou grande.');
+    return valor;
+  };
   /** Entidade fora da subordinação ao Diretor que demandou a ação (texto livre, até 120 caracteres). */
   const lerDemandanteExterno = (valor) => {
     if (valor === undefined) return undefined;
@@ -322,6 +329,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       throw falha(400, 'O Diretor Adjunto não direciona ações para a própria seção. Crie essas ações em "Minhas ações".');
     }
     const detalhe = texto(b.detalhe, 2000) || null;
+    const esforco = lerEsforco(b.esforco) ?? null;
     return await db.transaction(async () => {
       if (reuniaoId !== null) {
         const r = await q1(`select status from reunioes where id = ? and empresa_id = ?${db.isPg ? ' for update' : ''}`, reuniaoId, empresaAtual());
@@ -336,8 +344,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       for (const s of alvos) {
         const quando = agoraISO();
         const aId = (await run(
-          `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em, criado_por, recebida_em, empresa_id) values (?,?,?,?,?,?,?,?,?,?,?)`,
-          d, s, titulo, detalhe, b.prazo, b.prazo, prioridade, quando, user.id, quando, empresaAtual(),
+          `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em, criado_por, recebida_em, esforco, empresa_id) values (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          d, s, titulo, detalhe, b.prazo, b.prazo, prioridade, quando, user.id, quando, esforco, empresaAtual(),
         )).lastInsertRowid;
         await run(
           `insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)`,
@@ -462,6 +470,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     if (b.demanda_diretor !== undefined && typeof b.demanda_diretor !== 'boolean') throw falha(400, 'Informe se a ação é demanda do Diretor.');
     const demanda = b.demanda_diretor === true ? 1 : 0;
     if (demanda && interna) throw falha(400, 'Uma demanda do Diretor deve ser visível na pauta. Desmarque ação interna.');
+    const esforco = lerEsforco(b.esforco) ?? null;
     const externo = lerDemandanteExterno(b.demandante_externo) ?? null;
     if (externo === '') throw falha(400, 'Informe o nome da entidade que demandou a ação.');
     if (externo && demanda) throw falha(400, 'Uma ação não pode ser, ao mesmo tempo, demanda do Diretor e de entidade externa. Escolha uma origem.');
@@ -475,9 +484,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const { atribuido_por: atribuidoPor, atribuida_em: atribuidaEm } = atribuicao(req.user, responsavel, quando);
     const id = (await run(
       `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, interna, criada_em, criado_por, demanda_diretor, recebida_em,
-         responsavel_id, atribuido_por, atribuida_em, demandante_externo, empresa_id)
-       values (null, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      secaoId, titulo, detalhe, b.prazo, b.prazo, prioridade, interna, quando, req.user.id, demanda, recebida, responsavel, atribuidoPor, atribuidaEm, externo, empresaAtual(),
+         responsavel_id, atribuido_por, atribuida_em, demandante_externo, esforco, empresa_id)
+       values (null, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      secaoId, titulo, detalhe, b.prazo, b.prazo, prioridade, interna, quando, req.user.id, demanda, recebida, responsavel, atribuidoPor, atribuidaEm, externo, esforco, empresaAtual(),
     )).lastInsertRowid;
     const nomeResp = responsavel ? (await q1('select nome from usuarios where id = ? and empresa_id = ?', responsavel, empresaAtual())).nome : null;
     await run(
@@ -584,7 +593,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     // Título, detalhamento e prazo: só o autor (ver ehAutor e permissoes).
     const edicao = ['titulo', 'detalhe', 'prazo', 'demanda_diretor', 'demandante_externo'].some((k) => k in b);
     if (edicao && !autor) throw falha(403, NAO_GERE);
-    if (b.status !== undefined || (b.prioridade !== undefined && !autor)) await chefeGere(req.user, a);
+    if (b.status !== undefined || ((b.prioridade !== undefined || b.esforco !== undefined) && !autor)) await chefeGere(req.user, a);
     if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada pelo Diretor.');
 
     // Atribuir a ação a alguém da seção: o chefe (ou o Administrador), enquanto ela está em curso. Mudar o responsável
@@ -651,6 +660,11 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       }
     }
 
+    if (b.esforco !== undefined) {
+      const e = lerEsforco(b.esforco);
+      if (e !== (a.esforco ?? null)) await run('update acoes set esforco = ? where id = ? and empresa_id = ?', e, a.id, empresaAtual());
+    }
+
     const p = b.prioridade;
     if (p !== undefined) {
       if (!PRIORIDADES.includes(p)) throw falha(400, 'Prioridade inválida (use alta, media ou baixa).');
@@ -666,6 +680,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
         await db.transaction(async () => {
           // Mudar o status recomeça a validação do chefe: ela vale para a conclusão que ele viu.
           await run('update acoes set status = ?, concluida_em = ?, validada_chefe_em = null, validada_chefe_por = null where id = ? and empresa_id = ?', novo, novo === 'concluida' ? agoraISO() : null, a.id, empresaAtual());
+          // A primeira vez em andamento marca o início da execução (o tempo de espera antes dela não entra no tempo de execução).
+          if (novo === 'em_andamento' && !a.iniciada_em) await run('update acoes set iniciada_em = ? where id = ? and empresa_id = ?', agoraISO(), a.id, empresaAtual());
           // Ação concluída não tem mais o que travar: os impedimentos abertos são encerrados, e o histórico fica.
           if (novo === 'concluida') {
             await run('update impedimentos set resolvido_em = ?, resolvido_por = ?, resolucao = ? where acao_id = ? and resolvido_em is null',
@@ -959,7 +975,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     } else if (req.user.perfil === 'diretor' && etapa !== 'diretor') {
       throw falha(409, etapa === 'chefe' ? 'Esta ação ainda aguarda a validação do chefe da seção.' : 'Esta ação não aguarda o aceite do Diretor.');
     }
-    await run(`update acoes set status = 'em_andamento', concluida_em = null, encerrada = 0, validada_chefe_em = null, validada_chefe_por = null where id = ? and empresa_id = ?`, a.id, empresaAtual());
+    await run(`update acoes set status = 'em_andamento', concluida_em = null, encerrada = 0, validada_chefe_em = null, validada_chefe_por = null, devolucoes = devolucoes + 1 where id = ? and empresa_id = ?`, a.id, empresaAtual());
     const quem = { administrador: 'o Administrador', diretor: 'o Diretor', chefe: `o chefe (${req.user.nome})` }[req.user.perfil];
     await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id, `Devolvida pel${quem}: ${t}`, agoraISO());
     return { ok: true };
@@ -1015,5 +1031,5 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     });
   }));
 
-  return { criarDiretriz, SELECT_ACAO, acaoOut };
+  return { criarDiretriz, SELECT_ACAO, acaoOut, visiveisAcoes };
 }

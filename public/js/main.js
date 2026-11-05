@@ -14,6 +14,7 @@ import { atas, reuniaoDetalhe, reunioes } from './atas.js';
 import { inicioReuniao, viewReuniao } from './reuniao.js';
 import { avisos } from './avisos.js';
 import { empresas } from './plataforma.js';
+import { produtividade } from './produtividade.js';
 import { equipe } from './equipe.js';
 import { acoesDosCentros, lePorTodosOsCentros } from './consulta.js';
 import { DIRETORIA_ADJUNTA } from './regras.js';
@@ -47,6 +48,8 @@ const ROTAS = {
   equipe: { f: equipe, perfis: ['chefe', 'administrador'], titulo: 'Minha equipe' },
   historico: { f: historico, perfis: ['chefe'], titulo: 'Histórico' },
   atas: { f: atas, perfis: ['chefe'], titulo: 'Atas' },
+  // Indicadores das unidades (o chefe vê a própria unidade; o Diretor e o Administrador, também as pessoas).
+  produtividade: { f: produtividade, perfis: ['diretor', 'apoio', 'administrador', 'chefe'], titulo: 'Produtividade' },
   // Perfil Plataforma: cria e administra as empresas (não vê dados de negócio).
   empresas: { f: empresas, perfis: ['plataforma'], titulo: 'Empresas' },
 };
@@ -70,6 +73,7 @@ const ICONES = {
   'minhas-acoes': '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5,5 4,6.5 6.5,3.5"/><line x1="9" y1="5" x2="17.5" y2="5"/><polyline points="2.5,11 4,12.5 6.5,9.5"/><line x1="9" y1="11" x2="17.5" y2="11"/><line x1="2.5" y1="16" x2="17.5" y2="16"/></svg>',
   historico: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10a6.5 6.5 0 1 0 1.9-4.6"/><polyline points="2.5,3.5 3.5,6.5 6.5,5.5"/><polyline points="10,7 10,10.3 12.5,11.8"/></svg>',
   atas: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h7l3.5 3.5v11.5H5z"/><path d="M12 2.5v3.5h3.5"/><line x1="7.5" y1="10" x2="14" y2="10"/><line x1="7.5" y1="13.5" x2="14" y2="13.5"/></svg>',
+  produtividade: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="17" x2="17" y2="17"/><rect x="4.5" y="10" width="3" height="7"/><rect x="8.5" y="6" width="3" height="11"/><rect x="12.5" y="3" width="3" height="14"/></svg>',
   empresas: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 17.5v-12l7-2v14"/><path d="M10.5 8.5h6v9"/><line x1="6" y1="7.5" x2="8" y2="7.5"/><line x1="6" y1="10.5" x2="8" y2="10.5"/><line x1="6" y1="13.5" x2="8" y2="13.5"/><line x1="2.5" y1="17.5" x2="17.5" y2="17.5"/></svg>',
   avisos: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3c-2.5 0-4 2-4 4.5V11l-1.5 2.5h11L14 11V7.5C14 5 12.5 3 10 3z"/><path d="M8 15.5a2 2 0 0 0 4 0"/></svg>',
 };
@@ -77,6 +81,7 @@ const ICONES = {
 const MENU_GESTAO = [
   ['#Acompanhamento'],
   ['painel', 'Painel da semana'],
+  ['produtividade', 'Produtividade'],
   ['agenda', 'Agenda'],
   ['reuniao', 'Iniciar reunião', 'destaque'],
   ['#Ações'],
@@ -99,6 +104,7 @@ const MENU_CHEFE = [
   ['minhas-acoes', 'Minhas ações'],
   ['equipe', 'Minha equipe'],
   ['historico', 'Histórico'],
+  ['produtividade', 'Produtividade'],
   ['#Reunião'],
   ['combinados', 'Combinados'],
   ['atas', 'Atas'],

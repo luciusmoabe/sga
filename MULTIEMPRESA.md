@@ -47,6 +47,10 @@ O Agilis nasceu para um órgão só. Este documento registra o plano para atende
 
 - O principal risco é vazamento entre empresas: por isso os testes de isolamento vêm junto da Fase 2, e uma proteção extra no banco (RLS por empresa) fica como evolução.
 
+## Produtividade
+
+Os indicadores (ver `CLAUDE.md`) são por empresa como todo o resto: cada consulta já sai filtrada pela empresa de quem pergunta, e `/produtividade` está no teste de isolamento.
+
 ## Organograma por empresa
 
 Cada empresa tem a sua própria árvore de seções (já isolada). O que variava era o molde: os nomes (Centro, Coordenação…), a profundidade e quais unidades viram cartão na reunião. Exemplos reais: **Deplan** = Diretoria (o perfil Diretor) → Diretoria Adjunta → Centros → Coordenações, podendo haver Coordenação direto sob a Adjunta; **SGTO** = Superintendência (o perfil do topo) → Diretorias → Coordenações. Plano em etapas, cada uma preservando o comportamento atual como padrão:

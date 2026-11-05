@@ -331,6 +331,7 @@ export async function minhasAcoes(raiz) {
           <div class="campo"><label for="na-prazo">Prazo</label><input id="na-prazo" type="date" name="prazo" required min="${est.boot.hoje}" value="${addDias(est.boot.hoje, 7)}"></div>
           <div class="campo"><label for="na-prio">Prioridade</label><select id="na-prio" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div>
         </div>
+        <div class="campo"><label for="na-esf">Esforço estimado (opcional)</label><select id="na-esf" name="esforco"><option value="">Não estimado</option><option value="pequena">Pequeno</option><option value="media">Médio</option><option value="grande">Grande</option></select><div class="dica">Pesa a entrega nos indicadores de produtividade. Sem estimativa, vale médio.</div></div>
         ${equipe.length ? `<div class="campo"><label for="na-resp">Responsável pela execução</label>
           <select id="na-resp" name="responsavel_id"><option value="">Eu mesmo (sem delegar)</option>${equipe.map((m) => `<option value="${m.id}">${esc(m.nome)}</option>`).join('')}</select>
           <div class="dica">Ao concluir, a ação de um membro da equipe aguarda a sua validação.</div></div>` : ''}
@@ -347,6 +348,7 @@ export async function minhasAcoes(raiz) {
           prazo: d.prazo,
           prioridade: d.prioridade,
           interna: d.interna === '1',
+          ...(d.esforco ? { esforco: d.esforco } : {}),
           ...origem,
           ...(d.responsavel_id ? { responsavel_id: Number(d.responsavel_id) } : {}),
         });

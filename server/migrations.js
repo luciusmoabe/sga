@@ -7,6 +7,7 @@ import { aplicarMembros } from './migration-membros.js';
 import { aplicarEmpresas } from './migration-empresas.js';
 import { aplicarContracao } from './migration-contracao.js';
 import { aplicarPlataforma } from './migration-plataforma.js';
+import { aplicarProdutividade } from './migration-produtividade.js';
 import { aplicarDiretoriaAdjunta } from './migration-diretoria-adjunta.js';
 import { aplicarPrazosEReuniao } from './migration-prazos-reuniao.js';
 import { aplicarMovimentacao } from './migration-movimentacao.js';
@@ -319,6 +320,12 @@ const MIGRACOES = [
     async aplicar(db) {
       await aplicarPlataforma(db);
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
+  {
+    id: 25, nome: 'produtividade',
+    async aplicar(db) {
+      await aplicarProdutividade(db);
     },
   },
 ];

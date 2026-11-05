@@ -1334,3 +1334,16 @@ button.cal-item:hover { border-color: var(--line-str); background: var(--pale); 
 .marcar input { width: auto; flex: none; }
 .senha-gerada { display: flex; gap: 8px; align-items: stretch; }
 .senha-gerada input { flex: 1; min-width: 0; }
+
+/* Produtividade das unidades */
+.prod-unidade h2 { margin: 0 0 12px; }
+.prod-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.prod-ind { background: var(--pale); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.prod-rotulo { font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.prod-valor { font-size: 1.7rem; font-weight: 700; color: var(--ink); line-height: 1.2; margin: 2px 0; }
+.prod-detalhe, .prod-tend { font-size: 0.8rem; }
+.prod-tend { display: block; margin-top: 4px; }
+.prod-detalhes { margin-top: 12px; }
+.prod-detalhes summary { cursor: pointer; font-weight: 600; }
+.prod-tabela .num { text-align: right; font-variant-numeric: tabular-nums; }
+.prod-filtros { margin-bottom: 14px; }

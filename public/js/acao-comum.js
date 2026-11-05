@@ -5,7 +5,7 @@ import { abrirForm, br, confirmar, dataHora, esc, fmtMin, on, pilulaStatus, PRIO
 
 /** Avisa a casca que as contagens dos selos do menu mudaram (ex.: ação nova aberta). */
 export const selosMudaram = () => window.dispatchEvent(new Event('sgc:selos'));
-import { TIPOS_DE_DIRETRIZ_GERAL, porDataDaTarefa } from './regras.js';
+import { ROTULO_ESFORCO, TIPOS_DE_DIRETRIZ_GERAL, porDataDaTarefa } from './regras.js';
 
 // ---------- Impedimentos (formulários usados também pela atualização semanal e por Minhas ações) ----------
 /** Ação em que ainda faz sentido registrar impedimento. */
@@ -87,6 +87,7 @@ const badgesHTML = (a) => `${pilulaStatus(a)}
   ${a.demandada_diretor ? '<span class="pilula diretor">Demandada pelo Diretor</span>' : ''}
   ${a.apresentada ? `<span class="pilula" title="Título e detalhamento não mudam mais; o prazo pode ser alterado">Apresentada em reunião (${br(a.apresentada_em)})</span>` : ''}
   <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade]}</span>
+  ${a.esforco ? `<span class="pilula" title="Estimativa de esforço, usada nos indicadores de produtividade">Esforço ${ROTULO_ESFORCO[a.esforco]}</span>` : ''}
   <span class="suave pequeno">${esc(a.secao_sigla)} · ${esc(a.secao_nome)}</span>`;
 const checklistBlocoHTML = (a, responsaveis) => `
   <h3 style="margin:12px 0 6px">Tarefas${a.checklist.length ? ` <span class="suave pequeno">(${a.checklist_feitos}/${a.checklist_total} feitas)</span>` : ''}</h3>
@@ -318,6 +319,11 @@ export async function abrirAcao(id, aoMudar) {
         <option value="media" ${a.prioridade === 'media' ? 'selected' : ''}>Média</option>
         <option value="baixa" ${a.prioridade === 'baixa' ? 'selected' : ''}>Baixa</option>
       </select>
+      <label for="sel-esforco" class="suave pequeno" style="margin:0 0 0 14px"><b>Esforço:</b></label>
+      <select id="sel-esforco" data-mudar-esforco style="width:auto;padding:3px 8px;font-size:0.84rem;margin-left:6px">
+        <option value="" ${!a.esforco ? 'selected' : ''}>Não estimado</option>
+        ${Object.entries(ROTULO_ESFORCO).map(([v, r]) => `<option value="${v}" ${a.esforco === v ? 'selected' : ''}>${r}</option>`).join('')}
+      </select>
     </div>` : ''}
     ${cienciaHTML(a)}
     <p><b>Prazo:</b> <span class="num">${br(a.prazo)}</span>${prazoAlterado ? ` <span class="suave pequeno">(original: ${br(a.prazo_original)})</span>` : ''}</p>
@@ -473,6 +479,13 @@ export async function abrirAcao(id, aoMudar) {
         try {
           await patch(`/acoes/${a.id}`, { prioridade: el.value });
           toast(`Prioridade atualizada para ${PRIO[el.value]}.`);
+          aoMudar?.();
+        } catch (e) { toast(e.message, 'erro'); }
+      });
+      on(dlg, 'change', '[data-mudar-esforco]', async (el) => {
+        try {
+          await patch(`/acoes/${a.id}`, { esforco: el.value || null });
+          toast(el.value ? `Esforço estimado: ${ROTULO_ESFORCO[el.value]}.` : 'Estimativa de esforço removida.');
           aoMudar?.();
         } catch (e) { toast(e.message, 'erro'); }
       });
