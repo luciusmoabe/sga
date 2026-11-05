@@ -49,36 +49,37 @@ test('a lista de empresas da entrada é pública, traz só as ativas e listadas 
   assert.equal(r.headers.get('cache-control'), 'no-store');
 });
 
-test('com mais de uma empresa ativa é preciso escolher; a conta só entra na empresa a que pertence', async (t) => {
+test('o órgão é descoberto pela própria conta: só e-mail e senha, em qualquer órgão', async (t) => {
   const { call, login } = await ambiente(t);
-  const faltando = await login({ email: 'ana@a.invalid', senha: SENHA });
-  assert.equal(faltando.status, 400);
-  assert.match((await faltando.json()).erro, /órgão/i);
-
-  const certa = await login({ empresa: 'dpog', email: 'ana@a.invalid', senha: SENHA });
+  const certa = await login({ email: 'ana@a.invalid', senha: SENHA });
   assert.equal(certa.status, 200);
   const boot = await (await call('/bootstrap', { headers: { cookie: cookieDe(certa) } })).json();
   assert.equal(boot.user.id, 3);
   assert.equal(boot.empresa.slug, 'dpog');
   assert.deepEqual(Object.keys(boot.empresa).sort(), ['nome', 'sigla', 'slug']);
 
-  const certaB = await login({ empresa: 'zb', email: 'bia@zb.invalid', senha: SENHA });
+  const certaB = await login({ email: 'bia@zb.invalid', senha: SENHA });
   assert.equal(certaB.status, 200);
   const bootB = await (await call('/bootstrap', { headers: { cookie: cookieDe(certaB) } })).json();
   assert.equal(bootB.user.empresa_id, 2);
   assert.equal(bootB.empresa.nome, 'Empresa ZB');
   assert.equal((await (await call('/secoes', { headers: { cookie: cookieDe(certaB) } })).json()).length, 0, 'a empresa nova ainda não tem seções da outra');
 
-  // Empresa errada, desconhecida ou em maiúsculas: a mesma resposta genérica, sem revelar a que empresa o e-mail pertence.
+  // Senha errada ou e-mail desconhecido: a mesma resposta genérica.
+  for (const [email, senha] of [['ana@a.invalid', 'errada'], ['ninguem@a.invalid', SENHA]]) {
+    const r = await login({ email, senha });
+    assert.equal(r.status, 401);
+    assert.equal((await r.json()).erro, MSG);
+  }
+  // Endereços antigos com o identificador do órgão: ele só restringe (a conta precisa ser desse órgão).
+  assert.equal((await login({ empresa: 'DPOG ', email: 'ana@a.invalid', senha: SENHA })).status, 200, 'o identificador é normalizado');
   const respostas = [];
-  for (const [empresa, email] of [['zb', 'ana@a.invalid'], ['dpog', 'bia@zb.invalid'], ['nao-existe', 'ana@a.invalid'], ['dpog', 'ninguem@a.invalid']]) {
+  for (const [empresa, email] of [['zb', 'ana@a.invalid'], ['dpog', 'bia@zb.invalid'], ['nao-existe', 'ana@a.invalid']]) {
     const r = await login({ empresa, email, senha: SENHA });
     assert.equal(r.status, 401, `${empresa} ${email}`);
     respostas.push((await r.json()).erro);
   }
   assert.deepEqual([...new Set(respostas)], [MSG]);
-  assert.equal((await login({ empresa: 'dpog', email: 'ana@a.invalid', senha: 'errada' })).status, 401);
-  assert.equal((await login({ empresa: 'DPOG ', email: 'ana@a.invalid', senha: SENHA })).status, 200, 'o identificador é normalizado');
   assert.equal((await login({ empresa: 42, email: 'ana@a.invalid', senha: SENHA })).status, 400);
   assert.equal((await login({ empresa: 'x'.repeat(61), email: 'ana@a.invalid', senha: SENHA })).status, 400);
 });
@@ -103,10 +104,11 @@ test('desativar a empresa encerra o acesso das contas dela na hora', async (t) =
   assert.equal((await call('/bootstrap', { headers: { cookie: cookieDe(a) } })).status, 200);
 });
 
-test('o limite de tentativas conta por empresa e e-mail', async (t) => {
+test('o limite de tentativas conta por e-mail', async (t) => {
   const { db, login } = await ambiente(t);
-  for (let i = 0; i < 12; i++) await login({ empresa: 'zb', email: 'ana@a.invalid', senha: 'errada' });
-  assert.equal((await login({ empresa: 'zb', email: 'ana@a.invalid', senha: 'errada' })).status, 429);
-  assert.equal((await login({ empresa: 'dpog', email: 'ana@a.invalid', senha: SENHA })).status, 200, 'o mesmo e-mail na empresa certa não foi bloqueado');
+  for (let i = 0; i < 12; i++) await login({ email: 'ana@a.invalid', senha: 'errada' });
+  assert.equal((await login({ email: 'ana@a.invalid', senha: 'errada' })).status, 429);
+  assert.equal((await login({ email: 'ana@a.invalid', senha: SENHA })).status, 429, 'bloqueado mesmo com a senha certa, até a janela passar');
+  assert.equal((await login({ email: 'bia@zb.invalid', senha: SENHA })).status, 200, 'outro e-mail não é afetado');
   assert.ok((await db.prepare('select count(*) n from auth_tentativas').get()).n >= 2);
 });

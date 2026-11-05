@@ -71,12 +71,12 @@ export function criarProvedorSupabase(config, { fetchImpl = fetch } = {}) {
   };
 }
 
-async function limitarTentativas(db, email, ip, empresa = '') {
+async function limitarTentativas(db, email, ip, escopo = '') {
   const agora = segundos(), janela = Math.floor(agora / 900) * 900;
   const bloqueado = await db.transaction(async () => {
     await db.prepare('delete from auth_tentativas where janela < ?').run(janela);
     let excedeu = false;
-    for (const [tipo, valor, limite] of [['conta', `${empresa}:${email}`, 10], ['origem', ip, 100]]) {
+    for (const [tipo, valor, limite] of [['conta', `${escopo}:${email}`, 10], ['origem', ip, 100]]) {
       const id = hash(`${tipo}:${valor}`);
       await db.prepare(`insert into auth_tentativas (id, janela, tentativas) values (?, ?, 1)
         on conflict(id) do update set janela = excluded.janela,
@@ -147,19 +147,13 @@ export function instalarAuth(app, db, config, provedor, contas) {
     const { email, senha, empresa } = req.body || {};
     if (typeof email !== 'string' || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
       || typeof senha !== 'string' || !senha.length || senha.length > 1024) throw falha(400, 'Informe e-mail e senha válidos.');
-    if (empresa !== undefined && (typeof empresa !== 'string' || empresa.length > 60)) throw falha(400, 'Escolha o órgão.');
+    if (empresa !== undefined && (typeof empresa !== 'string' || empresa.length > 60)) throw falha(400, 'Informe um órgão válido.');
     const normalizado = email.trim().toLowerCase();
+    // O órgão é descoberto pela própria conta: cada e-mail pertence a um só órgão. A pessoa só informa e-mail e senha; depois que
+    // o Supabase confirma a identidade, o servidor acha a conta vinculada e o órgão dela. `empresa` (o identificador do órgão),
+    // se vier, só restringe: a conta precisa ser desse órgão (endereços antigos com ?empresa=...).
     const slug = (empresa || '').trim().toLowerCase();
-    // A empresa vem do cliente só como escolha na tela: quem confere que a conta pertence a ela é este servidor. Sem escolha,
-    // vale a única empresa ativa (telas antigas, ainda sem o seletor); havendo várias, é preciso escolher.
-    let alvo;
-    if (slug) alvo = await q1('select id from empresas where slug = ? and ativa = 1', slug);
-    else {
-      const ativas = await db.prepare('select id from empresas where ativa = 1').all();
-      if (ativas.length > 1) throw falha(400, 'Escolha o órgão.');
-      alvo = ativas[0];
-    }
-    await limitarTentativas(db, normalizado, req.ip || 'desconhecido', slug);
+    await limitarTentativas(db, normalizado, req.ip || 'desconhecido');
     let identidade;
     try { identidade = await supabase.autenticar(normalizado, senha); }
     catch (err) {
@@ -173,9 +167,9 @@ export function instalarAuth(app, db, config, provedor, contas) {
     const token = aleatorio(), csrf = aleatorio();
     const expira = Math.min(identidade.expires, segundos() + SESSAO_OCIOSA);
     await db.transaction(async () => {
-      // Empresa desconhecida ou conta de outra empresa: a mesma resposta, para não revelar a que empresa o e-mail pertence.
-      const vinculo = alvo ? await q1(`select c.id from auth_contas c join usuarios u on u.id = c.usuario_id join empresas e on e.id = u.empresa_id
-        where c.projeto = ? and c.subject = ? and u.ativo = 1 and u.empresa_id = ? and e.ativa = 1`, config.supabaseUrl, identidade.subject, alvo.id) : null;
+      // Sem conta ativa num órgão ativo (ou, com `empresa`, de outro órgão): a mesma resposta de senha errada.
+      const vinculo = await q1(`select c.id from auth_contas c join usuarios u on u.id = c.usuario_id join empresas e on e.id = u.empresa_id
+        where c.projeto = ? and c.subject = ? and u.ativo = 1 and e.ativa = 1 and (? = '' or e.slug = ?)`, config.supabaseUrl, identidade.subject, slug, slug);
       if (!vinculo) throw falha(401, 'E-mail, senha ou órgão incorretos.');
       await run('delete from auth_sessoes_senha where expira_em <= ?', segundos());
       const anterior = cookie(req, sessaoCookie);

@@ -7,15 +7,15 @@ O Agilis nasceu para um órgão só. Este documento registra o plano para atende
 1. **Quem cria empresas:** só o administrador da plataforma. Não há autocadastro.
 2. **Cada pessoa pertence a uma só empresa.** Um e-mail, um login do Supabase Auth, um usuário. Vários vínculos por pessoa ficam para depois (exigiria ligar vários usuários ao mesmo login em `auth_contas`).
 3. **O método é o mesmo para todas:** Diretor, chefes, membros, reunião semanal, semáforo. Variam o nome, o logo, o cabeçalho e o brasão da ata, e o dia e a hora da reunião. Vocabulário configurável fica para depois, se as empresas novas pedirem.
-4. **A pessoa escolhe a empresa na tela de entrada** (decisão do proprietário). Endereço único; subdomínio por empresa, só se for preciso.
+4. **O órgão é descoberto pela conta, na entrada** (decisão do proprietário, revista em 05/11/2026: antes a pessoa escolhia numa caixa de seleção). Endereço único; a pessoa digita só e-mail e senha.
 5. **Uma base compartilhada**, com `empresa_id` nas tabelas, e não uma base por empresa.
 6. **Administrador** continua total *dentro* da empresa. A plataforma ganha um perfil próprio, que cria e gerencia empresas mas não lê os dados de negócio delas.
 
-### A escolha da empresa na entrada
-- A tela de entrada traz um seletor de empresa (com busca), lembra a última escolha e aceita `?empresa=slug` no endereço. Depois de escolher, mostra o nome e o logo da empresa.
-- `GET /api/auth/empresas` é público e lista só as empresas ativas com `listada_no_login = 1`. A empresa que não quiser aparecer na lista deixa o campo em 0 e entra pelo link com o `slug`.
-- O login envia `{ empresa, e-mail, senha }`. **O servidor confere** que a conta pertence àquela empresa; a escolha nunca é confiada ao cliente. Erro genérico ("E-mail, senha ou órgão incorretos"), para não revelar a que empresa um e-mail pertence. O limite de tentativas passa a considerar a empresa.
-- Como cada e-mail pertence a uma só empresa, a escolha também é uma segunda conferência e já prepara o futuro "uma pessoa em várias empresas".
+### Como a entrada acha o órgão
+- A tela de entrada pede só e-mail e senha. Depois que o Supabase confirma a identidade, o servidor acha a conta vinculada (`auth_contas`) e o órgão dela. **Não usa o domínio do e-mail**: cada e-mail já pertence a um só órgão, então funciona também com `gmail.com` e com vários órgãos no mesmo domínio.
+- Conta inativa, órgão inativo ou e-mail desconhecido respondem como senha errada ("E-mail, senha ou órgão incorretos."), sem revelar a que órgão um e-mail pertence. O limite de tentativas conta por e-mail.
+- `empresa` (o identificador) continua aceito no login só como restrição opcional, para endereços antigos com `?empresa=slug`. `GET /api/auth/empresas` segue público (ativas e listadas; `?slug=` devolve também uma empresa fora da lista) e é usado pela demonstração.
+- Futuro "uma pessoa em várias empresas": exigirá ligar vários usuários ao mesmo login e, aí sim, voltar a perguntar o órgão quando houver mais de um.
 
 ## Fases (cada uma publicada separada)
 

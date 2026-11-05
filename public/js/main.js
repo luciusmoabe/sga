@@ -153,35 +153,10 @@ function escolherEmpresa({ empresas, escolhida }) {
   return empresas.length === 1 ? empresas[0].slug : '';
 }
 
-/** Rótulo do órgão nas listas: a sigla (ou o nome, se ainda não tiver sigla). */
-const rotuloOrgao = (e) => e.sigla || e.nome;
-
-/** Campo "Órgão" da entrada: caixa de seleção que começa vazia, com a sigla de cada órgão (busca a partir de 7). Quem chega por
- *  um endereço com `?empresa=slug` já vem com o órgão escolhido; se ele não consta da lista, aparece só o nome dele. O servidor
- *  sempre confere se a conta pertence ao órgão escolhido. */
-function campoEmpresa({ empresas: lista, escolhida }, atual) {
-  const empresas = [...lista].sort((a, b) => rotuloOrgao(a).localeCompare(rotuloOrgao(b), 'pt-BR'));
-  if (escolhida && !empresas.some((e) => e.slug === escolhida.slug)) {
-    return `<div class="campo empresa-fixa"><span class="rotulo-campo">Órgão</span><b>${esc(rotuloOrgao(escolhida))}</b><input type="hidden" name="empresa" value="${esc(escolhida.slug)}"><a href="/">Não é o seu? Escolher outro</a></div>`;
-  }
-  return `<div class="campo"><label for="login-empresa">Órgão</label>
-    ${empresas.length > 6 ? '<input id="login-empresa-busca" type="search" placeholder="Buscar órgão" aria-label="Buscar órgão" autocomplete="off">' : ''}
-    <select id="login-empresa" name="empresa" required>
-      <option value=""></option>
-      ${empresas.map((e) => `<option value="${esc(e.slug)}" title="${esc(e.nome)}"${e.slug === atual ? ' selected' : ''}>${esc(rotuloOrgao(e))}</option>`).join('')}
-    </select></div>`;
-}
-
 async function telaEntrada({ expirada = false } = {}) {
   document.body.classList.remove('tv');
   if (!expirada) retorno = null;
   if (await modoAuth() === 'supabase') {
-    let lista;
-    try { lista = await empresasDaEntrada(empresaDoEndereco()); }
-    catch { lista = { empresas: [], escolhida: null }; }
-    // A caixa começa vazia; só um endereço com ?empresa=slug a deixa preenchida.
-    const pedida = empresaDoEndereco();
-    const atual = lista.empresas.some((e) => e.slug === pedida) ? pedida : '';
     app.innerHTML = `<div class="entrada"><div class="entrada-caixa estreita">
       <img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo">
       <p class="entrada-tag">Acompanhamento semanal</p>
@@ -189,7 +164,6 @@ async function telaEntrada({ expirada = false } = {}) {
       <p class="lema">Entre com seu e-mail e senha.</p>
       ${expirada ? '<div class="info" role="status">Sua sessão expirou. Entre novamente para continuar de onde parou; rascunhos não enviados foram mantidos.</div>' : ''}
       <form id="login-senha">
-        ${campoEmpresa(lista, atual)}
         <div class="campo"><label for="login-email">E-mail</label>
         <input id="login-email" name="email" type="email" autocomplete="username" maxlength="254" required></div>
         <div class="campo"><label for="login-password">Senha</label>
@@ -208,11 +182,6 @@ async function telaEntrada({ expirada = false } = {}) {
       e.currentTarget.setAttribute('aria-label', mostrar ? 'Ocultar senha' : 'Mostrar senha');
       e.currentTarget.title = mostrar ? 'Ocultar senha' : 'Mostrar senha';
     });
-    // Busca no seletor de empresas (só aparece quando há muitas): esconde as que não combinam, sem tirar a escolhida.
-    $('#login-empresa-busca')?.addEventListener('input', (ev) => {
-      const termo = ev.currentTarget.value.trim().toLowerCase();
-      for (const op of $('#login-empresa').options) op.hidden = !!op.value && !!termo && !op.textContent.toLowerCase().includes(termo) && !op.selected;
-    });
     form.addEventListener('submit', async e => {
       e.preventDefault();
       const botao = form.querySelector('button[type=submit]');
@@ -222,10 +191,8 @@ async function telaEntrada({ expirada = false } = {}) {
       const erro = form.querySelector('#login-erro');
       erro.textContent = '';
       try {
-        const empresa = form.elements.empresa?.value || '';
-        if (!empresa) throw new Error('Escolha o órgão.');
-        await entrarSenha(form.elements.email.value, form.elements.senha.value, empresa);
-        if (empresa) lembrarEmpresa(empresa);
+        // O órgão é descoberto pela conta: só e-mail e senha.
+        await entrarSenha(form.elements.email.value, form.elements.senha.value);
         form.elements.senha.value = '';
         est.user = null;
         location.hash = retorno || '#/';
