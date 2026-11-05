@@ -50,7 +50,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   const LEITURA_CONSULTA = [/^\/bootstrap$/, /^\/acoes$/, /^\/acoes\/\d+$/, /^\/tarefas$/];
   app.use('/api', (req, res, next) => {
     if (req.user?.perfil !== 'consulta' || (req.method === 'GET' && LEITURA_CONSULTA.some((r) => r.test(req.path)))) return next();
-    next(falha(403, 'O perfil Consulta só permite ler as ações dos Centros.'));
+    next(falha(403, 'O perfil Consulta só permite ler as ações das unidades.'));
   });
   // Perfil Plataforma: administra as empresas e não toca em dados de negócio. Lista fechada, como as outras: só o bootstrap e as
   // rotas /plataforma respondem; qualquer outra rota (atual ou futura) responde 403 a ele.

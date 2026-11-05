@@ -1,4 +1,5 @@
 // Ponto de entrada: entrada simulada, casca da aplicação e roteamento por hash.
+import { PERFIL_DA_EMPRESA, dosPlural, nomeTipo } from './vocab.js';
 import { empresaLembrada, empresasDaEntrada, entrar, entrarSenha, get, lembrarEmpresa, sair, sessao, limparSessao, modoAuth, versao } from './api.js';
 import { atualizarSessao, est } from './estado.js';
 import { $, esc, on, trilho, toast } from './ui.js';
@@ -15,7 +16,7 @@ import { avisos } from './avisos.js';
 import { empresas } from './plataforma.js';
 import { equipe } from './equipe.js';
 import { acoesDosCentros, lePorTodosOsCentros } from './consulta.js';
-import { DIRETORIA_ADJUNTA, ROTULO_PERFIL } from './regras.js';
+import { DIRETORIA_ADJUNTA } from './regras.js';
 import { abrirTrocaSenha, telaTrocaSenha } from './senha.js';
 
 const GESTAO = ['diretor', 'apoio', 'administrador'];
@@ -23,7 +24,7 @@ const LEITURA = ['diretor', 'apoio', 'administrador']; // telas de acompanhament
 const TODOS = ['diretor', 'apoio', 'chefe', 'administrador'];
 const ROTAS = {
   painel: { f: painel, perfis: LEITURA, trilho: true, titulo: 'Painel da semana' },
-  centro: { f: centro, perfis: LEITURA, titulo: 'Centro' },
+  centro: { f: centro, perfis: LEITURA, get titulo() { return nomeTipo('centro'); } },
   direcionar: { f: direcionar, perfis: GESTAO, titulo: 'Direcionar ação' },
   acoes: { f: acoes, perfis: LEITURA, titulo: 'Ações' },
   prazos: { f: prazos, perfis: LEITURA, titulo: 'Pedidos de prazo' },
@@ -38,7 +39,7 @@ const ROTAS = {
   inicio: { f: inicio, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Início' },
   agenda: { f: agenda, perfis: [...TODOS, 'consulta', 'membro'], trilho: true, titulo: 'Agenda' },
   // Leitura das ações de todos os Centros: perfil Consulta e chefe com a permissão (a tela confere a permissão).
-  'acoes-centros': { f: acoesDosCentros, perfis: ['consulta', 'chefe'], titulo: 'Ações dos Centros' },
+  'acoes-centros': { f: acoesDosCentros, perfis: ['consulta', 'chefe'], get titulo() { return `Ações ${dosPlural('centro')}`; } },
   // O Administrador da Diretoria Adjunta envia o relato da própria seção, como um chefe.
   atualizacao: { f: atualizacao, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Minha atualização' },
   'minhas-acoes': { f: minhasAcoes, perfis: ['chefe', 'administrador', 'membro'], trilho: true, titulo: 'Minhas ações' },
@@ -107,10 +108,10 @@ const MENU_MEMBRO = [['#Minha seção'], ['minhas-acoes', 'Minhas ações'], ['a
 // Consulta: só lê as ações dos Centros.
 // Plataforma: cria e administra as empresas.
 const MENU_PLATAFORMA = [['#Plataforma'], ['empresas', 'Empresas']];
-const MENU_CONSULTA = [['#Consulta'], ['acoes-centros', 'Ações dos Centros'], ['agenda', 'Agenda']];
+const menuConsulta = () => [['#Consulta'], ['acoes-centros', `Ações ${dosPlural('centro')}`], ['agenda', 'Agenda']];
 // O Administrador tem acesso total às abas de Configuração.
 const MENU_ADMIN = MENU_GESTAO.map((m) => (m[0] === '#Organização' ? ['#Administração'] : m[0] === 'estrutura' ? ['estrutura', 'Configuração'] : m[0] === 'avisos' ? ['avisos', 'Avisos'] : m));
-const PERFIL = ROTULO_PERFIL;
+const PERFIL = PERFIL_DA_EMPRESA;
 // Selos do menu, com a contagem que vem no bootstrap: pedidos de prazo pendentes (gestão) e ações recebidas
 // que a pessoa ainda não abriu (chefe e Diretoria Adjunta).
 const SELOS = { prazos: [['pedidos_pendentes'], 'pedidos de prazo pendentes'], 'minhas-acoes': [['acoes_novas', 'acoes_a_validar'], 'ações novas ou aguardando a sua validação'] };
@@ -219,7 +220,7 @@ async function telaEntrada({ expirada = false } = {}) {
     <img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo">
     <p class="entrada-tag">Protótipo de demonstração</p>
     <h1>Bem-vindo ao Agilis</h1>
-    <p class="lema">Acompanhamento semanal dos Centros${nomeDemo ? ` — ${esc(nomeDemo)}` : ''}.</p>
+    <p class="lema">Acompanhamento semanal${nomeDemo ? ` — ${esc(nomeDemo)}` : ''}.</p>
     <div class="info">Protótipo com dados fictícios. Escolha um perfil para explorar; não há senha nesta versão.</div>
     ${trocaEmpresa}
     ${us.length ? '' : '<div class="info">Esta empresa ainda não tem usuários cadastrados.</div>'}
@@ -273,8 +274,8 @@ function casca() {
   // Quem é da Diretoria Adjunta (Administrador vinculado a ela) cria e acompanha as ações da seção e envia o relato semanal.
   const daDiretoriaAdjunta = u.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA;
   // O chefe com a permissão do Diretor ganha "Ações dos Centros", logo abaixo das próprias ações.
-  const chefe = lePorTodosOsCentros() ? MENU_CHEFE.flatMap((m) => (m[0] === 'minhas-acoes' ? [m, ['acoes-centros', 'Ações dos Centros']] : [m])) : MENU_CHEFE;
-  const base = u.perfil === 'chefe' ? chefe : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? MENU_CONSULTA : u.perfil === 'membro' ? MENU_MEMBRO : u.perfil === 'plataforma' ? MENU_PLATAFORMA : MENU_GESTAO;
+  const chefe = lePorTodosOsCentros() ? MENU_CHEFE.flatMap((m) => (m[0] === 'minhas-acoes' ? [m, ['acoes-centros', `Ações ${dosPlural('centro')}`]] : [m])) : MENU_CHEFE;
+  const base = u.perfil === 'chefe' ? chefe : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? menuConsulta() : u.perfil === 'membro' ? MENU_MEMBRO : u.perfil === 'plataforma' ? MENU_PLATAFORMA : MENU_GESTAO;
   const menu = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['equipe', 'Minha equipe'], ['atualizacao', 'Minha atualização']] : []), ...base]
     .filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
   app.innerHTML = `<div class="app"><aside class="lateral">

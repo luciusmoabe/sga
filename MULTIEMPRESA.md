@@ -46,3 +46,12 @@ O Agilis nasceu para um órgão só. Este documento registra o plano para atende
 - A migração 13 (histórico de prazos) ganhou a própria consulta de árvore: migração não pode depender de código que passou a exigir `empresa_id`, coluna que só existe a partir da versão 22.
 
 - O principal risco é vazamento entre empresas: por isso os testes de isolamento vêm junto da Fase 2, e uma proteção extra no banco (RLS por empresa) fica como evolução.
+
+## Organograma por empresa
+
+Cada empresa tem a sua própria árvore de seções (já isolada). O que variava era o molde: os nomes (Centro, Coordenação…), a profundidade e quais unidades viram cartão na reunião. Exemplos reais: **Deplan** = Diretoria (o perfil Diretor) → Diretoria Adjunta → Centros → Coordenações, podendo haver Coordenação direto sob a Adjunta; **SGTO** = Superintendência (o perfil do topo) → Diretorias → Coordenações. Plano em etapas, cada uma preservando o comportamento atual como padrão:
+
+1. **Vocabulário por empresa** (pronta, sem migração): `config.vocabulario` (JSON) guarda, por empresa, singular, plural e gênero de cada tipo de unidade e o nome do perfil do topo. Módulo puro compartilhado `public/js/vocabulario.js` (servidor e tela), `public/js/vocab.js` (atalhos da tela), `PUT /api/config/vocabulario` (Diretor e Administrador), vindo no bootstrap (`vocabulario`). O gênero acerta os artigos ("Todos os Centros" / "Todas as Diretorias"). Edição em Configuração → "Nomes das unidades". Aplicado nos menus, títulos, "Direcionar ação", Configuração, ata e mensagens da API. **Ainda com o texto fixo**: as demais ocorrências de "Diretor" (por exemplo "Demandada pelo Diretor", "Peça ao Diretor") e algumas legendas; a lista vai sendo trocada à medida que as telas são revisadas.
+2. **Posição livre da árvore** (a fazer): o tipo deixa de depender do nível (uma Coordenação sob um Centro ou direto sob a Adjunta), a Diretoria Adjunta passa a poder ter unidades abaixo dela e o limite de níveis (hoje 3, `LIMITE_NIVEIS`) vira configuração da empresa.
+3. **Unidade de acompanhamento** (a fazer, com migração pequena): a empresa marca quais unidades viram cartão no Modo Reunião, linha do painel e do semáforo; cada cartão soma as unidades abaixo dele que não são cartões. "Todos os Centros" passa a significar todas as unidades de acompanhamento.
+

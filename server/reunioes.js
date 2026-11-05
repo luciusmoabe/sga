@@ -2,11 +2,12 @@ import { FREQUENCIAS, HORA_PADRAO, LIMITE_COMBINADOS, addDays, agora, br, ehDiaR
 import { arvoresDosCentros, cartoesReuniao, falha, h, json, permit, texto } from './helpers.js';
 import { registrosReuniao } from './reuniao-registros.js';
 import { empresaAtual } from './empresa.js';
+import { completarVocabulario, todasAs, validarVocabulario } from '../public/js/vocabulario.js';
 
 const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 const PRIO = { alta: 'alta', media: 'média', baixa: 'baixa' };
 
-export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretriz, cfg }) {
+export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretriz, cfg, vocabularioAtual }) {
   const gestao = permit('diretor', 'apoio', 'administrador');
   const fmt = (r) => (r ? { ...r, combinados_snapshot: json(r.combinados_snapshot, []) } : null);
   const avisoLimite = async () => {
@@ -113,6 +114,15 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       }
       return cfg();
     });
+  }));
+
+  // Nomes dos tipos de unidade e do topo, próprios de cada empresa (o Diretor e o Administrador editam em Configuração).
+  app.put('/api/config/vocabulario', permit('diretor', 'administrador'), h(async (req) => {
+    let v;
+    try { v = validarVocabulario(req.body?.vocabulario); } catch (e) { throw falha(400, e.message); }
+    await run('insert into config (chave, valor, empresa_id) values (?, ?, ?) on conflict(empresa_id, chave) do update set valor = excluded.valor',
+      'vocabulario', JSON.stringify(v), empresaAtual());
+    return { vocabulario: completarVocabulario(v) };
   }));
 
   // ---------- Reunião ----------
@@ -252,7 +262,7 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       for (const g of novas) {
         let alvo;
         if (g.destino === 'todos') {
-          alvo = 'Todos os Centros';
+          alvo = todasAs(await vocabularioAtual(), 'centro');
         } else {
           const secoesAcao = await q(`select s.sigla from acoes a join secoes s on s.id = a.secao_id where a.diretriz_id = ? and a.empresa_id = ?`, g.id, empresaAtual());
           alvo = secoesAcao.map((s) => s.sigla).join(', ');

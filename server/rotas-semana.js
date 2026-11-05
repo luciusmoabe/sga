@@ -3,7 +3,8 @@ import { subarvore } from './db.js';
 import { FUSO_NEGOCIO, HORA_CORTE_PADRAO, agora, ehDiaReuniao, fechamentoDe, refDiaReuniao } from './logic.js';
 import { assinatura, camposLegados, ehCorpoLegado, montarRelato, paraSnapshot } from './relato.js';
 import { empresaAtual } from './empresa.js';
-import { atualizacaoDe, cartoesReuniao, falha, h, marks, painelSemana, permit, texto, ultimaAtualizacao } from './helpers.js';
+import { completarVocabulario } from '../public/js/vocabulario.js';
+import { atualizacaoDe, cartoesReuniao, falha, h, json, marks, painelSemana, permit, texto, ultimaAtualizacao } from './helpers.js';
 
 export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, semanaDe, SELECT_ACAO, acaoOut }) {
   // ---------- Bootstrap ----------
@@ -44,6 +45,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
       user: req.user,
       csrf: req.csrf,
       empresa,
+      vocabulario: completarVocabulario(json(config.vocabulario, null)),
       secao,
       agora: agoraISO(),
       hoje: hoje(),
@@ -180,7 +182,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     const [s, semana, ids] = await Promise.all([
       q1('select * from secoes where id = ? and pai_id is null and empresa_id = ?', id, empresaAtual()), semanaDe(req), subarvore(db, id),
     ]);
-    if (!s) throw falha(404, 'Centro não encontrado.');
+    if (!s) throw falha(404, 'Unidade não encontrada.');
     const [painel, historico, acoes, tempo] = await Promise.all([
       painelSemana(db, semana, hoje()),
       historicoDe(id),

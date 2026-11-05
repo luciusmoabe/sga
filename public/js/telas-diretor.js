@@ -1,4 +1,5 @@
 // Telas do Diretor e do Apoio: painel, Centro, direcionar ação, ações, prazos e pauta impressa.
+import { esteTipo, oTipo, todasAs } from './vocab.js';
 import { del, get, post } from './api.js';
 import { ehAdmin, ehDiretor, est, hoje } from './estado.js';
 import {
@@ -103,7 +104,7 @@ export async function centro(raiz, { id, q, refresh }) {
       ${d.acoes.length ? `<div class="tabela-rolagem"><table class="tabela-lista"><thead><tr><th>Ação</th><th>Prazo</th><th>Situação</th><th>Tempo</th></tr></thead><tbody>
       ${d.acoes.map((a) => `<tr class="clicavel" data-acao="${a.id}" tabindex="0"><td><b>${esc(a.titulo)}</b><br><span class="suave pequeno">${esc(a.secao_sigla)} · prioridade ${PRIO[a.prioridade].toLowerCase()}</span></td>
         <td class="num" data-rotulo="Prazo">${br(a.prazo)}</td><td data-rotulo="Situação">${pilulaStatus(a)}</td><td class="num" data-rotulo="Tempo">${fmtMin(a.tempo_total)}</td></tr>`).join('')}</tbody></table></div>`
-        : vazio('Nenhuma ação em aberto', 'As ações direcionadas a este Centro aparecerão aqui.')}
+        : vazio('Nenhuma ação em aberto', `As ações direcionadas a ${esteTipo('centro')} aparecerão aqui.`)}
       <p class="suave pequeno" style="margin-top:10px">${d.acoes_internas_visiveis ? 'Como Administrador, você vê também as ações internas das subseções.' : 'Ações internas das subseções não aparecem aqui: o Diretor vê só o resumo, salvo se o chefe compartilhar.'}</p></div>
     <div class="cartao"><h2>Semanas anteriores</h2>${anteriores.length ? anteriores.map((h) => `<details style="margin-bottom:8px"><summary><b>Reunião de ${br(h.semana)}</b>
       <span class="suave pequeno"> · enviada em ${dataHora(h.enviada_em)}</span></summary><div style="padding-top:10px">${relatoHTML(h, { permitirExcluir: ehAdmin() })}</div></details>`).join('')
@@ -140,17 +141,17 @@ export async function direcionar(raiz, { refresh }) {
   // O Diretor Adjunto não direciona ações para a própria seção: as dela ele cria em "Minhas ações".
   const centros = secoes.filter((s) => !s.pai_id && s.ativa && !(ehAdmin() && s.id === est.user.secao_id));
   raiz.innerHTML = `
-    <div class="cabeca"><div><h1>Direcionar ação</h1><div class="sub">Para todos os Centros, quando o assunto é comum, ou para seções específicas. Todo pedido tem prazo.</div></div></div>
+    <div class="cabeca"><div><h1>Direcionar ação</h1><div class="sub">Para ${todasAs('centro', true)}, quando o assunto é comum, ou para seções específicas. Todo pedido tem prazo.</div></div></div>
     <div class="dois" style="align-items:start">
       <form class="cartao" id="form-dir" novalidate>
         <div class="erro-form oculto" role="alert"></div>
         <div class="campo"><label for="d-titulo">O que precisa ser feito</label><input id="d-titulo" name="titulo" maxlength="160" placeholder="Ex.: Enviar o relatório de execução do trimestre" required></div>
         <div class="campo"><label for="d-detalhe">Detalhes (opcional)</label><textarea id="d-detalhe" name="detalhe" placeholder="Formato esperado, referências, quem acionar…"></textarea></div>
         <div class="campo"><label>Para quem</label>
-          <div class="escolha"><label><input type="radio" name="destino" value="todos" checked> Todos os Centros</label>
+          <div class="escolha"><label><input type="radio" name="destino" value="todos" checked> ${todasAs('centro')}</label>
           <label><input type="radio" name="destino" value="especificos"> Escolher seções</label></div></div>
         <div class="campo oculto" id="alvos"><div class="escolha">${centros.map((c) => `<label><input type="checkbox" name="secao" value="${c.id}"> ${esc(c.sigla || c.nome)}</label>`).join('')}</div>
-          <div class="dica">Cada seção escolhida recebe a sua própria ação, com acompanhamento individual. "Todos os Centros" não inclui a Diretoria Adjunta.</div></div>
+          <div class="dica">Cada seção escolhida recebe a sua própria ação, com acompanhamento individual. "${todasAs('centro')}" não inclui ${oTipo('diretoria_adjunta')}.</div></div>
         <div class="dois">
           <div class="campo"><label for="d-prazo">Prazo</label><input id="d-prazo" type="date" name="prazo" min="${hoje()}" value="${addDias(hoje(), 7)}" required></div>
           <div class="campo"><label for="d-prio">Prioridade</label><select id="d-prio" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div>
@@ -159,7 +160,7 @@ export async function direcionar(raiz, { refresh }) {
       </form>
       <div class="cartao"><h2>Últimas ações direcionadas</h2>
         ${dirs.length ? dirs.slice(0, 8).map((x) => `<div style="margin-bottom:14px"><div class="linha entre" style="flex-wrap:nowrap;align-items:flex-start;gap:12px"><b>${esc(x.titulo)}</b><span class="pilula prio-${x.prioridade}" style="flex-shrink:0">${PRIO[x.prioridade]}</span></div>
-          <div class="suave pequeno">${x.destino === 'todos' ? 'Todos os Centros' : x.secoes?.length ? `Para ${esc(x.secoes.map((c) => c.sigla || c.nome).join(', '))}` : 'Nenhuma seção (ações excluídas)'} · prazo ${br(x.prazo)} · criada por ${esc(x.criado_por_nome || '')}</div>
+          <div class="suave pequeno">${x.destino === 'todos' ? todasAs('centro') : x.secoes?.length ? `Para ${esc(x.secoes.map((c) => c.sigla || c.nome).join(', '))}` : 'Nenhuma seção (ações excluídas)'} · prazo ${br(x.prazo)} · criada por ${esc(x.criado_por_nome || '')}</div>
           ${cienciaSecoes(x)}
           <div class="linha"><div class="progresso" style="flex:1"><i style="width:${x.total ? (x.concluidas / x.total) * 100 : 0}%"></i></div><span class="pequeno num">${x.concluidas}/${x.total} concluídas</span></div>
           <button type="button" class="btn btn-fantasma btn-mini" data-acrescentar="${x.id}">Acrescentar seções</button></div>`).join('')

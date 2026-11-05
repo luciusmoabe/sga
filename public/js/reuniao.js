@@ -1,6 +1,7 @@
 // Modo Reunião: tela cheia para a TV da sala, conduzida pelo Diretor ou pelo Apoio.
 // Abre com os Combinados, mostra as seções por ordem de necessidade e registra decisões e ações ao vivo.
 // Ficam ocultos na projeção, por padrão: tempo em minutos e ações internas de subseções.
+import { todasAs } from './vocab.js';
 import { del, get, patch, post, put } from './api.js';
 import { itensDoRelato, resumoInternas } from './relato-vista.js';
 import { est, hoje } from './estado.js';
@@ -206,7 +207,7 @@ export async function viewReuniao(raiz, { id: idRota, q }) {
       corpo: `<div class="campo"><label for="na-t">O que precisa ser feito</label><input id="na-t" name="titulo" maxlength="160"></div>
         <div class="campo"><label>Para quem</label><div class="escolha">
           ${c ? `<label><input type="radio" name="destino" value="esta" checked> ${esc(c.secao.sigla || c.secao.nome)}</label>` : ''}
-          <label><input type="radio" name="destino" value="todos" ${c ? '' : 'checked'}> Todos os Centros</label>
+          <label><input type="radio" name="destino" value="todos" ${c ? '' : 'checked'}> ${todasAs('centro')}</label>
           <label><input type="radio" name="destino" value="escolher"> Escolher seções</label></div></div>
         <div class="campo oculto" id="na-alvos"><div class="escolha">${S.cartoes.map((x) => `<label><input type="checkbox" name="secao" value="${x.secao.id}"> ${esc(x.secao.sigla || x.secao.nome)}</label>`).join('')}</div></div>
         <div class="dois"><div class="campo"><label for="na-p">Prazo</label><input id="na-p" type="date" name="prazo" min="${hoje()}" value="${addDias(hoje(), 7)}"></div>

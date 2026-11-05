@@ -3,8 +3,12 @@ import { subarvore } from './db.js';
 import { DIAS_SEM_MOVIMENTO, PERFIS_DE_SECAO, PRIORIDADES, STATUS, TRANSICOES, addDays, br, ehISO, porDataDaTarefa } from './logic.js';
 import { falha, h, marks, permit, texto } from './helpers.js';
 import { empresaAtual } from './empresa.js';
+import { listaDe, nomePlural, nomeTipo } from '../public/js/vocabulario.js';
 
-export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
+/** "Centros, Coordenações e Diretoria Adjunta", com os nomes da empresa. */
+const tiposDeDestino = (v) => listaDe([nomePlural(v, 'centro'), nomePlural(v, 'coordenacao'), nomeTipo(v, 'diretoria_adjunta')]);
+
+export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtual }) {
   const deSecao = (user) => PERFIS_DE_SECAO.includes(user.perfil); // chefe ou membro: trabalham numa seção
   // Ações que a pessoa enxerga (e altera, conforme o perfil). O chefe e o membro, a árvore da própria seção; a gestão e a
   // Consulta, as que o Diretor vê; o Administrador, todas. Rotas que gravam usam sempre este escopo.
@@ -308,7 +312,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
         if (await q1('select 1 from secoes where id = ? and pai_id is null and ativa = 1 and empresa_id = ?', i, empresaAtual())) validados.push(i);
       }
       alvos = validados;
-      if (alvos.length !== ids.length) throw falha(400, 'Só Centros, Coordenação e Diretoria Adjunta ativos podem receber ações do Diretor.');
+      if (alvos.length !== ids.length) throw falha(400, `Escolha só unidades de primeiro nível ativas (${tiposDeDestino(await vocabularioAtual())}).`);
     }
     if (!alvos.length) throw falha(400, 'Escolha ao menos uma seção para receber a ação.');
     // O Diretor Adjunto (Administrador vinculado à Diretoria Adjunta) não direciona ações para a própria seção:
@@ -384,7 +388,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje }) {
       if (prazo < hoje()) throw falha(400, 'O prazo desta ação já passou. Informe um novo prazo para as seções acrescentadas.');
       for (const s of ids) {
         if (!(await q1('select 1 from secoes where id = ? and pai_id is null and ativa = 1 and empresa_id = ?', s, empresaAtual()))) {
-          throw falha(400, 'Só Centros, Coordenação e Diretoria Adjunta ativos podem receber ações do Diretor.');
+          throw falha(400, `Escolha só unidades de primeiro nível ativas (${tiposDeDestino(await vocabularioAtual())}).`);
         }
       }
       if (req.user.perfil === 'administrador' && req.user.secao_id && ids.includes(req.user.secao_id)) {

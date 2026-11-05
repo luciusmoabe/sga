@@ -1,5 +1,6 @@
 // Ações dos Centros: leitura das ações de todas as seções, para o perfil Consulta e para o chefe a quem o Diretor
 // deu essa permissão (usuarios.ver_outros_centros). As de fora da própria seção abrem só para leitura.
+import { dosPlural, todasAs } from './vocab.js';
 import { get } from './api.js';
 import { est } from './estado.js';
 import { $, br, esc, on, pilulaStatus, PRIO, STATUS, toast, vazio } from './ui.js';
@@ -9,12 +10,12 @@ export const lePorTodosOsCentros = () => est.user?.perfil === 'consulta' || (est
 
 export async function acoesDosCentros(raiz) {
   if (!lePorTodosOsCentros()) {
-    raiz.innerHTML = `<div class="cabeca"><h1>Ações dos Centros</h1></div><div class="cartao">${vazio(
-      'Consulta não liberada', 'Peça ao Diretor para liberar a consulta às ações de todos os Centros.')}</div>`;
+    raiz.innerHTML = `<div class="cabeca"><h1>Ações ${dosPlural('centro')}</h1></div><div class="cartao">${vazio(
+      'Consulta não liberada', `Peça a quem dirige o órgão para liberar a consulta às ações de ${todasAs('centro', true)}.`)}</div>`;
     return;
   }
   raiz.innerHTML = `
-    <div class="cabeca"><div><h1>Ações dos Centros</h1><div class="sub">Ações de todas as seções, só para leitura${est.user.perfil === 'chefe' ? '. As da sua seção continuam em Minhas ações' : ''}.</div></div></div>
+    <div class="cabeca"><div><h1>Ações ${dosPlural('centro')}</h1><div class="sub">Ações de todas as seções, só para leitura${est.user.perfil === 'chefe' ? '. As da sua seção continuam em Minhas ações' : ''}.</div></div></div>
     <div class="cartao"><div class="linha filtros-acoes" style="margin-bottom:12px">
       <div class="filtro-busca" style="flex:1;min-width:200px"><label for="c-q">Buscar</label><input id="c-q" type="search" placeholder="Título ou detalhe"></div>
       <button type="button" class="btn btn-sec filtros-alternar" aria-expanded="false" aria-controls="c-filtros">Filtros</button>

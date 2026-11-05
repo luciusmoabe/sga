@@ -1,6 +1,7 @@
 // Auxiliares compartilhados pelas rotas: acesso ao banco, relógio de negócio e configuração da reunião.
 import { DIA_PADRAO, HORA_PADRAO, HORA_CORTE_PADRAO, agora, ehISO, ehDiaReuniao, hojeISO, refDiaReuniao } from './logic.js';
-import { falha } from './helpers.js';
+import { falha, json } from './helpers.js';
+import { completarVocabulario } from '../public/js/vocabulario.js';
 import { empresaAtual } from './empresa.js';
 
 export function criarContexto(db) {
@@ -30,5 +31,8 @@ export function criarContexto(db) {
   };
   const cfg = async () => Object.fromEntries((await q('select chave, valor from config where empresa_id = ?', empresaAtual())).map((r) => [r.chave, r.valor]));
 
-  return { db, q, q1, run, agoraISO, hoje, cfgReuniao, semanaDe, cfg };
+  /** Nomes que a empresa deu aos tipos de unidade e ao topo (o que não foi informado vale o padrão). */
+  const vocabularioAtual = async () => completarVocabulario(json((await cfg()).vocabulario, null));
+
+  return { db, q, q1, run, agoraISO, hoje, cfgReuniao, semanaDe, cfg, vocabularioAtual };
 }

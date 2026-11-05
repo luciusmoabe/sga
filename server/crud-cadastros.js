@@ -16,7 +16,7 @@ export async function editarHierarquia(db, id, dados) {
   }
   if (tipo === 'subsecao' && !rows.some(s=>s.id===pai && s.ativa)) throw falha(400,'Escolha uma seção superior ativa.');
   if (tipo === 'subsecao' && rows.find(s=>s.id===pai)?.tipo === DIRETORIA_ADJUNTA) throw falha(400,'A Diretoria Adjunta não tem subseções.');
-  if (tipo !== 'subsecao' && pai !== null) throw falha(400,'Centros e Coordenações ficam no primeiro nível.');
+  if (tipo !== 'subsecao' && pai !== null) throw falha(400,'Este tipo de unidade fica no primeiro nível.');
   atual.pai_id=pai; atual.tipo=tipo;
   const mapa=new Map(rows.map(s=>[s.id,s]));
   for (const s of rows) {

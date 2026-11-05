@@ -50,7 +50,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     const b = req.body || {};
     const nome = texto(b.nome, 120);
     if (!nome) throw falha(400, 'Informe o nome da seção.');
-    if (!TIPOS_SECAO.includes(b.tipo)) throw falha(400, 'Escolha o tipo: Centro, Coordenação, Subseção ou Diretoria Adjunta.');
+    if (!TIPOS_SECAO.includes(b.tipo)) throw falha(400, 'Escolha o tipo da unidade.');
     if (b.tipo === DIRETORIA_ADJUNTA) {
       if (await q1('select id from secoes where tipo = ? and empresa_id = ?', DIRETORIA_ADJUNTA, empresaAtual())) throw falha(409, 'A Diretoria Adjunta já está cadastrada.');
       if (b.chefe_id) throw falha(400, SEM_CHEFE);
@@ -62,7 +62,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
       if (pai.tipo === DIRETORIA_ADJUNTA) throw falha(400, 'A Diretoria Adjunta não tem subseções.');
       if (await nivel(db, pai.id) + 1 > LIMITE_NIVEIS) throw falha(400, `A estrutura aceita até ${LIMITE_NIVEIS} níveis abaixo do Departamento.`);
     } else if (b.pai_id) {
-      throw falha(400, 'Centros e Coordenação ficam no primeiro nível.');
+      throw falha(400, 'Este tipo de unidade fica no primeiro nível.');
     }
     const chefe = await validarChefe(b.chefe_id);
     const ordemRow = pai

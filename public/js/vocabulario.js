@@ -1,0 +1,88 @@
+// Vocabulário por empresa: cada empresa dá os seus nomes aos tipos de unidade e ao perfil do topo (o Diretor). Módulo puro,
+// compartilhado pelo servidor e pela interface. O que não for informado vale o padrão, que é o vocabulário do órgão atual.
+//
+// Cada nome tem singular, plural e gênero (m/f): o gênero acerta os artigos ("Todos os Centros", "Todas as Diretorias").
+import { ROTULO_PERFIL } from './regras.js';
+
+export const TIPOS_DO_VOCABULARIO = ['centro', 'coordenacao', 'subsecao', 'diretoria_adjunta'];
+export const MAX_NOME = 40;
+
+export const VOCABULARIO_PADRAO = Object.freeze({
+  topo: Object.freeze({ nome: 'Diretor', genero: 'm' }),
+  tipos: Object.freeze({
+    centro: Object.freeze({ singular: 'Centro', plural: 'Centros', genero: 'm' }),
+    coordenacao: Object.freeze({ singular: 'Coordenação', plural: 'Coordenações', genero: 'f' }),
+    subsecao: Object.freeze({ singular: 'Subseção', plural: 'Subseções', genero: 'f' }),
+    diretoria_adjunta: Object.freeze({ singular: 'Diretoria Adjunta', plural: 'Diretorias Adjuntas', genero: 'f' }),
+  }),
+});
+
+const limpo = (v) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : '');
+const genero = (v, padrao) => (v === 'm' || v === 'f' ? v : padrao);
+
+/** Vocabulário completo: o que a empresa informou, com o padrão no que faltar ou vier inválido. Nunca lança. */
+export function completarVocabulario(bruto) {
+  const b = bruto && typeof bruto === 'object' ? bruto : {};
+  const topo = { nome: limpo(b.topo?.nome).slice(0, MAX_NOME) || VOCABULARIO_PADRAO.topo.nome, genero: genero(b.topo?.genero, VOCABULARIO_PADRAO.topo.genero) };
+  const tipos = {};
+  for (const t of TIPOS_DO_VOCABULARIO) {
+    const p = VOCABULARIO_PADRAO.tipos[t], e = b.tipos?.[t] ?? {};
+    tipos[t] = { singular: limpo(e.singular).slice(0, MAX_NOME) || p.singular, plural: limpo(e.plural).slice(0, MAX_NOME) || p.plural, genero: genero(e.genero, p.genero) };
+  }
+  return { topo, tipos };
+}
+
+/** Confere o que a pessoa enviou ao salvar: nomes preenchidos, curtos e sem repetição. Lança Error com mensagem em português. */
+export function validarVocabulario(bruto) {
+  if (!bruto || typeof bruto !== 'object') throw new Error('Informe os nomes.');
+  const nomes = [];
+  const exigir = (valor, rotulo) => {
+    const v = limpo(valor);
+    if (!v) throw new Error(`Preencha o nome: ${rotulo}.`);
+    if (v.length > MAX_NOME) throw new Error(`O nome "${rotulo}" deve ter até ${MAX_NOME} caracteres.`);
+    return v;
+  };
+  const exigirGenero = (g, rotulo) => {
+    if (g !== 'm' && g !== 'f') throw new Error(`Escolha o gênero de "${rotulo}" (masculino ou feminino).`);
+    return g;
+  };
+  const topo = { nome: exigir(bruto.topo?.nome, 'chefe da empresa'), genero: exigirGenero(bruto.topo?.genero, 'chefe da empresa') };
+  const tipos = {};
+  for (const t of TIPOS_DO_VOCABULARIO) {
+    const rotulo = VOCABULARIO_PADRAO.tipos[t].singular;
+    const e = bruto.tipos?.[t] ?? {};
+    tipos[t] = { singular: exigir(e.singular, `${rotulo} (singular)`), plural: exigir(e.plural, `${rotulo} (plural)`), genero: exigirGenero(e.genero, rotulo) };
+    nomes.push(tipos[t].singular.toLowerCase());
+  }
+  if (new Set(nomes).size !== nomes.length) throw new Error('Dois tipos de unidade não podem ter o mesmo nome.');
+  return { topo, tipos };
+}
+
+const artigo = (g, { m, f }) => (g === 'f' ? f : m);
+
+export const nomeTipo = (v, tipo) => v.tipos[tipo].singular;
+export const nomePlural = (v, tipo) => v.tipos[tipo].plural;
+/** "Todos os Centros" / "Todas as Diretorias". */
+export const todasAs = (v, tipo) => `${artigo(v.tipos[tipo].genero, { m: 'Todos os', f: 'Todas as' })} ${v.tipos[tipo].plural}`;
+/** "dos Centros" / "das Diretorias" (para "Ações dos Centros"). */
+export const dosPlural = (v, tipo) => `${artigo(v.tipos[tipo].genero, { m: 'dos', f: 'das' })} ${v.tipos[tipo].plural}`;
+/** "este Centro" / "esta Diretoria". */
+export const esteTipo = (v, tipo) => `${artigo(v.tipos[tipo].genero, { m: 'este', f: 'esta' })} ${v.tipos[tipo].singular}`;
+/** "o Centro" / "a Diretoria Adjunta". */
+export const oTipo = (v, tipo) => `${artigo(v.tipos[tipo].genero, { m: 'o', f: 'a' })} ${v.tipos[tipo].singular}`;
+/** "do Superintendente" / "da Superintendente". */
+export const doTopo = (v) => `${artigo(v.topo.genero, { m: 'do', f: 'da' })} ${v.topo.nome}`;
+/** "o Superintendente" / "a Superintendente". */
+export const oTopo = (v) => `${artigo(v.topo.genero, { m: 'o', f: 'a' })} ${v.topo.nome}`;
+
+/** Rótulo do perfil: o Diretor e o Apoio acompanham o nome do topo; os demais seguem fixos. */
+export function rotuloPerfil(v, perfil) {
+  if (perfil === 'diretor') return v.topo.nome;
+  if (perfil === 'apoio') return `Apoio ${doTopo(v)}`;
+  return ROTULO_PERFIL[perfil] ?? perfil;
+}
+
+/** Lista "A, B e C" para mensagens. */
+export function listaDe(itens) {
+  return itens.length < 2 ? itens.join('') : `${itens.slice(0, -1).join(', ')} e ${itens.at(-1)}`;
+}
