@@ -6,14 +6,16 @@ import { ROTULO_PERFIL } from './regras.js';
 
 export const TIPOS_DO_VOCABULARIO = ['centro', 'coordenacao', 'subsecao', 'diretoria_adjunta'];
 export const MAX_NOME = 40;
+/** Tipos que uma empresa pode não usar. O Centro (unidade de primeiro nível) e a Subseção sempre existem. */
+export const TIPOS_OPCIONAIS = ['coordenacao', 'diretoria_adjunta'];
 
 export const VOCABULARIO_PADRAO = Object.freeze({
   topo: Object.freeze({ nome: 'Diretor', genero: 'm' }),
   tipos: Object.freeze({
-    centro: Object.freeze({ singular: 'Centro', plural: 'Centros', genero: 'm' }),
-    coordenacao: Object.freeze({ singular: 'Coordenação', plural: 'Coordenações', genero: 'f' }),
-    subsecao: Object.freeze({ singular: 'Subseção', plural: 'Subseções', genero: 'f' }),
-    diretoria_adjunta: Object.freeze({ singular: 'Diretoria Adjunta', plural: 'Diretorias Adjuntas', genero: 'f' }),
+    centro: Object.freeze({ singular: 'Centro', plural: 'Centros', genero: 'm', usa: true }),
+    coordenacao: Object.freeze({ singular: 'Coordenação', plural: 'Coordenações', genero: 'f', usa: true }),
+    subsecao: Object.freeze({ singular: 'Subseção', plural: 'Subseções', genero: 'f', usa: true }),
+    diretoria_adjunta: Object.freeze({ singular: 'Diretoria Adjunta', plural: 'Diretorias Adjuntas', genero: 'f', usa: true }),
   }),
 });
 
@@ -27,7 +29,10 @@ export function completarVocabulario(bruto) {
   const tipos = {};
   for (const t of TIPOS_DO_VOCABULARIO) {
     const p = VOCABULARIO_PADRAO.tipos[t], e = b.tipos?.[t] ?? {};
-    tipos[t] = { singular: limpo(e.singular).slice(0, MAX_NOME) || p.singular, plural: limpo(e.plural).slice(0, MAX_NOME) || p.plural, genero: genero(e.genero, p.genero) };
+    tipos[t] = {
+      singular: limpo(e.singular).slice(0, MAX_NOME) || p.singular, plural: limpo(e.plural).slice(0, MAX_NOME) || p.plural, genero: genero(e.genero, p.genero),
+      usa: TIPOS_OPCIONAIS.includes(t) ? e.usa !== false : true,
+    };
   }
   return { topo, tipos };
 }
@@ -51,7 +56,11 @@ export function validarVocabulario(bruto) {
   for (const t of TIPOS_DO_VOCABULARIO) {
     const rotulo = VOCABULARIO_PADRAO.tipos[t].singular;
     const e = bruto.tipos?.[t] ?? {};
-    tipos[t] = { singular: exigir(e.singular, `${rotulo} (singular)`), plural: exigir(e.plural, `${rotulo} (plural)`), genero: exigirGenero(e.genero, rotulo) };
+    if (e.usa !== undefined && typeof e.usa !== 'boolean') throw new Error(`Informe se a empresa usa "${rotulo}" (sim ou não).`);
+    tipos[t] = {
+      singular: exigir(e.singular, `${rotulo} (singular)`), plural: exigir(e.plural, `${rotulo} (plural)`), genero: exigirGenero(e.genero, rotulo),
+      usa: TIPOS_OPCIONAIS.includes(t) ? e.usa !== false : true,
+    };
     nomes.push(tipos[t].singular.toLowerCase());
   }
   if (new Set(nomes).size !== nomes.length) throw new Error('Dois tipos de unidade não podem ter o mesmo nome.');
@@ -61,6 +70,8 @@ export function validarVocabulario(bruto) {
 const artigo = (g, { m, f }) => (g === 'f' ? f : m);
 
 export const nomeTipo = (v, tipo) => v.tipos[tipo].singular;
+/** A empresa usa este tipo de unidade? */
+export const usaTipo = (v, tipo) => v.tipos[tipo].usa !== false;
 export const nomePlural = (v, tipo) => v.tipos[tipo].plural;
 /** "Todos os Centros" / "Todas as Diretorias". */
 export const todasAs = (v, tipo) => `${artigo(v.tipos[tipo].genero, { m: 'Todos os', f: 'Todas as' })} ${v.tipos[tipo].plural}`;

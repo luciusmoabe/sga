@@ -5,10 +5,13 @@ import { DIRETORIA_ADJUNTA, LIMITE_NIVEIS, TAM_SENHA, TIPOS_SECAO } from './logi
 const SEM_CHEFE = 'A Diretoria Adjunta não tem chefe: quem faz parte dela é Administrador, cadastrado pelo servidor.';
 import { falha, h, marks, permit, texto } from './helpers.js';
 import { empresaAtual } from './empresa.js';
+import { usaTipo } from '../public/js/vocabulario.js';
+
+const NAO_USADO = 'Esta empresa não usa este tipo de unidade. Escolha outro tipo ou ative-o em Configuração, "Nomes das unidades".';
 import { editarHierarquia, excluirCadastro } from './crud-cadastros.js';
 import { administradorAuth, cadastrarChefe } from './cadastro-chefes.js';
 
-export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth }) {
+export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth, vocabularioAtual }) {
   // ---------- Seções (estrutura em árvore) ----------
   const listaSecoes = async (user) => {
     let rows = await q(`select s.*, u.nome as chefe_nome from secoes s left join usuarios u on u.id = s.chefe_id where s.empresa_id = ? order by s.ordem, s.id`, empresaAtual());
@@ -51,6 +54,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     const nome = texto(b.nome, 120);
     if (!nome) throw falha(400, 'Informe o nome da seção.');
     if (!TIPOS_SECAO.includes(b.tipo)) throw falha(400, 'Escolha o tipo da unidade.');
+    if (!usaTipo(await vocabularioAtual(), b.tipo)) throw falha(400, NAO_USADO);
     if (b.tipo === DIRETORIA_ADJUNTA) {
       if (await q1('select id from secoes where tipo = ? and empresa_id = ?', DIRETORIA_ADJUNTA, empresaAtual())) throw falha(409, 'A Diretoria Adjunta já está cadastrada.');
       if (b.chefe_id) throw falha(400, SEM_CHEFE);
@@ -85,6 +89,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth 
     if (!s) throw falha(404, 'Seção não encontrada.');
     const b = req.body || {};
     if ('tipo' in b || 'pai_id' in b) {
+      if ('tipo' in b && b.tipo !== s.tipo && !usaTipo(await vocabularioAtual(), b.tipo)) throw falha(400, NAO_USADO);
       await editarHierarquia(db,id,b);
       Object.assign(s, await q1('select * from secoes where id=? and empresa_id=?',id,empresaAtual()));
     }

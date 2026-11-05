@@ -2,7 +2,7 @@ import { FREQUENCIAS, HORA_PADRAO, LIMITE_COMBINADOS, addDays, agora, br, ehDiaR
 import { arvoresDosCentros, cartoesReuniao, falha, h, json, permit, texto } from './helpers.js';
 import { registrosReuniao } from './reuniao-registros.js';
 import { empresaAtual } from './empresa.js';
-import { completarVocabulario, todasAs, validarVocabulario } from '../public/js/vocabulario.js';
+import { TIPOS_OPCIONAIS, completarVocabulario, todasAs, validarVocabulario } from '../public/js/vocabulario.js';
 
 const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 const PRIO = { alta: 'alta', media: 'média', baixa: 'baixa' };
@@ -120,6 +120,12 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
   app.put('/api/config/vocabulario', permit('diretor', 'administrador'), h(async (req) => {
     let v;
     try { v = validarVocabulario(req.body?.vocabulario); } catch (e) { throw falha(400, e.message); }
+    // Não dá para deixar de usar um tipo que ainda tem unidade ativa: ela ficaria escondida das telas.
+    for (const tipo of TIPOS_OPCIONAIS) {
+      if (v.tipos[tipo].usa) continue;
+      const n = (await q1('select count(*) n from secoes where tipo = ? and ativa = 1 and empresa_id = ?', tipo, empresaAtual())).n;
+      if (Number(n) > 0) throw falha(409, `Há ${n} unidade(s) ativa(s) do tipo "${v.tipos[tipo].singular}". Desative-as antes de deixar de usar este tipo.`);
+    }
     await run('insert into config (chave, valor, empresa_id) values (?, ?, ?) on conflict(empresa_id, chave) do update set valor = excluded.valor',
       'vocabulario', JSON.stringify(v), empresaAtual());
     return { vocabulario: completarVocabulario(v) };

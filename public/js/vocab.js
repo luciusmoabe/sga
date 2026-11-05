@@ -7,6 +7,8 @@ export const vocab = () => V.completarVocabulario(est.boot?.vocabulario);
 const minuscula = (s) => s.charAt(0).toLowerCase() + s.slice(1);
 
 export const nomeTipo = (tipo) => V.nomeTipo(vocab(), tipo);
+/** A empresa usa este tipo de unidade? (a Coordenação de primeiro nível e a Diretoria Adjunta são opcionais) */
+export const usaTipo = (tipo) => V.usaTipo(vocab(), tipo);
 export const nomePlural = (tipo) => V.nomePlural(vocab(), tipo);
 /** "Todos os Centros" / "Todas as Diretorias"; com `emFrase`, a primeira letra em minúscula. */
 export const todasAs = (tipo, emFrase = false) => (emFrase ? minuscula(V.todasAs(vocab(), tipo)) : V.todasAs(vocab(), tipo));

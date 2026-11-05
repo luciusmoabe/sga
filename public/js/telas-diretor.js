@@ -1,5 +1,5 @@
 // Telas do Diretor e do Apoio: painel, Centro, direcionar ação, ações, prazos e pauta impressa.
-import { esteTipo, oTipo, todasAs } from './vocab.js';
+import { esteTipo, oTipo, todasAs, usaTipo } from './vocab.js';
 import { del, get, post } from './api.js';
 import { ehAdmin, ehDiretor, est, hoje } from './estado.js';
 import {
@@ -151,7 +151,7 @@ export async function direcionar(raiz, { refresh }) {
           <div class="escolha"><label><input type="radio" name="destino" value="todos" checked> ${todasAs('centro')}</label>
           <label><input type="radio" name="destino" value="especificos"> Escolher seções</label></div></div>
         <div class="campo oculto" id="alvos"><div class="escolha">${centros.map((c) => `<label><input type="checkbox" name="secao" value="${c.id}"> ${esc(c.sigla || c.nome)}</label>`).join('')}</div>
-          <div class="dica">Cada seção escolhida recebe a sua própria ação, com acompanhamento individual. "${todasAs('centro')}" não inclui ${oTipo('diretoria_adjunta')}.</div></div>
+          <div class="dica">Cada seção escolhida recebe a sua própria ação, com acompanhamento individual. ${usaTipo('diretoria_adjunta') ? `"${todasAs('centro')}" não inclui ${oTipo('diretoria_adjunta')}.` : ''}</div></div>
         <div class="dois">
           <div class="campo"><label for="d-prazo">Prazo</label><input id="d-prazo" type="date" name="prazo" min="${hoje()}" value="${addDias(hoje(), 7)}" required></div>
           <div class="campo"><label for="d-prio">Prioridade</label><select id="d-prio" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div>

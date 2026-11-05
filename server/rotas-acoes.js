@@ -3,10 +3,10 @@ import { subarvore } from './db.js';
 import { DIAS_SEM_MOVIMENTO, PERFIS_DE_SECAO, PRIORIDADES, STATUS, TRANSICOES, addDays, br, ehISO, porDataDaTarefa } from './logic.js';
 import { falha, h, marks, permit, texto } from './helpers.js';
 import { empresaAtual } from './empresa.js';
-import { listaDe, nomePlural, nomeTipo } from '../public/js/vocabulario.js';
+import { listaDe, nomePlural, nomeTipo, usaTipo } from '../public/js/vocabulario.js';
 
 /** "Centros, Coordenações e Diretoria Adjunta", com os nomes da empresa. */
-const tiposDeDestino = (v) => listaDe([nomePlural(v, 'centro'), nomePlural(v, 'coordenacao'), nomeTipo(v, 'diretoria_adjunta')]);
+const tiposDeDestino = (v) => listaDe([nomePlural(v, 'centro'), ...(usaTipo(v, 'coordenacao') ? [nomePlural(v, 'coordenacao')] : []), ...(usaTipo(v, 'diretoria_adjunta') ? [nomeTipo(v, 'diretoria_adjunta')] : [])]);
 
 export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtual }) {
   const deSecao = (user) => PERFIS_DE_SECAO.includes(user.perfil); // chefe ou membro: trabalham numa seção

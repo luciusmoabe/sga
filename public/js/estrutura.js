@@ -1,5 +1,5 @@
 // Estrutura: o Diretor cria e organiza as seções em árvore (Centros, Coordenação e subseções) e o cadastro mínimo de usuários.
-import { PERFIL_DA_EMPRESA, TIPO_DA_EMPRESA, dosPlural, nomePlural, nomeTipo, oTipo, rotuloPerfilDe, todasAs, vocab } from './vocab.js';
+import { PERFIL_DA_EMPRESA, TIPO_DA_EMPRESA, dosPlural, nomePlural, nomeTipo, oTipo, rotuloPerfilDe, todasAs, usaTipo, vocab } from './vocab.js';
 import { VOCABULARIO_PADRAO } from './vocabulario.js';
 import { get, patch, post, put, del } from './api.js';
 import { atualizarSessao, ehAdmin } from './estado.js';
@@ -52,17 +52,18 @@ function painelNomes() {
   const linha = (tipo, rotulo) => `<tr><th scope="row">${esc(rotulo)}</th>
     <td><input name="${tipo}-singular" value="${esc(v.tipos[tipo].singular)}" maxlength="40" required aria-label="${esc(rotulo)}: singular"></td>
     <td><input name="${tipo}-plural" value="${esc(v.tipos[tipo].plural)}" maxlength="40" required aria-label="${esc(rotulo)}: plural"></td>
-    <td>${campoGenero(`${tipo}-genero`, v.tipos[tipo].genero)}</td></tr>`;
-  return `<div class="estrutura-barra"><div><h2 id="titulo-nomes">Nomes das unidades</h2><p class="suave">Cada empresa chama a sua estrutura do seu jeito. Os nomes abaixo aparecem nas telas, na ata e nas mensagens. O gênero acerta os artigos ("Todos os Centros", "Todas as Diretorias").</p></div></div>
+    <td>${campoGenero(`${tipo}-genero`, v.tipos[tipo].genero)}</td>
+    <td>${['coordenacao', 'diretoria_adjunta'].includes(tipo) ? `<label class="marcar"><input type="checkbox" name="${tipo}-usa" ${v.tipos[tipo].usa !== false ? 'checked' : ''}> A empresa usa</label>` : '<span class="suave pequeno">sempre</span>'}</td></tr>`;
+  return `<div class="estrutura-barra"><div><h2 id="titulo-nomes">Nomes das unidades</h2><p class="suave">Cada empresa chama a sua estrutura do seu jeito. Os nomes abaixo aparecem nas telas, na ata e nas mensagens. Desmarque "A empresa usa" nos tipos que a sua estrutura não tem: eles somem dos formulários e dos textos. O gênero acerta os artigos ("Todos os Centros", "Todas as Diretorias").</p></div></div>
     <form id="form-nomes" novalidate>
-      <div class="tabela-rolagem"><table class="estrutura-tabela"><thead><tr><th scope="col">Tipo</th><th scope="col">Singular</th><th scope="col">Plural</th><th scope="col">Gênero</th></tr></thead><tbody>
+      <div class="tabela-rolagem"><table class="estrutura-tabela"><thead><tr><th scope="col">Tipo</th><th scope="col">Singular</th><th scope="col">Plural</th><th scope="col">Gênero</th><th scope="col">Uso</th></tr></thead><tbody>
         ${linha('centro', 'Unidade de primeiro nível (hoje: Centro)')}
         ${linha('coordenacao', 'Segunda unidade de primeiro nível (hoje: Coordenação)')}
         ${linha('subsecao', 'Unidade subordinada (hoje: Subseção)')}
         ${linha('diretoria_adjunta', 'Unidade sem chefe própria (hoje: Diretoria Adjunta)')}
         <tr><th scope="row">Perfil de quem dirige a empresa (hoje: Diretor)</th>
           <td colspan="2"><input name="topo-nome" value="${esc(v.topo.nome)}" maxlength="40" required aria-label="Nome do perfil de quem dirige a empresa"></td>
-          <td>${campoGenero('topo-genero', v.topo.genero)}</td></tr>
+          <td>${campoGenero('topo-genero', v.topo.genero)}</td><td></td></tr>
       </tbody></table></div>
       <div class="erro-form oculto" role="alert" id="erro-nomes"></div>
       <div class="linha" style="gap:8px;margin-top:12px"><button class="btn btn-primario" type="submit" id="btn-salvar-nomes">Salvar nomes</button><button class="btn btn-sec" type="button" id="padrao-nomes">Voltar ao padrão</button></div>
@@ -120,7 +121,7 @@ export async function estrutura(raiz, { refresh, painel }) {
       <button data-painel="nomes" aria-controls="estrutura-nomes">Nomes das unidades</button>
     </nav>
     <section id="estrutura-secoes" class="estrutura-painel" aria-labelledby="titulo-secoes">
-      <div class="estrutura-barra"><div><h2 id="titulo-secoes">Organização das seções</h2><p class="suave">${nomePlural('centro')}, ${nomePlural('coordenacao').toLowerCase()} e ${nomePlural('subsecao').toLowerCase()} em até três níveis, e ${oTipo('diretoria_adjunta')}.</p></div><button class="btn btn-primario" data-a="nova">+ Nova seção</button></div>
+      <div class="estrutura-barra"><div><h2 id="titulo-secoes">Organização das seções</h2><p class="suave">${[nomePlural('centro'), usaTipo('coordenacao') && nomePlural('coordenacao').toLowerCase(), nomePlural('subsecao').toLowerCase()].filter(Boolean).join(', ')} em até três níveis${usaTipo('diretoria_adjunta') ? `, e ${oTipo('diretoria_adjunta')}` : ''}.</p></div><button class="btn btn-primario" data-a="nova">+ Nova seção</button></div>
       <div class="estrutura-filtros"><div class="campo"><label for="buscar-secao">Buscar seção ou responsável</label><input id="buscar-secao" type="search" placeholder="Nome, sigla ou responsável" value="${esc(ui.buscaSecao)}"></div><div class="campo"><label for="estado-secao">Situação</label><select id="estado-secao"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="inativas">Inativas</option></select></div></div>
       <div id="lista-secoes"></div>
     </section>
@@ -191,7 +192,7 @@ export async function estrutura(raiz, { refresh, painel }) {
   const lerNomes = () => {
     const f = formNomes.elements;
     const tipos = {};
-    for (const t of ['centro', 'coordenacao', 'subsecao', 'diretoria_adjunta']) tipos[t] = { singular: f[`${t}-singular`].value, plural: f[`${t}-plural`].value, genero: f[`${t}-genero`].value };
+    for (const t of ['centro', 'coordenacao', 'subsecao', 'diretoria_adjunta']) tipos[t] = { singular: f[`${t}-singular`].value, plural: f[`${t}-plural`].value, genero: f[`${t}-genero`].value, ...(f[`${t}-usa`] ? { usa: f[`${t}-usa`].checked } : {}) };
     return { topo: { nome: f['topo-nome'].value, genero: f['topo-genero'].value }, tipos };
   };
   formNomes?.addEventListener('submit', async (e) => {
@@ -307,7 +308,7 @@ export async function estrutura(raiz, { refresh, painel }) {
           corpo: `<div class="campo"><label for="r-nome">Nome</label><input id="r-nome" name="nome" required maxlength="120" value="${esc(s.nome)}"></div>
                   <div class="campo"><label for="r-sigla">Sigla</label><input id="r-sigla" name="sigla" maxlength="12" value="${esc(s.sigla || '')}"></div>
                   <div class="escolha"><label><input type="checkbox" name="na_reuniao" value="1" ${s.na_reuniao ? 'checked' : ''}> Aparece na reunião (cartões do Modo Reunião, pauta e ata)</label>${filhos(s.id).length ? '<div class="dica">Fora da reunião, as subseções desta seção também ficam de fora.</div>' : ''}</div>
-                  ${ehDA(s) ? `<p class="suave pequeno">${nomeTipo('diretoria_adjunta')}: fica no primeiro nível, sem chefe nem subseções.</p>` : `<div class="campo"><label for="r-tipo">Tipo</label><select id="r-tipo" name="tipo">${Object.entries(tiposComNome()).filter(([k])=>k!==DIRETORIA_ADJUNTA).map(([k,v])=>`<option value="${k}" ${s.tipo===k?'selected':''}>${v}</option>`).join('')}</select></div>
+                  ${ehDA(s) ? `<p class="suave pequeno">${nomeTipo('diretoria_adjunta')}: fica no primeiro nível, sem chefe nem subseções.</p>` : `<div class="campo"><label for="r-tipo">Tipo</label><select id="r-tipo" name="tipo">${Object.entries(tiposComNome()).filter(([k])=>k!==DIRETORIA_ADJUNTA && (usaTipo(k) || s.tipo===k)).map(([k,v])=>`<option value="${k}" ${s.tipo===k?'selected':''}>${v}</option>`).join('')}</select></div>
                   <div class="campo"><label for="r-pai">Seção superior</label><select id="r-pai" name="pai_id" required><option value="">Escolha uma seção</option>${secoes.filter(x=>x.ativa && !ehDA(x) && !descendentes.has(x.id) && x.nivel < LIMITE).map(x=>`<option value="${x.id}" ${s.pai_id===x.id?'selected':''}>${esc(x.nome)}</option>`).join('')}</select></div>`}`,
           aoEnviar: async (d) => { d.na_reuniao = d.na_reuniao === '1'; if(ehDA(s)) { delete d.tipo; delete d.pai_id; } else if(d.tipo !== 'subsecao') d.pai_id=null; await patch(`/secoes/${id}`, d); salvo('Seção atualizada.'); },
         });
@@ -321,7 +322,7 @@ export async function estrutura(raiz, { refresh, painel }) {
       } else if (a === 'sub' || a === 'nova') {
         formulario({
           titulo: a === 'sub' ? `Nova subseção em ${s.nome}` : 'Nova seção',
-          corpo: `${a === 'nova' ? `<div class="campo"><label>Tipo</label><div class="escolha"><label><input type="radio" name="tipo" value="centro" checked> ${nomeTipo('centro')}</label><label><input type="radio" name="tipo" value="coordenacao"> ${nomeTipo('coordenacao')}</label>${secoes.some(ehDA) ? '' : `<label><input type="radio" name="tipo" value="${DIRETORIA_ADJUNTA}"> ${nomeTipo('diretoria_adjunta')}</label>`}</div></div>` : ''}
+          corpo: `${a === 'nova' ? `<div class="campo"><label>Tipo</label><div class="escolha"><label><input type="radio" name="tipo" value="centro" checked> ${nomeTipo('centro')}</label>${usaTipo('coordenacao') ? `<label><input type="radio" name="tipo" value="coordenacao"> ${nomeTipo('coordenacao')}</label>` : ''}${secoes.some(ehDA) || !usaTipo('diretoria_adjunta') ? '' : `<label><input type="radio" name="tipo" value="${DIRETORIA_ADJUNTA}"> ${nomeTipo('diretoria_adjunta')}</label>`}</div></div>` : ''}
             <div class="campo"><label for="n-nome">Nome</label><input id="n-nome" name="nome" required maxlength="120" placeholder="Ex.: ${nomeTipo('centro')} de Estudos Econômicos"></div>
             <div class="campo"><label for="n-sigla">Sigla (opcional)</label><input id="n-sigla" name="sigla" maxlength="12"></div>
             <div class="campo"><label for="n-chefe">Chefe (opcional)</label><select id="n-chefe" name="chefe_id">${opcoesChefe(null)}</select></div>
