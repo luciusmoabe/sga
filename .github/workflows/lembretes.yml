@@ -1,0 +1,37 @@
+name: Lembretes da semana
+
+# Chama o Agilis de hora em hora para ele enviar os avisos no celular (sexta 15h, segunda 12h e 18h). O próprio sistema decide
+# o que está na hora e nunca repete um aviso, então rodar toda hora é seguro. Fica inerte até o GitHub ter a variável AGILIS_URL e
+# o segredo CRON_SECRET (veja docs/operacao.md): sem eles, o passo só avisa que não está configurado e termina sem erro.
+#
+# Atenção: o GitHub desativa workflows agendados de repositório sem atividade por 60 dias; um commit ou um disparo manual reativa.
+on:
+  schedule:
+    - cron: '5 * * * *'
+  workflow_dispatch:
+    inputs:
+      ensaio:
+        description: 'Só calcular o que seria enviado, sem enviar nada'
+        type: boolean
+        default: true
+
+jobs:
+  chamar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar a rota dos lembretes
+        env:
+          URL: ${{ vars.AGILIS_URL }}
+          SEGREDO: ${{ secrets.CRON_SECRET }}
+          ENSAIO: ${{ inputs.ensaio }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$SEGREDO" ]; then
+            echo "Lembretes não configurados: defina a variável AGILIS_URL e o segredo CRON_SECRET no GitHub. Nada a fazer."
+            exit 0
+          fi
+          alvo="${URL%/}/api/interno/lembretes"
+          if [ "$ENSAIO" = "true" ]; then alvo="$alvo?ensaio=1"; fi
+          echo "Chamando ${alvo}"
+          # A resposta traz só contagens (nunca e-mails nem nomes).
+          curl -fsS --max-time 60 -H "Authorization: Bearer $SEGREDO" "$alvo"
+          echo
