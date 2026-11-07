@@ -1343,7 +1343,8 @@ button.cal-item:hover { border-color: var(--line-str); background: var(--pale); 
 
 /* Produtividade das unidades */
 .prod-unidade h2 { margin: 0 0 12px; }
-.prod-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.prod-unidade { container-type: inline-size; } /* a grade responde à largura do cartão da unidade, não da janela */
+.prod-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
 .prod-ind { background: var(--pale); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 .prod-rotulo { font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .prod-valor { font-size: 1.7rem; font-weight: 700; color: var(--ink); line-height: 1.2; margin: 2px 0; }
@@ -1353,6 +1354,16 @@ button.cal-item:hover { border-color: var(--line-str); background: var(--pale); 
 .prod-detalhes summary { cursor: pointer; font-weight: 600; }
 .prod-tabela .num { text-align: right; font-variant-numeric: tabular-nums; }
 .prod-filtros { margin-bottom: 14px; }
+/* Os seis indicadores numa linha só quando o cartão comporta; senão, três por linha (sem sobrar um sozinho). Abaixo de 480 px, o auto-fit acima. */
+@container (min-width: 480px) and (max-width: 879px) {
+  .prod-grade { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@container (min-width: 880px) {
+  .prod-grade { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+  .prod-ind { padding: 10px 11px; }
+  .prod-rotulo { font-size: 0.7rem; letter-spacing: 0.03em; line-height: 1.25; min-height: 2.5em; } /* o rótulo pode ocupar duas linhas; o valor fica alinhado entre os cartões */
+  .prod-valor { font-size: 1.5rem; }
+}
 
 /* Selos recolhidos do cartão da ação ("+N"). */
 .selos-mais { display: inline-block; position: relative; }
