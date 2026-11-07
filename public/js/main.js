@@ -19,6 +19,7 @@ import { equipe } from './equipe.js';
 import { acoesDosCentros, lePorTodosOsCentros } from './consulta.js';
 import { DIRETORIA_ADJUNTA } from './regras.js';
 import { abrirTrocaSenha, telaTrocaSenha } from './senha.js';
+import { abrirAvisosNoCelular, esquecerAvisosAoSair, recebeAvisos, restaurarAvisos } from './push.js';
 
 const GESTAO = ['diretor', 'apoio', 'administrador'];
 const LEITURA = ['diretor', 'apoio', 'administrador']; // telas de acompanhamento que o Administrador também consulta
@@ -289,15 +290,17 @@ function casca() {
     <nav class="menu" aria-label="Principal">${menu.map((m) => m[0].startsWith('#')
       ? `<div class="grupo"><b>${esc(m[0].slice(1))}</b></div>`
       : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}"><span class="menu-rotulo">${ICONES[m[0]] || ''}${esc(m[1])}</span>${selo(m[0])}</a>`).join('')}</nav>
-    <div class="usuario"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}${est.boot?.secao?.tipo === DIRETORIA_ADJUNTA ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}<br><span class="usuario-acoes">${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
+    <div class="usuario"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}${est.boot?.secao?.tipo === DIRETORIA_ADJUNTA ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}<br><span class="usuario-acoes">${recebeAvisos(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="avisos-celular">Avisos no celular</button>' : ''}${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
       <button class="btn btn-fantasma btn-mini oculto" id="instalar-app" style="margin-top:6px">Instalar aplicativo</button></div></aside>
     <main class="principal"><div id="trilho"></div><div id="conteudo"></div></main>
     ${cascaMovel(u, menu)}</div>`;
   atualizarBotaoInstalar();
   document.title = est.boot?.empresa ? `Agilis · ${est.boot.empresa.sigla || est.boot.empresa.nome}` : 'Agilis';
   $('#alterar-senha')?.addEventListener('click', () => abrirTrocaSenha());
+  $('#avisos-celular')?.addEventListener('click', () => abrirAvisosNoCelular(u.id));
+  if (recebeAvisos(u.perfil)) restaurarAvisos(u.id); // se a pessoa já ativou neste aparelho, religa em silêncio
   $('#sair').addEventListener('click', async () => {
-    try { await sair(); est.user = null; est.boot = null; location.hash = '#/'; render(); }
+    try { await esquecerAvisosAoSair(); await sair(); est.user = null; est.boot = null; location.hash = '#/'; render(); }
     catch (e) { toast(e.message); }
   });
   ligarCascaMovel();
@@ -343,6 +346,7 @@ function cascaMovel(u, menu) {
         : `<a href="#/${m[0]}" data-rota="${m[0]}">${ICONES[m[0]] || ''}<span>${esc(m[1])}</span>${selo(m[0])}</a>`).join('')}</nav>
       <div class="folha-acoes">
         ${sessao.modo === 'demo' ? '' : '<button type="button" class="btn btn-sec" data-conta="senha">Alterar senha</button>'}
+        ${recebeAvisos(u.perfil) ? '<button type="button" class="btn btn-sec" data-conta="avisos">Avisos no celular</button>' : ''}
         <button type="button" class="btn btn-sec oculto" data-conta="instalar">Instalar aplicativo</button>
         <button type="button" class="btn btn-sec" data-conta="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button>
         <button type="button" class="btn btn-fantasma" data-fechar-mais>Fechar</button>
@@ -366,6 +370,7 @@ function ligarCascaMovel() {
   });
   on(folha, 'click', '[data-conta="senha"]', () => { fechar(); abrirTrocaSenha(); });
   on(folha, 'click', '[data-conta="instalar"]', () => { fechar(); $('#instalar-app')?.click(); });
+  on(folha, 'click', '[data-conta="avisos"]', () => { fechar(); $('#avisos-celular')?.click(); });
   on(folha, 'click', '[data-conta="sair"]', () => { fechar(); $('#sair').click(); });
 }
 

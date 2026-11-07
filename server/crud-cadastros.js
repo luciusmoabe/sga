@@ -80,6 +80,8 @@ export async function excluirCadastro(db, tabela, id) {
         // Chefia é uma atribuição atual, não um impedimento histórico.
         // Qualquer falha posterior desfaz também esta liberação.
         await db.prepare('update secoes set chefe_id=null where chefe_id=? and empresa_id=?').run(id, empresaAtual());
+        // Aparelhos com avisos no celular não são histórico: saem junto com a conta.
+        await db.prepare('delete from push_assinaturas where usuario_id=? and empresa_id=?').run(id, empresaAtual());
         await db.prepare('delete from auth_sessoes_senha where conta_id in (select id from auth_contas where usuario_id=?)').run(id);
         await db.prepare('delete from auth_contas where usuario_id=?').run(id);
         await db.prepare('delete from auth_sessoes where identidade_id in (select id from auth_identidades where usuario_id=?)').run(id);

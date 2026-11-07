@@ -37,6 +37,9 @@ O modelo está em `.env.example`. **Nunca versione `.env`, `.env.local` nem chav
 | `SGC_ADMIN_SENHA_INICIAL`, `SGC_ADMIN_SUBJECT`, `SGC_ADMIN_SECAO` | Comando `admin:criar` |
 | `SGC_NOVA_SENHA` | Comando `senha:redefinir` |
 | `SGC_EMPRESA`, `SGC_EMPRESA_SIGLA`, `SGC_EMPRESA_LISTADA` | Comandos de empresa |
+| `SGC_VAPID_PUBLIC_KEY`, `SGC_VAPID_PRIVATE_KEY`, `SGC_VAPID_SUBJECT` | Chaves dos avisos no celular (veja a seção abaixo) |
+| `SGC_LEMBRETES_CANAL` | `push` envia os lembretes aos aparelhos; vazio ou `ensaio` só calcula |
+| `SGC_CRON_SECRET` (ou `CRON_SECRET`) | Segredo do agendador dos lembretes; sem ele a rota `/api/interno/lembretes` não existe |
 | `SGC_LINT_EMPRESA` | `1` faz os testes falharem em SQL de tabela raiz sem `empresa_id` |
 
 ## Comandos
@@ -55,6 +58,7 @@ O modelo está em `.env.example`. **Nunca versione `.env`, `.env.local` nem chav
 | `npm run plataforma:criar` | Cria o usuário do perfil Plataforma |
 | `npm test` | Suíte principal |
 | `npm run test:postgres` | Integração com PostgreSQL descartável |
+| `npm run push:chaves` | Gera as chaves VAPID dos avisos no celular |
 
 ## Implantação em produção
 
@@ -71,6 +75,31 @@ Pontos de atenção:
 - Na Vercel, cabeçalhos de cache dos estáticos vêm do `vercel.json`, não do Express.
 - **Não crie a 2ª empresa** antes de a migração 23 estar aplicada em produção.
 - A chave `service_role` nunca vai para o repositório, o navegador, mensagens ou capturas de tela.
+
+## Avisos no celular (notificação push)
+
+Os usuários recebem no próprio celular o lembrete da atualização semanal, sem e-mail. Funciona assim: a pessoa ativa os avisos em **Avisos no celular** (menu lateral ou "Mais"), o navegador pede a permissão e o servidor passa a enviar direto ao aparelho. A mensagem nunca traz dados das ações, só o texto do lembrete.
+
+**Quem recebe:** Diretor, Apoio, Chefe e Administrador. Chefes e Administradores recebem o lembrete (sexta 15h) e as "últimas horas" (segunda 12h) quando a unidade ainda não enviou; o Diretor recebe o resumo no fechamento (segunda 18h). Membros e o perfil Consulta não têm avisos.
+
+### Ligar em produção (uma vez)
+
+1. **Chaves:** rode `npm run push:chaves` e cadastre `SGC_VAPID_PUBLIC_KEY`, `SGC_VAPID_PRIVATE_KEY` e `SGC_VAPID_SUBJECT` nas variáveis do servidor (Vercel: Settings → Environment Variables). A chave privada é segredo. Trocar as chaves depois invalida todos os aparelhos já ativados.
+2. **Migração 27:** em PostgreSQL, `npm run migrate -- --postgres` (cria `push_assinaturas`; aditiva).
+3. **Canal:** `SGC_LEMBRETES_CANAL=push`.
+4. **Agendador:** os lembretes só saem quando algo chama `GET/POST /api/interno/lembretes` com `Authorization: Bearer <segredo>` (cadastre o segredo em `SGC_CRON_SECRET`). Chame **de hora em hora**: o motor decide sozinho o que está na hora e nunca repete o mesmo aviso. Opções:
+   - **Vercel Cron** (`crons` no `vercel.json`, `"path": "/api/interno/lembretes"`, `"schedule": "0 * * * *"`). Atenção: no plano gratuito (Hobby) a Vercel só aceita execução diária; com uma vez por dia os lembretes das 12h de segunda não saem (sai o do fechamento). Hoje o `vercel.json` **não** tem o cron.
+   - **GitHub Actions agendado** (gratuito; pode atrasar alguns minutos): um workflow com `schedule: cron: '5 * * * *'` e um passo `curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" https://SEU-ENDERECO/api/interno/lembretes`.
+   - Teste sem enviar: acrescente `?ensaio=1` à chamada.
+5. **Cada pessoa** ativa os avisos no próprio celular e usa **Enviar um aviso de teste** para conferir.
+
+### No celular
+
+- **Android (Chrome):** funciona no navegador; instalar o app (Adicionar à tela inicial) deixa mais confiável.
+- **iPhone/iPad (iOS 16.4 ou mais novo):** só funciona com o Agilis **instalado** (Compartilhar → Adicionar à Tela de Início) e aberto pelo ícone. Dentro do Safari comum a opção não existe.
+- É preciso **HTTPS** (a Vercel já serve assim). Em `localhost` também funciona, para desenvolvimento.
+- Se a pessoa bloquear as notificações, só ela desfaz: nas configurações do navegador ou do aparelho.
+- Sair da conta desliga os avisos daquele aparelho para aquela pessoa (aparelho compartilhado); ao entrar de novo, a mesma pessoa os religa sozinha.
 
 ## Testes
 
@@ -101,4 +130,6 @@ O botão "Instalar aplicativo" aparece na barra lateral quando o navegador dispa
 | Login funciona no demo mas não em produção | O modo demo não vale em produção; use contas do Supabase |
 | Erro 403 em toda mutação | `Origin` diferente de `SGC_PUBLIC_ORIGIN` ou CSRF ausente |
 | Limite de tentativas atinge todos de uma vez | Falta `SGC_TRUST_PROXY` atrás de proxy |
+| Avisos no celular indisponíveis na tela | Faltam as variáveis `SGC_VAPID_*` no servidor |
+| Lembretes não chegam | Sem agendador chamando `/api/interno/lembretes`, `SGC_LEMBRETES_CANAL` diferente de `push`, ou a pessoa não ativou os avisos (o resultado da chamada mostra `semAparelho`) |
 | Datas deslocadas em um dia | Uso de getters locais de `Date`; use as funções de `logic.js` / `datas.js` |

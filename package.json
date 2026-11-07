@@ -17,6 +17,7 @@
     "admin:criar": "node server/criar-administrador.js",
     "empresa:criar": "node server/criar-empresa.js",
     "plataforma:criar": "node server/criar-plataforma.js",
+    "push:chaves": "node server/gerar-chaves-push.js",
     "senha:redefinir": "node server/redefinir-senha.js",
     "admin:secao": "node server/secao-administrador.js",
     "test": "node --test test/*.test.js",
@@ -27,6 +28,7 @@
     "compression": "^1.8.2",
     "dotenv": "^18.0.1",
     "express": "^4.19.2",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "web-push": "^3.6.7"
   }
 }

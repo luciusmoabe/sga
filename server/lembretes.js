@@ -6,12 +6,13 @@
 //   - fechamento     (véspera da reunião, 18h; segunda): resumo de quem ficou pendente, para o topo da empresa.
 // Cada lembrete sai uma só vez por empresa, semana, tipo e pessoa (tabela `lembretes_enviados`).
 //
-// O envio real depende de um provedor de e-mail, ainda não escolhido. Sem transporte configurado, o motor roda em modo ENSAIO:
-// calcula e devolve o que enviaria, sem gravar nada, para ser conferido antes de ligar o envio.
+// Canal de entrega (SGC_LEMBRETES_CANAL): `push` envia aviso ao celular de quem ativou (ver server/push.js); vazio ou `ensaio`
+// só calcula e devolve o que enviaria, sem gravar nada. O envio por e-mail foi adiado por decisão do proprietário.
 import { addDays, agora, DIA_PADRAO, fechamentoDe, HORA_CORTE_PADRAO, HORA_PADRAO, hojeISO, br, refDiaReuniao } from './logic.js';
 import { instante } from '../public/js/datas.js';
 import { comEmpresa, empresaAtual } from './empresa.js';
 import { painelSemana } from './helpers.js';
+import { canalPush, configurarPush } from './push.js';
 
 export const TIPOS_DE_LEMBRETE = ['lembrete', 'ultimas_horas', 'fechamento'];
 const NOMES_DIA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
@@ -57,18 +58,36 @@ export function montarMensagem({ tipo, pessoa, unidade, pendentes = [], semana, 
   };
 }
 
-/** Transporte de ensaio: só registra no log o que enviaria. */
-export const transporteEnsaio = {
-  nome: 'ensaio',
-  real: false,
-  async enviar({ para, assunto }) { console.log(JSON.stringify({ nivel: 'info', lembrete: 'ensaio', para, assunto })); },
-};
+/** Aviso curto para o celular (Web Push): título, corpo de uma linha e a tela que abre ao tocar. Função pura. */
+export function montarNotificacao({ tipo, unidade, pendentes = [], dia }) {
+  const veespera = NOMES_DIA[(dia + 6) % 7];
+  if (tipo === 'fechamento') {
+    return {
+      titulo: pendentes.length === 1 ? '1 unidade não enviou a atualização' : `${pendentes.length} unidades não enviaram a atualização`,
+      corpo: `O prazo regular terminou. ${pendentes.slice(0, 3).join(', ')}${pendentes.length > 3 ? ` e mais ${pendentes.length - 3}` : ''}.`,
+      url: '/#/painel',
+    };
+  }
+  if (tipo === 'ultimas_horas') {
+    return { titulo: 'Últimas horas para a atualização', corpo: `A atualização de ${unidade} ainda não foi enviada. O prazo termina hoje, às 18h.`, url: '/#/atualizacao' };
+  }
+  return { titulo: 'Lembrete da atualização da semana', corpo: `Falta enviar a atualização de ${unidade}. Prazo: ${veespera}, às 18h.`, url: '/#/atualizacao' };
+}
 
-/** Escolhe o transporte pela configuração. Sem configuração, ensaio. Provedores reais entram aqui quando forem escolhidos. */
-export function escolherTransporte(env = process.env) {
-  const nome = (env.SGC_EMAIL_TRANSPORTE || '').trim().toLowerCase();
+/** Canal de ensaio: não envia nada. */
+export const transporteEnsaio = { nome: 'ensaio', real: false, exigeEmail: false, async enviar() { return 0; } };
+
+/** Escolhe o canal pela configuração. Sem configuração, ensaio. `push` exige as chaves VAPID. */
+export function escolherTransporte(env = process.env, db = null) {
+  const nome = (env.SGC_LEMBRETES_CANAL || '').trim().toLowerCase();
   if (!nome || nome === 'ensaio') return transporteEnsaio;
-  throw new Error(`Transporte de e-mail "${nome}" ainda não implementado: veja o desenho em docs/plano-melhorias.md.`);
+  if (nome === 'push') {
+    const config = configurarPush(env);
+    if (!config.ativo) throw new Error('SGC_LEMBRETES_CANAL=push exige SGC_VAPID_PUBLIC_KEY, SGC_VAPID_PRIVATE_KEY e SGC_VAPID_SUBJECT (veja docs/operacao.md).');
+    if (!db) throw new Error('O canal push precisa do banco para achar os aparelhos.');
+    return canalPush(db, config);
+  }
+  throw new Error(`Canal de lembretes "${nome}" não disponível. Use "push" ou deixe vazio (ensaio).`);
 }
 
 const violacaoDeUnicidade = (e) => e?.code === '23505' || /^SQLITE_CONSTRAINT/.test(String(e?.code || '')) || /UNIQUE constraint/i.test(String(e?.message || ''));
@@ -80,7 +99,7 @@ async function processarEmpresa(db, { transporte, ensaio, origem, agoraInstante 
   const hora = cfg.reuniao_hora || HORA_PADRAO;
   const semana = refDiaReuniao(agoraInstante, dia, HORA_CORTE_PADRAO);
   const tipo = tipoDevido(semana, hora, agoraInstante);
-  const resultado = { semana, tipo, destinatarios: [], enviados: 0, jaEnviados: 0, falhas: 0 };
+  const resultado = { semana, tipo, destinatarios: [], enviados: 0, jaEnviados: 0, semAparelho: 0, falhas: 0 };
   if (!tipo) return resultado;
 
   const painel = await painelSemana(db, semana, hojeISO());
@@ -89,17 +108,19 @@ async function processarEmpresa(db, { transporte, ensaio, origem, agoraInstante 
   const nomeDe = (c) => c.secao.sigla ? `${c.secao.nome} (${c.secao.sigla})` : c.secao.nome;
 
   const pessoas = tipo === 'fechamento'
-    ? (await db.prepare("select id, nome, email, perfil, secao_id from usuarios where empresa_id = ? and ativo = 1 and perfil = 'diretor' and email is not null and email != ''").all(empresaAtual()))
+    ? (await db.prepare("select id, nome, email, perfil, secao_id from usuarios where empresa_id = ? and ativo = 1 and perfil = 'diretor'").all(empresaAtual()))
+        .filter((u) => !transporte.exigeEmail || u.email)
         .map((u) => ({ ...u, unidade: null }))
-    : (await db.prepare("select id, nome, email, perfil, secao_id from usuarios where empresa_id = ? and ativo = 1 and perfil in ('chefe', 'administrador') and secao_id is not null and email is not null and email != ''").all(empresaAtual()))
+    : (await db.prepare("select id, nome, email, perfil, secao_id from usuarios where empresa_id = ? and ativo = 1 and perfil in ('chefe', 'administrador') and secao_id is not null").all(empresaAtual()))
+        .filter((u) => !transporte.exigeEmail || u.email)
         .map((u) => ({ ...u, unidade: pendentes.find((c) => c.secao.id === u.secao_id) }))
         .filter((u) => u.unidade);
 
   for (const u of pessoas) {
-    const mensagem = montarMensagem({
-      tipo, pessoa: u.nome, unidade: u.unidade ? nomeDe(u.unidade) : null, pendentes: pendentes.map(nomeDe), semana, dia, hora, origem,
-    });
-    resultado.destinatarios.push({ usuario_id: u.id, perfil: u.perfil, assunto: mensagem.assunto });
+    const dados = { tipo, unidade: u.unidade ? nomeDe(u.unidade) : null, pendentes: pendentes.map(nomeDe), semana, dia, hora, origem };
+    const mensagem = montarMensagem({ ...dados, pessoa: u.nome });
+    const aviso = montarNotificacao(dados);
+    resultado.destinatarios.push({ usuario_id: u.id, perfil: u.perfil, titulo: aviso.titulo });
     if (ensaio || !transporte.real) continue;
     try {
       await db.prepare('insert into lembretes_enviados (empresa_id, semana, tipo, usuario_id, enviado_em, modo) values (?, ?, ?, ?, ?, ?)')
@@ -108,12 +129,17 @@ async function processarEmpresa(db, { transporte, ensaio, origem, agoraInstante 
       if (violacaoDeUnicidade(e)) { resultado.jaEnviados++; continue; }
       throw e;
     }
+    const liberar = () => db.prepare('delete from lembretes_enviados where empresa_id = ? and semana = ? and tipo = ? and usuario_id = ?').run(empresaAtual(), semana, tipo, u.id);
     try {
-      await transporte.enviar({ para: u.email, assunto: mensagem.assunto, texto: mensagem.texto });
-      resultado.enviados++;
+      const entregues = await transporte.enviar({ usuario: u.id, empresa: empresaAtual(), email: u.email, assunto: mensagem.assunto, texto: mensagem.texto, ...aviso });
+      if (entregues === 0) {
+        // Ninguém recebeu (a pessoa não ativou os avisos): não marca como enviado, para valer se ela ativar antes da reunião.
+        await liberar();
+        resultado.semAparelho++;
+      } else resultado.enviados++;
     } catch (e) {
       // Falhou: libera a linha para a próxima rodada tentar de novo.
-      await db.prepare('delete from lembretes_enviados where empresa_id = ? and semana = ? and tipo = ? and usuario_id = ?').run(empresaAtual(), semana, tipo, u.id);
+      await liberar();
       resultado.falhas++;
       console.error(JSON.stringify({ nivel: 'erro', lembrete: tipo, usuario: u.id, mensagem: String(e?.message || e).slice(0, 200) }));
     }
@@ -122,7 +148,7 @@ async function processarEmpresa(db, { transporte, ensaio, origem, agoraInstante 
 }
 
 /** Roda os lembretes de todas as empresas ativas (menos a interna da plataforma). `ensaio` não envia nem grava nada. */
-export async function rodarLembretes(db, { transporte = escolherTransporte(), ensaio = false, origem = '', agoraInstante = agora() } = {}) {
+export async function rodarLembretes(db, { transporte = escolherTransporte(process.env, db), ensaio = false, origem = '', agoraInstante = agora() } = {}) {
   const empresas = await db.prepare("select id, slug from empresas where ativa = 1 and slug != 'plataforma' order by id").all();
   const saida = [];
   for (const e of empresas) {

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { falha } from './helpers.js';
 import { rodarLembretes } from './lembretes.js';
+import { rotasPush } from './push.js';
 import { criarContexto } from './contexto.js';
 import { rotasAcoes } from './rotas-acoes.js';
 import { rotasEstrutura } from './rotas-estrutura.js';
@@ -26,7 +27,7 @@ const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  * Monta a aplicação. As rotas ficam por assunto: estrutura (seções e usuários), ações (diretrizes,
  * ações e pedidos de prazo), semana (sessão, atualização semanal e painel), reuniões e avisos.
  */
-export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } = {}) {
+export function createApp(db, { auth = configurarAuth(), provedor, adminAuth, emissorPush } = {}) {
   const app = express();
   // Atrás do proxy da Vercel (ou de outro proxy confiável), o IP real vem de X-Forwarded-For.
   // Sem isso o limite de tentativas de login trataria todos os usuários como um só IP.
@@ -111,6 +112,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   });
 
   rotasEstrutura(app, { ...ctx, auth, adminAuth: contas });
+  rotasPush(app, { db, emissor: emissorPush });
   const { criarDiretriz, SELECT_ACAO, acaoOut, visiveisAcoes } = rotasAcoes(app, ctx);
   rotasProdutividade(app, { ...ctx, visiveisAcoes });
   rotasSemana(app, { ...ctx, SELECT_ACAO, acaoOut });

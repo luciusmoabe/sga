@@ -123,6 +123,17 @@ Onde a coluna diz "regra na rota", a rota não usa `permit`: a decisão de quem 
 | GET `/avisos` | D, Adm | Lista |
 | POST/PATCH/DELETE `/avisos[/:id]` | D, Adm | Gerencia (exclusão definitiva) |
 
+## Avisos no celular (`push.js`)
+
+Diretor, Apoio, Chefe e Administrador. Os demais perfis ficam fora pelas listas fechadas.
+
+| Rota | Função |
+| --- | --- |
+| GET `/push/config[?endpoint=]` | Se os avisos estão disponíveis, a chave pública e se este aparelho já está ativo |
+| POST `/push/assinar` | `{ assinatura }` (a do navegador): grava o aparelho; máximo 5 por pessoa; o mesmo aparelho passa a quem ativou por último |
+| POST `/push/cancelar` | `{ endpoint }`: remove o aparelho da própria pessoa |
+| POST `/push/teste` | Envia um aviso de teste aos aparelhos da própria pessoa |
+
 ## Operação (sem sessão)
 
 | Rota | Quem | Função |

@@ -10,7 +10,7 @@ import { createApp } from '../server/app.js';
 import { instante } from '../public/js/datas.js';
 import { comEmpresa } from '../server/empresa.js';
 import { painelSemana } from '../server/helpers.js';
-import { escolherTransporte, montarMensagem, rodarLembretes, tipoDevido, transporteEnsaio } from '../server/lembretes.js';
+import { escolherTransporte, montarMensagem, montarNotificacao, rodarLembretes, tipoDevido, transporteEnsaio } from '../server/lembretes.js';
 
 const SEMANA = '2026-09-22';
 const em = (dataHora) => instante(dataHora); // horário da Bahia
@@ -24,7 +24,7 @@ async function banco(t) {
 const pendentesDoPainel = async (db) => (await comEmpresa(1, () => painelSemana(db, SEMANA, '2026-09-21'))).filter((c) => c.secao.na_reuniao && !c.enviada);
 const transporteFalso = (extra = {}) => {
   const enviados = [];
-  return { nome: 'teste', real: true, enviados, async enviar(m) { enviados.push(m); }, ...extra };
+  return { nome: 'teste', real: true, exigeEmail: false, enviados, async enviar(m) { enviados.push(m); return 1; }, ...extra };
 };
 
 test('janelas: lembrete na sexta 15h, últimas horas na segunda 12h, fechamento às 18h, nada depois da reunião', () => {
@@ -60,10 +60,32 @@ test('mensagens: dizem a unidade, o prazo e a reunião; o resumo do fechamento l
   assert.match(montarMensagem({ ...base, tipo: 'fechamento', pendentes: ['Centro A (A)'] }).assunto, /1 unidade não enviou/);
 });
 
-test('transporte: sem configuração vale o ensaio; provedor não implementado falha com mensagem clara', () => {
+test('notificação: curta, com a unidade, o prazo e a tela que abre ao tocar', () => {
+  const base = { unidade: 'Centro X (CX)', dia: 2 };
+  const l = montarNotificacao({ ...base, tipo: 'lembrete' });
+  assert.match(l.corpo, /Centro X \(CX\)/);
+  assert.match(l.corpo, /segunda-feira, às 18h/);
+  assert.equal(l.url, '/#/atualizacao');
+  assert.match(montarNotificacao({ ...base, tipo: 'ultimas_horas' }).titulo, /últimas horas/i);
+  const f = montarNotificacao({ tipo: 'fechamento', dia: 2, pendentes: ['A (A)', 'B (B)', 'C (C)', 'D (D)', 'E (E)'] });
+  assert.match(f.titulo, /5 unidades não enviaram/);
+  assert.match(f.corpo, /A \(A\), B \(B\), C \(C\) e mais 2/);
+  assert.equal(f.url, '/#/painel');
+  assert.equal(montarNotificacao({ tipo: 'fechamento', dia: 2, pendentes: ['A (A)'] }).titulo, '1 unidade não enviou a atualização');
+  for (const n of [l, f]) assert.ok(JSON.stringify(n).length < 400, 'cabe com folga no limite de uma notificação');
+});
+
+test('canal: sem configuração vale o ensaio; push exige as chaves VAPID e o banco; outros canais não existem', () => {
   assert.equal(escolherTransporte({}), transporteEnsaio);
-  assert.equal(escolherTransporte({ SGC_EMAIL_TRANSPORTE: 'ensaio' }), transporteEnsaio);
-  assert.throws(() => escolherTransporte({ SGC_EMAIL_TRANSPORTE: 'resend' }), /ainda não implementado/);
+  assert.equal(escolherTransporte({ SGC_LEMBRETES_CANAL: 'ensaio' }), transporteEnsaio);
+  assert.throws(() => escolherTransporte({ SGC_LEMBRETES_CANAL: 'push' }, {}), /SGC_VAPID_PUBLIC_KEY/);
+  const env = { SGC_LEMBRETES_CANAL: 'push', SGC_VAPID_PUBLIC_KEY: 'pub', SGC_VAPID_PRIVATE_KEY: 'priv', SGC_VAPID_SUBJECT: 'mailto:a@b.gov.br' };
+  assert.throws(() => escolherTransporte(env), /precisa do banco/);
+  const canal = escolherTransporte(env, {});
+  assert.equal(canal.nome, 'push');
+  assert.equal(canal.real, true);
+  assert.equal(canal.exigeEmail, false);
+  assert.throws(() => escolherTransporte({ SGC_LEMBRETES_CANAL: 'email' }), /não disponível/);
 });
 
 test('ensaio: lista quem receberia (chefes das unidades sem relato) e não grava nem envia nada', async (t) => {
@@ -90,7 +112,7 @@ test('envio: cada pessoa recebe uma vez; a segunda rodada não repete', async (t
   assert.ok(a.enviados > 0);
   assert.equal(a.enviados, falso.enviados.length);
   assert.equal(a.jaEnviados, 0);
-  assert.ok(falso.enviados.every((m) => m.para.includes('@') && /últimas horas/i.test(m.assunto)));
+  assert.ok(falso.enviados.every((m) => /últimas horas/i.test(m.titulo) && m.url === '/#/atualizacao' && typeof m.usuario === 'number'));
   const [b] = await rodarLembretes(db, { transporte: falso, agoraInstante });
   assert.equal(b.enviados, 0);
   assert.equal(b.jaEnviados, a.enviados);
@@ -122,6 +144,20 @@ test('falha de envio: libera o registro para a próxima rodada tentar de novo', 
   assert.equal(outra.enviados, r.falhas);
 });
 
+test('sem aparelho: quem não ativou os avisos não fica marcado como enviado e recebe quando ativar', async (t) => {
+  const db = await banco(t);
+  const agoraInstante = em('2026-09-21T13:00:00');
+  const sem = transporteFalso({ async enviar() { return 0; } });
+  const [a] = await rodarLembretes(db, { transporte: sem, agoraInstante });
+  assert.equal(a.enviados, 0);
+  assert.ok(a.semAparelho > 0);
+  assert.equal(a.falhas, 0);
+  assert.equal((await db.prepare('select count(*) n from lembretes_enviados').get()).n, 0, 'nada marcado: a pessoa ainda pode ativar');
+  const com = transporteFalso();
+  const [b] = await rodarLembretes(db, { transporte: com, agoraInstante });
+  assert.equal(b.enviados, a.semAparelho, 'depois de ativar, o aviso chega');
+});
+
 test('fechamento: o resumo vai só ao Diretor, com as unidades pendentes', async (t) => {
   const db = await banco(t);
   const falso = transporteFalso();
@@ -130,8 +166,8 @@ test('fechamento: o resumo vai só ao Diretor, com as unidades pendentes', async
   assert.deepEqual(r.destinatarios.map((d) => d.perfil), ['diretor']);
   assert.equal(falso.enviados.length, 1);
   const pendentes = await pendentesDoPainel(db);
-  assert.match(falso.enviados[0].assunto, new RegExp(`${pendentes.length} unidades? não enviaram?`));
-  for (const c of pendentes) assert.ok(falso.enviados[0].texto.includes(c.secao.nome));
+  assert.match(falso.enviados[0].titulo, new RegExp(`${pendentes.length} unidades? não enviaram?`));
+  for (const c of pendentes.slice(0, 3)) assert.ok(falso.enviados[0].corpo.includes(c.secao.nome));
 });
 
 test('depois da reunião e antes do lembrete não há envio', async (t) => {
