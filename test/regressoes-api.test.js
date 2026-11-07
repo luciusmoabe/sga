@@ -30,7 +30,10 @@ test('API: falha assíncrona de identificação retorna 500 sem expor detalhes d
   const call = await servir(t, db);
   const resposta = await call('GET', '/bootstrap');
   assert.equal(resposta.status, 500);
-  assert.deepEqual(resposta.data, { erro: 'Erro interno. Tente novamente.' });
+  // O corpo traz só a mensagem genérica e o código da requisição (para o suporte achar o registro); nada do banco.
+  assert.deepEqual(Object.keys(resposta.data).sort(), ['erro', 'id']);
+  assert.equal(resposta.data.erro, 'Erro interno. Tente novamente.');
+  assert.doesNotMatch(JSON.stringify(resposta.data), /Detalhe privado/);
 });
 
 test('API: pedidos internos não aparecem na pauta nem podem ser decididos pela gestão', async (t) => {

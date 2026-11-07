@@ -2,6 +2,7 @@ import express from 'express';
 import compression from 'compression';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 import { falha } from './helpers.js';
 import { criarContexto } from './contexto.js';
 import { rotasAcoes } from './rotas-acoes.js';
@@ -30,6 +31,18 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   // Sem isso o limite de tentativas de login trataria todos os usuários como um só IP.
   if (process.env.VERCEL || process.env.SGC_TRUST_PROXY) app.set('trust proxy', Number(process.env.SGC_TRUST_PROXY) || 1);
   app.disable('x-powered-by');
+  // Identificador por requisição: vai no cabeçalho `X-Request-Id` e nos registros de erro, para ligar o que a pessoa viu ao que o servidor registrou.
+  app.use((req, res, next) => {
+    const recebido = req.get('x-request-id');
+    req.id = recebido && /^[\w.-]{8,64}$/.test(recebido) ? recebido : randomUUID();
+    res.set('X-Request-Id', req.id);
+    next();
+  });
+  // Verificação de saúde (sem sessão e sem dados): serve a monitores e à implantação. Confere só que o banco responde.
+  app.get('/api/saude', async (req, res) => {
+    try { await db.prepare('select 1 as ok').get(); res.set('Cache-Control', 'no-store').json({ ok: true }); }
+    catch { res.status(503).set('Cache-Control', 'no-store').json({ ok: false }); }
+  });
   app.use(cabecalhosSeguranca({ https: !!auth?.secure }));
   app.use(compression({ threshold: 512 })); // gzip/brotli: reduz JSON em ~70-80%
   app.use(express.json({ limit: '200kb' }));
@@ -92,7 +105,8 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
   app.use('/api', (req, res, next) => next(falha(404, 'Rota não encontrada.')));
   app.use(async (err, req, res, next) => {
     const status = err.status || 500;
-    if (status >= 500) console.error(err);
+    // Registro estruturado (uma linha JSON): fácil de filtrar nos logs da hospedagem. Sem corpo da requisição nem dados pessoais.
+    if (status >= 500) console.error(JSON.stringify({ nivel: 'erro', id: req.id, metodo: req.method, rota: req.path, usuario: req.user?.id ?? null, empresa: req.user?.empresa_id ?? null, mensagem: err.message, pilha: String(err.stack || '').split(/\r?\n/).slice(0, 6) }));
     let erro = status >= 500 ? 'Erro interno. Tente novamente.' : err.message;
     // As mensagens escrevem o topo da empresa como {topo:o}, {topo:do}…; aqui viram o nome que a empresa de quem recebe escolheu.
     if (typeof erro === 'string' && erro.includes('{topo')) {
@@ -100,7 +114,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
       try { v = req.user ? await comEmpresa(req.user.empresa_id, () => ctx.vocabularioAtual()) : completarVocabulario(null); } catch { v = completarVocabulario(null); }
       erro = resolverTopo(erro, v);
     }
-    res.status(status).json({ erro, ...(err.extra || {}) });
+    res.status(status).json({ erro, ...(status >= 500 ? { id: req.id } : {}), ...(err.extra || {}) });
   });
 
   return app;

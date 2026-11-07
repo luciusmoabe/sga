@@ -416,7 +416,8 @@ async function renderizar() {
     }
     // No celular, a aba "Mais" fica marcada quando a tela atual não tem aba própria.
     $('[data-aba-mais]')?.classList.toggle('ativa', !document.querySelector('.abas-movel a[aria-current]'));
-    $('#trilho').innerHTML = def.trilho ? trilho(est.boot) : '';
+    // O trilho completo (com a pista) só no Início e no Painel; nas demais telas, uma linha.
+    $('#trilho').innerHTML = def.trilho ? trilho(est.boot, { compacto: rota !== 'painel' && rota !== 'inicio' }) : '';
     const conteudo = $('#conteudo');
     const novo = document.createElement('div');
     novo.id = 'conteudo';

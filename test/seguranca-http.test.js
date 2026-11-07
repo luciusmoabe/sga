@@ -71,3 +71,19 @@ test('a interface não depende de fontes ou scripts de terceiros', async () => {
     }
   } finally { await fechar(); }
 });
+
+test('saúde: /api/saude responde sem sessão e toda resposta traz X-Request-Id', async () => {
+  const { base, fechar } = await subir({ mode: 'demo' });
+  try {
+    const r = await fetch(base + '/api/saude');
+    assert.equal(r.status, 200);
+    assert.deepEqual(await r.json(), { ok: true });
+    assert.equal(r.headers.get('cache-control'), 'no-store');
+    assert.match(r.headers.get('x-request-id'), /^[\w.-]{8,64}$/);
+    // Um identificador válido enviado por um proxy é mantido; um inválido é substituído.
+    const mantido = await fetch(base + '/api/saude', { headers: { 'x-request-id': 'abc-12345678' } });
+    assert.equal(mantido.headers.get('x-request-id'), 'abc-12345678');
+    const trocado = await fetch(base + '/api/saude', { headers: { 'x-request-id': 'x y<script>' } });
+    assert.notEqual(trocado.headers.get('x-request-id'), 'x y<script>');
+  } finally { await fechar(); }
+});

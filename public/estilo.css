@@ -196,6 +196,10 @@ button { cursor: pointer; border: 0; }
   margin-bottom: 22px;
   box-shadow: var(--sombra-card);
 }
+.trilho.compacto { padding: 8px 16px; margin-bottom: 14px; box-shadow: none; }
+.trilho.compacto .trilho-pista { display: none; }
+.trilho.compacto .trilho-topo { margin: 0; }
+.trilho.compacto .trilho-topo b { font-size: .92rem; }
 .trilho-topo {
   display: flex;
   flex-wrap: wrap;
@@ -1210,6 +1214,8 @@ button.cal-item:hover { border-color: var(--line-str); background: var(--pale); 
   /* Minhas ações: abas deslizantes, status em grade 2x2, tempo numa linha e ações com alvo grande */
   .abas-lista { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; margin-inline: -16px !important; padding-inline: 16px; }
   .abas-lista::-webkit-scrollbar { display: none; }
+  /* Esmaece a borda direita para indicar que há mais abas além da tela. */
+  .abas-lista { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-inline-end: 32px; }
   .abas-lista .btn { flex-shrink: 0; }
   .segmento { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
   .segmento button { min-height: 46px; border-bottom: 1px solid var(--line-str); }
@@ -1347,3 +1353,11 @@ button.cal-item:hover { border-color: var(--line-str); background: var(--pale); 
 .prod-detalhes summary { cursor: pointer; font-weight: 600; }
 .prod-tabela .num { text-align: right; font-variant-numeric: tabular-nums; }
 .prod-filtros { margin-bottom: 14px; }
+
+/* Selos recolhidos do cartão da ação ("+N"). */
+.selos-mais { display: inline-block; position: relative; }
+.selos-mais > summary { cursor: pointer; list-style: none; }
+.selos-mais > summary::-webkit-details-marker { display: none; }
+.selos-mais[open] { display: contents; }
+.selos-mais[open] > summary { display: none; }
+.selos-resto { display: contents; }

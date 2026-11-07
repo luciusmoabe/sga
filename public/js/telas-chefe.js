@@ -20,6 +20,29 @@ const semSecao = (raiz) => {
 const diasSemMovimento = (a) => diasEntre(dataNoFuso(instante(a.movimentada_em || a.criada_em)), est.boot.hoje);
 const seloParada = (a) => (a.parada ? `<span class="pilula atencao-selo" title="Atualize o status ou registre o andamento">Sem atualização há ${diasSemMovimento(a)} dias</span>` : '');
 
+/** Selos do cartão da ação: só os três mais importantes ficam à vista; o resto abre em "+N", para o cartão não virar um mural de etiquetas. */
+const selosDaAcao = (a) => {
+  const itens = [
+    [a.nova ? 0 : null, seloNova(a)],
+    [a.atrasada ? 1 : null, '<span class="pilula atraso">Atrasada</span>'],
+    [a.impedimento_critico ? 2 : null, '<span class="pilula atraso">Impedimento crítico</span>'],
+    [a.aguardando_validacao ? 3 : null, `<span class="pilula validacao">${a.aguardando_validacao === 'chefe' ? 'Aguardando validação do chefe' : `Aguardando aceite ${doTopo()}`}</span>`],
+    [a.parada ? 4 : null, seloParada(a)],
+    [5, `<span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade].toLowerCase()}</span>`],
+    [a.demandada_diretor ? 6 : null, `<span class="pilula diretor" title="Ações demandadas ${peloTopo()} não podem ser arquivadas nem excluídas pela seção">Demandada ${peloTopo()}</span>`],
+    [a.demandante_externo ? 7 : null, `<span class="pilula externa" title="Demanda de entidade fora da subordinação ${aoTopo()}">Demanda externa: ${esc(a.demandante_externo)}</span>`],
+    [!a.impedimento_critico && a.impedimentos_abertos ? 8 : null, '<span class="pilula st-bloqueada">Impedimento aberto</span>'],
+    [a.pedido_pendente ? 9 : null, '<span class="pilula">Pedido de prazo enviado</span>'],
+    [a.checklist_total ? 10 : null, `<span class="pilula" title="Tarefas feitas">☑ ${a.checklist_feitos}/${a.checklist_total}</span>`],
+    [a.responsavel_nome ? 11 : null, `<span class="pilula" title="Responsável pela execução">Responsável: ${esc(a.responsavel_nome)}</span>`],
+    [a.arquivada ? 12 : null, '<span class="pilula enc">Arquivada</span>'],
+    [a.apresentada ? 13 : null, '<span class="pilula" title="Título e detalhamento não mudam mais; o prazo pode ser alterado">Apresentada em reunião</span>'],
+  ].filter(([peso, html]) => peso !== null && html).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
+  const MAX = 3;
+  if (itens.length <= MAX + 1) return itens.join(' ');
+  return `${itens.slice(0, MAX).join(' ')}<details class="selos-mais"><summary class="pilula" title="Mostrar os demais selos">+${itens.length - MAX}</summary><div class="selos-resto">${itens.slice(MAX).join(' ')}</div></details>`;
+};
+
 /** Ações em aberto que pedem um gesto do chefe, cada uma pelo motivo mais urgente: atrasada, sem atualização
  *  há DIAS_SEM_MOVIMENTO dias ou mais, ou com prazo até o dia da reunião. */
 function itensAtencao(abertas, semana) {
@@ -220,20 +243,7 @@ export async function minhasAcoes(raiz) {
             <h3>${esc(a.titulo)}</h3>
             <div class="acao-meta">Prazo <b class="num">${br(a.prazo)}</b> · ${esc(a.secao_sigla)}${a.interna ? ' · ação interna' : ''}${a.demandada_diretor ? ` · demandada em ${br(a.demandado_em || a.criada_em)}` : ''}</div>
           </div>
-          <div class="acao-selos">
-            ${seloNova(a)}
-            ${a.atrasada ? '<span class="pilula atraso">Atrasada</span>' : ''}
-            ${seloParada(a)}
-            ${a.demandada_diretor ? `<span class="pilula diretor" title="Ações demandadas ${peloTopo()} não podem ser arquivadas nem excluídas pela seção">Demandada ${peloTopo()}</span>` : ''}
-            <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade].toLowerCase()}</span>
-            ${a.pedido_pendente ? '<span class="pilula">Pedido de prazo enviado</span>' : ''}
-            ${a.impedimento_critico ? '<span class="pilula atraso">Impedimento crítico</span>' : a.impedimentos_abertos ? '<span class="pilula st-bloqueada">Impedimento aberto</span>' : ''}
-            ${a.checklist_total ? `<span class="pilula" title="Tarefas feitas">☑ ${a.checklist_feitos}/${a.checklist_total}</span>` : ''}
-            ${a.responsavel_nome ? `<span class="pilula" title="Responsável pela execução">Responsável: ${esc(a.responsavel_nome)}</span>` : ''}
-            ${a.demandante_externo ? `<span class="pilula externa" title="Demanda de entidade fora da subordinação ${aoTopo()}">Demanda externa: ${esc(a.demandante_externo)}</span>` : ''}
-            ${a.aguardando_validacao ? `<span class="pilula validacao">${a.aguardando_validacao === 'chefe' ? 'Aguardando validação do chefe' : `Aguardando aceite ${doTopo()}`}</span>` : ''}
-            ${a.arquivada ? '<span class="pilula enc">Arquivada</span>' : ''}
-            ${a.apresentada ? '<span class="pilula" title="Título e detalhamento não mudam mais; o prazo pode ser alterado">Apresentada em reunião</span>' : ''}
+          <div class="acao-selos">${selosDaAcao(a)}
           </div>
         </header>
         ${a.detalhe ? `<p class="acao-detalhe">${esc(a.detalhe)}</p>` : ''}

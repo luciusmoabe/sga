@@ -106,7 +106,8 @@ export function on(raiz, tipo, seletor, fn) {
 }
 
 /** Trilho da Semana: mostra onde estamos entre uma reunião e a seguinte. */
-export function trilho(boot) {
+/** `compacto`: uma linha só (sem a pista), para as telas em que o trilho completo só repete o que já se sabe. */
+export function trilho(boot, { compacto = false } = {}) {
   const semana = boot.semana;
   const diaSemana = boot.reuniao_dia ?? 2;   // dia da semana da reunião (0 = dom … 6 = sáb)
   const horaReuniao = boot.reuniao_hora || '10:00'; // horário da reunião (HH:MM)
@@ -141,7 +142,7 @@ export function trilho(boot) {
   else if (agoraMs < fim) estado = `Prazo regular encerrado; correções disponíveis · reunião em ${falta(fim - agoraMs)}`;
   else estado = 'Hoje é dia de reunião';
   const p = pos(agoraMs) * 100;
-  return `<section class="trilho" aria-label="Trilho da semana">
+  return `<section class="trilho${compacto ? ' compacto' : ''}" aria-label="Trilho da semana">
     <div class="trilho-topo"><b>Reunião de ${nomeDia}, ${br(semana)}, às ${horaReuniao}</b><span class="suave">${estado}</span></div>
     <div class="trilho-pista" role="img" aria-label="Posição de hoje entre uma reunião e a seguinte">
       <div class="trilho-feito" style="width:${p}%"></div>

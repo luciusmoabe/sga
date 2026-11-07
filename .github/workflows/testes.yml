@@ -1,0 +1,40 @@
+name: Testes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Regras, API, migrações, isolamento entre empresas (SQLite em memória) e adaptador PostgreSQL com pool simulado.
+      - run: npm test
+        env:
+          SGC_LINT_EMPRESA: '1'
+      - name: Sintaxe dos módulos da interface
+        run: for f in public/js/*.js; do node --check "$f" || exit 1; done
+
+  postgres:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Cluster PostgreSQL descartável (veja TESTES_POSTGRESQL.md); não usa DATABASE_URL.
+      - name: Instalar binários do PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql postgresql-contrib
+          echo "PG_BIN=$(dirname $(ls /usr/lib/postgresql/*/bin/initdb | tail -1))" >> "$GITHUB_ENV"
+      - run: npm run test:postgres

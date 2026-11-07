@@ -5,6 +5,8 @@ Apoia a reunião presencial de terça-feira, 10h, entre o Diretor e os chefes de
 
 Este é um **protótipo com dados fictícios**, feito para validar o fluxo com o Diretor antes de construir a versão definitiva. Não use dados reais nele.
 
+A documentação completa (visão geral, guia do usuário, regras de negócio, arquitetura, API, banco de dados, operação e glossário) está em [docs/](docs/README.md).
+
 ## Como rodar
 
 Requisitos: Node.js 22.12 ou superior (testado em Node 24.11.1).
