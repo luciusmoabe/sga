@@ -38,3 +38,18 @@ jobs:
           sudo apt-get install -y postgresql postgresql-contrib
           echo "PG_BIN=$(dirname $(ls /usr/lib/postgresql/*/bin/initdb | tail -1))" >> "$GITHUB_ENV"
       - run: npm run test:postgres
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Jornadas críticas no Chrome de verdade (o ubuntu-latest já traz o google-chrome) e acessibilidade automática (axe).
+      # No CI a falta do Chrome é erro, não "teste pulado".
+      - run: npm run test:e2e
+        env:
+          CHROME_PATH: /usr/bin/google-chrome

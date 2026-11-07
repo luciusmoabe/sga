@@ -335,7 +335,7 @@ function cascaMovel(u, menu) {
   const rotuloPerfil = `${PERFIL[u.perfil]}${est.boot?.secao ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}`;
   return `<header class="topo-movel">
       <img src="/imagens/logo-agilis.png" alt="Agilis" class="topo-movel-logo">
-      <button type="button" class="topo-movel-conta" data-abrir-mais aria-label="Conta e mais opções">${esc(iniciais(u.nome))}</button>
+      <button type="button" class="topo-movel-conta" data-abrir-mais aria-label="${esc(iniciais(u.nome))}, conta e mais opções">${esc(iniciais(u.nome))}</button>
     </header>
     <nav class="abas-movel" aria-label="Navegação principal">
       ${abas.map(([rota, rotulo]) => `<a href="#/${rota}" data-rota="${rota}">${ICONES[rota] || ''}<span>${rotulo}</span>${selo(rota)}</a>`).join('')}

@@ -21,7 +21,8 @@
     "senha:redefinir": "node server/redefinir-senha.js",
     "admin:secao": "node server/secao-administrador.js",
     "test": "node --test test/*.test.js",
-    "test:postgres": "node --test test/postgres/*.test.js"
+    "test:postgres": "node --test test/postgres/*.test.js",
+    "test:e2e": "node --test --test-concurrency=1 --test-timeout=120000 test/e2e/*.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
@@ -30,5 +31,9 @@
     "express": "^4.19.2",
     "pg": "^8.23.0",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "axe-core": "^4.14.0",
+    "puppeteer-core": "^23.11.1"
   }
 }

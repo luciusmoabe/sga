@@ -9,7 +9,7 @@
   --bg:       #f7f8f5;
   --ink:      #1e2e22;
   --ink-2:    #2e7a4a;
-  --muted:    #6b7d6f;
+  --muted:    #5f6f63; /* contraste ≥ 4,5:1 (WCAG AA) sobre todos os fundos claros; as cores do semáforo abaixo seguem a mesma regra */
   --card:     #ffffff;
   --pale:     #f0f5f1;
   --line:     #e2e8e0;
@@ -21,11 +21,11 @@
   --green-bg: #e6f2eb;
 
   /* Semáforo — idêntico à imagem */
-  --verde:       #02911F;
+  --verde:       #027d1b;
   --verde-bg:    #e6f2eb;
-  --amarelo:     #a07800;
+  --amarelo:     #886600;
   --amarelo-bg:  #F6F66A;
-  --vermelho:    #D1003B;
+  --vermelho:    #cb0039;
   --vermelho-bg: #fadfdb;
 
   /* Azul-bg reutilizado como verde-pale */
