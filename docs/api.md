@@ -123,6 +123,13 @@ Onde a coluna diz "regra na rota", a rota não usa `permit`: a decisão de quem 
 | GET `/avisos` | D, Adm | Lista |
 | POST/PATCH/DELETE `/avisos[/:id]` | D, Adm | Gerencia (exclusão definitiva) |
 
+## Operação (sem sessão)
+
+| Rota | Quem | Função |
+| --- | --- | --- |
+| GET `/saude` | público | Confere que o banco responde; para monitores |
+| GET/POST `/interno/lembretes` | agendador, com `Authorization: Bearer <segredo>` | Roda os lembretes da semana. Sem `SGC_CRON_SECRET`/`CRON_SECRET` a rota não existe (404). `?ensaio=1` só calcula. Não devolve e-mails |
+
 ## Produtividade e plataforma
 
 | Rota | Quem | Função |

@@ -2,8 +2,9 @@ import express from 'express';
 import compression from 'compression';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { falha } from './helpers.js';
+import { rodarLembretes } from './lembretes.js';
 import { criarContexto } from './contexto.js';
 import { rotasAcoes } from './rotas-acoes.js';
 import { rotasEstrutura } from './rotas-estrutura.js';
@@ -38,6 +39,23 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth } =
     res.set('X-Request-Id', req.id);
     next();
   });
+  // Lembretes da semana: chamado por um agendador (cron da hospedagem), sem sessão, só com o segredo no cabeçalho
+  // `Authorization: Bearer ...`. Sem SGC_CRON_SECRET (ou CRON_SECRET, que a Vercel envia sozinha) a rota não existe.
+  // `?ensaio=1` só calcula o que seria enviado. Não devolve e-mails, só contagens e identificadores.
+  const resumoDe = (s) => createHash('sha256').update(String(s)).digest();
+  const lembretes = async (req, res, next) => {
+    try {
+      const segredo = process.env.SGC_CRON_SECRET || process.env.CRON_SECRET || '';
+      res.set('Cache-Control', 'no-store');
+      if (!segredo) return res.status(404).json({ erro: 'Rota não encontrada.' });
+      const enviado = (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
+      if (!timingSafeEqual(resumoDe(enviado), resumoDe(segredo))) return res.status(401).json({ erro: 'Não autorizado.' });
+      const resultado = await rodarLembretes(db, { ensaio: req.query.ensaio === '1', origem: process.env.SGC_PUBLIC_ORIGIN || '' });
+      res.json({ ok: true, empresas: resultado });
+    } catch (e) { next(e); }
+  };
+  app.get('/api/interno/lembretes', lembretes);
+  app.post('/api/interno/lembretes', lembretes);
   // Verificação de saúde (sem sessão e sem dados): serve a monitores e à implantação. Confere só que o banco responde.
   app.get('/api/saude', async (req, res) => {
     try { await db.prepare('select 1 as ok').get(); res.set('Cache-Control', 'no-store').json({ ok: true }); }

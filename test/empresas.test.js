@@ -32,7 +32,8 @@ async function bancoAntes(t) {
 const tabelas = async (db) => (await db.prepare("select name from sqlite_master where type = 'table' and name not like 'sqlite_%' order by name").all()).map((r) => r.name);
 async function fotografia(db) {
   const f = {};
-  for (const tabela of (await tabelas(db)).filter((n) => !['empresas', 'schema_migrations'].includes(n))) {
+  // `lembretes_enviados` nasceu na migração 26, depois desta comparação (não existia no banco "antes").
+  for (const tabela of (await tabelas(db)).filter((n) => !['empresas', 'schema_migrations', 'lembretes_enviados'].includes(n))) {
     f[tabela] = await db.prepare(`select * from ${tabela} order by 1, 2`).all();
   }
   return f;
@@ -48,7 +49,7 @@ test('migração 22 mantém todos os dados do órgão atual, sem alterar nenhum,
   const antes = await fotografia(db);
   assert.ok(Object.values(antes).filter((l) => l.length).length >= 12, 'o cenário tem dados em várias tabelas');
 
-  assert.deepEqual(await aplicarMigracoes(db), [22, 23, 24, 25]);
+  assert.deepEqual(await aplicarMigracoes(db), [22, 23, 24, 25, 26]);
 
   const depois = await fotografia(db);
   assert.deepEqual(Object.keys(depois), Object.keys(antes), 'nenhuma tabela some');
@@ -90,7 +91,7 @@ test('depois da contração só valem as chaves únicas por empresa, e os dados 
   for (const nome of ['uq_config_empresa_chave', 'uq_reuniao_em_andamento_empresa', 'uq_reuniao_em_andamento']) assert.ok(indices22.includes(nome), `${nome} existe na versão 22`);
   const antes = { config: await db.prepare('select * from config order by chave').all(), reunioes: await db.prepare('select * from reunioes').all() };
 
-  assert.deepEqual(await aplicarMigracoes(db), [23, 24, 25]);
+  assert.deepEqual(await aplicarMigracoes(db), [23, 24, 25, 26]);
   const indices = (await db.prepare("select name from sqlite_master where type = 'index'").all()).map((i) => i.name);
   assert.ok(!indices.includes('uq_reuniao_em_andamento'), 'a chave global de reunião em andamento caiu');
   assert.ok(indices.includes('uq_reuniao_em_andamento_empresa') && RAIZES.filter((r) => r !== 'config').every((r) => indices.includes(`idx_${r}_empresa`)));

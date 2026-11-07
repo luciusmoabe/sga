@@ -8,6 +8,7 @@ import { aplicarEmpresas } from './migration-empresas.js';
 import { aplicarContracao } from './migration-contracao.js';
 import { aplicarPlataforma } from './migration-plataforma.js';
 import { aplicarProdutividade } from './migration-produtividade.js';
+import { aplicarLembretes } from './migration-lembretes.js';
 import { aplicarDiretoriaAdjunta } from './migration-diretoria-adjunta.js';
 import { aplicarPrazosEReuniao } from './migration-prazos-reuniao.js';
 import { aplicarMovimentacao } from './migration-movimentacao.js';
@@ -326,6 +327,13 @@ const MIGRACOES = [
     id: 25, nome: 'produtividade',
     async aplicar(db) {
       await aplicarProdutividade(db);
+    },
+  },
+  {
+    id: 26, nome: 'lembretes_enviados',
+    async aplicar(db) {
+      await aplicarLembretes(db);
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },
 ];

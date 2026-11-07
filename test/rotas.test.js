@@ -17,6 +17,8 @@ const ESPERADAS = [
   'GET /api/atualizacao',
   'GET /api/auth/config',
   'GET /api/saude',
+  'GET /api/interno/lembretes',
+  'POST /api/interno/lembretes',
   'GET /api/auth/empresas',
   'GET /api/avisos',
   'GET /api/avisos/atual',

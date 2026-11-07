@@ -43,6 +43,7 @@ Este documento descreve as tabelas por finalidade. Para colunas exatas, consulte
 | `reuniao_informacoes` | Informações registradas durante ou depois da reunião |
 | `ata_sugestoes`, `ata_revisoes` | Sugestões de revisão da ata publicada e suas respostas |
 | `avisos` | Quadro de avisos com janela de vigência |
+| `lembretes_enviados` | Lembretes por e-mail já enviados; a chave única impede repetir |
 | `config` | Configuração por empresa (chave/valor): dia e hora da reunião, frequência dos combinados, vocabulário, cabeçalho e brasões da ata |
 | `schema_migrations` | Versões de migração aplicadas |
 
@@ -79,6 +80,7 @@ Cada versão aplicada é registrada em `schema_migrations`. **Nunca altere uma v
 | 23 | `contracao_multiempresa` | Chaves únicas por empresa (contração) |
 | 24 | `perfil_plataforma` | Perfil Plataforma |
 | 25 | `produtividade` | Esforço, devoluções e início da execução |
+| 26 | `lembretes_enviados` | Registro dos lembretes enviados (um por empresa, semana, tipo e pessoa) |
 
 ## Executando migrações
 
