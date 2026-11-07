@@ -58,6 +58,7 @@ O modelo está em `.env.example`. **Nunca versione `.env`, `.env.local` nem chav
 | `npm run plataforma:criar` | Cria o usuário do perfil Plataforma |
 | `npm test` | Suíte principal |
 | `npm run test:postgres` | Integração com PostgreSQL descartável |
+| `npm run medir -- 20000` | Mede tempo e tamanho das respostas com N ações fictícias (banco em memória) |
 | `npm run test:e2e` | Jornadas críticas e acessibilidade (axe) no Chrome, com dados fictícios em memória |
 | `npm run push:chaves` | Gera as chaves VAPID dos avisos no celular |
 
@@ -107,6 +108,7 @@ Os usuários recebem no próprio celular o lembrete da atualização semanal, se
 - `npm test` (Node test runner, `test/*.test.js`): regras, API, concorrência em SQLite em memória, migrações, isolamento entre empresas e adaptador PostgreSQL com pool simulado.
 - `npm run test:postgres`: cluster PostgreSQL temporário, sem usar `DATABASE_URL`. Exige binários locais (`PG_BIN=/caminho/bin`). Veja [TESTES_POSTGRESQL.md](../TESTES_POSTGRESQL.md). Rode ao alterar transações, migrações ou SQL compartilhado.
 - `npm run test:e2e`: abre o Chrome de verdade (`CHROME_PATH` aponta o executável; sem ele procura nos lugares comuns e **pula** os testes, exceto no CI, onde a falta do Chrome é erro). Cobre as jornadas críticas (Painel, direcionar ação, concluir ação com tempo, atualização semanal, link de ação, reunião do início ao fim) e roda o **axe** (WCAG 2.0/2.1 A e AA) em 25 telas, no computador e no celular: nenhuma violação é aceita. Corrigir uma tela que o axe reprovar vale mais do que registrá-la como "conhecida" (`CONHECIDAS` em `test/e2e/acessibilidade.test.js`).
+- - **Injeção de HTML** (`test/e2e/injecao.test.js`): grava uma carga maliciosa em todo campo de texto de usuário (títulos, comentários, nomes, atas…), percorre as telas e reprova se algo virar HTML. Texto de usuário entra na tela sempre por `esc()`; este teste pega o esquecimento.
 - Aspecto, TV e celular de verdade: continuam sendo conferidos por olho, em 1920×1080 (Modo Reunião) e 390×844 (celular).
 - Sempre rode `npm test` depois de mexer em `server/`. Rota nova entra com teste (`test/rotas.test.js`, `test/api.test.js`; isolamento em `test/isolamento-empresas.test.js`).
 

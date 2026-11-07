@@ -8,6 +8,8 @@ import { listaDe, nomePlural, nomeTipo, usaTipo } from '../public/js/vocabulario
 /** "Centros, Coordenações e Diretoria Adjunta", com os nomes da empresa. */
 const tiposDeDestino = (v) => listaDe([nomePlural(v, 'centro'), ...(usaTipo(v, 'coordenacao') ? [nomePlural(v, 'coordenacao')] : []), ...(usaTipo(v, 'diretoria_adjunta') ? [nomeTipo(v, 'diretoria_adjunta')] : [])]);
 
+const MAX_POR_PAGINA = 500; // GET /api/acoes?limite=
+
 export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtual }) {
   const deSecao = (user) => PERFIS_DE_SECAO.includes(user.perfil); // chefe ou membro: trabalham numa seção
   // Ações que a pessoa enxerga (e altera, conforme o perfil). O chefe e o membro, a árvore da própria seção; a gestão e a
@@ -424,7 +426,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
 
   const STATUS_OK = new Set(STATUS);
 
-  app.get('/api/acoes', h(async (req) => {
+  app.get('/api/acoes', h(async (req, res) => {
     const v = req.query.escopo === 'todos' ? await visiveisLeitura(req.user) : await visiveisAcoes(req.user);
     const where = [v.where];
     const params = [...v.params];
@@ -448,10 +450,19 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       else if (sit === 'encerradas') where.push('a.encerrada = 1');
     }
     if (f.q) { where.push('(a.titulo like ? or a.detalhe like ?)'); params.push(`%${f.q}%`, `%${f.q}%`); }
-    return marcarLeitura(req.user, await marcarNovas(req.user, (await q(`${SELECT_ACAO} where ${where.join(' and ')}
+    let linhas = await q(`${SELECT_ACAO} where ${where.join(' and ')}
               order by a.encerrada, case a.status when 'concluida' then 1 else 0 end,
-                       case when a.status != 'concluida' and a.prazo < '${hoje()}' then 0 else 1 end, a.prazo, a.id`, ...params))
-      .map((a) => ({ ...acaoOut(a), ...permissoes(req.user, a) }))));
+                       case when a.status != 'concluida' and a.prazo < '${hoje()}' then 0 else 1 end, a.prazo, a.id`, ...params);
+    // Paginação opcional (?limite=N&offset=M; no máximo 500 por página). Sem `limite` a resposta é a lista inteira, como sempre foi:
+    // nenhuma tela mudou. O total vem em X-Total-Count para quem pagina saber onde está.
+    res.set('X-Total-Count', String(linhas.length));
+    if (f.limite !== undefined) {
+      const limite = Number(f.limite), offset = f.offset === undefined ? 0 : Number(f.offset);
+      if (!Number.isInteger(limite) || limite < 1 || limite > MAX_POR_PAGINA) throw falha(400, `Informe um limite entre 1 e ${MAX_POR_PAGINA}.`);
+      if (!Number.isInteger(offset) || offset < 0) throw falha(400, 'Informe um offset de 0 em diante.');
+      linhas = linhas.slice(offset, offset + limite);
+    }
+    return marcarLeitura(req.user, await marcarNovas(req.user, linhas.map((a) => ({ ...acaoOut(a), ...permissoes(req.user, a) }))));
   }));
 
   app.post('/api/acoes', permit('chefe', 'membro', 'diretor', 'apoio', 'administrador'), h(async (req, res) => {

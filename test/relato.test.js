@@ -262,3 +262,17 @@ test('bootstrap: diz se a unidade já enviou a atualização da semana, só para
   assert.equal((await call(COF, 'GET', '/bootstrap')).data.atualizacao_enviada, true);
   assert.equal((await call(CHEFE_CPE, 'GET', '/bootstrap')).data.atualizacao_enviada, true, 'a outra unidade segue com o próprio relato');
 });
+
+test('painel: traz há quantos dias está a ação mais atrasada de cada unidade (só a contagem, nunca o título)', async (t) => {
+  const { call, nova } = await montar(t);
+  const antes = (await call(DIRETOR, 'GET', `/painel?semana=${SEMANA}`)).data.itens.find((i) => i.secao.id === 1);
+  await nova(1, 'P-atraso-antigo', { prazo: '2026-08-01' }); // 51 dias antes de 21/09
+  await nova(1, 'P-atraso-recente', { prazo: '2026-09-20' });
+  await nova(1, 'P-concluida-antiga', { prazo: '2026-07-01', status: 'concluida', concluida: '2026-07-02T12:00:00.000Z' }); // concluída não conta
+  const depois = (await call(DIRETOR, 'GET', `/painel?semana=${SEMANA}`)).data.itens.find((i) => i.secao.id === 1);
+  assert.equal(depois.pior_atraso_dias, 51);
+  assert.equal(depois.atrasadas, antes.atrasadas + 2);
+  const sem = (await call(DIRETOR, 'GET', `/painel?semana=${SEMANA}`)).data.itens.find((i) => i.atrasadas === 0);
+  if (sem) assert.equal(sem.pior_atraso_dias, null, 'sem ação atrasada não há "pior atraso"');
+  assert.doesNotMatch(JSON.stringify(depois), /P-atraso-antigo/, 'o painel não vaza o título');
+});

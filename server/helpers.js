@@ -1,6 +1,6 @@
 import { DIAS_SEM_MOVIMENTO, addDays, agora, atualizacaoPendente, semaforo } from './logic.js';
 import { porNecessidade as compararNecessidade } from '../public/js/regras.js';
-import { dataNoFuso, instante } from '../public/js/datas.js';
+import { dataNoFuso, diasEntre, instante } from '../public/js/datas.js';
 import { empresaAtual } from './empresa.js';
 
 export class HttpError extends Error {
@@ -120,11 +120,12 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
          coalesce(sum(case when status != 'concluida' and prazo >= ? and prazo <= ? then 1 end), 0) vencendo,
          coalesce(sum(case when status != 'concluida' then 1 end), 0) abertas,
          coalesce(sum(case when status != 'concluida' and prazo < ? and interna = 1 and compartilhada = 0 then 1 end), 0) atrasadas_internas,
-         coalesce(sum(case when status != 'concluida' and (interna = 0 or compartilhada = 1) and coalesce(movimentada_em, criada_em) < ? then 1 end), 0) paradas
+         coalesce(sum(case when status != 'concluida' and (interna = 0 or compartilhada = 1) and coalesce(movimentada_em, criada_em) < ? then 1 end), 0) paradas,
+         min(case when status != 'concluida' and prazo < ? then prazo end) prazo_mais_antigo
        from acoes
        where encerrada = 0 and arquivada = 0 and empresa_id = ? and secao_id in (${marks(todosIds)})
        group by secao_id`,
-    ).all(hoje, hoje, ate, hoje, limiteParada, empresaAtual(), ...todosIds),
+    ).all(hoje, hoje, ate, hoje, limiteParada, hoje, empresaAtual(), ...todosIds),
     // 2: última atualização de cada seção, incluindo subseções
     db.prepare(
       `select a.*
@@ -172,8 +173,10 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
   for (const row of statsRows) {
     const cId = idParaCentro.get(row.secao_id);
     if (cId == null) continue;
-    const prev = statsMap.get(cId) ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0, paradas: 0 };
+    const prev = statsMap.get(cId) ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0, paradas: 0, prazo_mais_antigo: null };
     statsMap.set(cId, {
+      // O prazo mais antigo entre as ações atrasadas da unidade e das subseções (só uma data agregada, nunca o título).
+      prazo_mais_antigo: [prev.prazo_mais_antigo, row.prazo_mais_antigo].filter(Boolean).sort()[0] ?? null,
       atrasadas:          prev.atrasadas          + Number(row.atrasadas),
       vencendo:           prev.vencendo           + Number(row.vencendo),
       abertas:            prev.abertas            + Number(row.abertas),
@@ -199,7 +202,7 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
 
   const now = agora();
   return centros.map((c) => {
-    const st  = statsMap.get(c.id)   ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0, paradas: 0 };
+    const st  = statsMap.get(c.id)   ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0, paradas: 0, prazo_mais_antigo: null };
     const at  = atMap.get(c.id)      ?? null;
     const impedimentosCriticos = criticosMap.get(c.id) ?? 0;
     // Crítico = impedimento crítico aberto em ação em curso. A marca do relato semanal antigo ainda vale
@@ -216,6 +219,7 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
       critico,
       impedimentos_criticos: impedimentosCriticos,
       atrasadas:          st.atrasadas,
+      pior_atraso_dias:   st.atrasadas && st.prazo_mais_antigo ? diasEntre(st.prazo_mais_antigo, hoje) : null, // há quantos dias está a ação mais atrasada
       vencendo:           st.vencendo,
       abertas:            st.abertas,
       atrasadas_internas: st.atrasadas_internas,

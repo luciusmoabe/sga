@@ -21,7 +21,10 @@ Origem: [avaliação especializada](avaliacao-especialista.md). Trabalho em bran
 | 3 | Ficha da ação com endereço próprio e seções recolhíveis (U4) | feito: link `#/acao/ID`, ficha na URL (`?acao=ID`), botão "Copiar link da ação", Impedimentos e Comentários recolhíveis. Segue como diálogo (não virou tela cheia) |
 | 3 | Teste de ponta a ponta com axe (E1, acessibilidade): 7 jornadas e 25 telas, job `e2e` no CI | feito (puppeteer-core com o Chrome do sistema, sem baixar navegador). O axe achou contraste insuficiente em todas as telas e um rótulo de botão no celular: corrigidos |
 | 3 | MFA, trilha de auditoria, LGPD (3.5) | a fazer |
-| 4 | Camada de domínio, `html` seguro, perfis sem `CHECK`, paginação (E2–E6) | a fazer |
+| 4 | **XSS (E2)**: teste dinâmico de injeção de HTML (`test/e2e/injecao.test.js`): grava uma carga maliciosa em 14 tipos de campo, percorre ~40 telas e fichas e reprova se algo virar HTML; verificado por mutação (tirar um `esc()` de propósito o faz falhar). Hoje: nenhuma falha | feito. Substitui o `html` com escape automático, que exigiria reescrever ~60 pontos sem ganho adicional |
+| 4 | **Desempenho (E6)**: medição com 20 mil ações (`npm run medir`) e paginação opcional compatível em `GET /api/acoes` (`?limite=&offset=`, total em `X-Total-Count`) | feito. Números abaixo |
+| 4 | **Pior atraso no Painel** (G2): "1 ação atrasada · a pior há 5 dias" (`pior_atraso_dias` em `/api/painel`, só a contagem de dias, nunca o título) | feito, com teste |
+| 4 | Camada de domínio de `rotas-acoes.js` (E3); perfis sem `CHECK` (E4); PostgreSQL também em desenvolvimento (E5) | **não feito**: refatorações grandes e arriscadas sem ganho imediato para o usuário; ver "Por que ficaram de fora" |
 
 ## Lembretes (G1): o que existe e o que falta
 
@@ -49,3 +52,24 @@ Desenho original:
 **Verificado:** testes automáticos (rotas, validação, limite de aparelhos, remoção de assinaturas encerradas, motor) e, no Chrome, ativação e envio de um aviso real aceito pelo serviço do Google. **Não verificado:** a chegada do aviso num celular de verdade (Android e, principalmente, iPhone com o app instalado). Faça esse teste antes de confiar.
 
 **Limites a conhecer:** no iPhone só com o app instalado; o usuário pode bloquear as notificações; o navegador pode atrasar a entrega (a mensagem vale por 6 horas).
+
+## Desempenho medido (E6)
+
+`npm run medir -- N` cria N ações fictícias num banco SQLite em memória e cronometra as respostas (mediana de 3 chamadas; o Diretor vê todas as ações).
+
+| Rota | 2 mil ações | 20 mil ações |
+| --- | --- | --- |
+| `/api/bootstrap` | 6 ms | 8 ms |
+| `/api/painel` | 7 ms | 26 ms |
+| `/api/acoes` (Diretor, lista inteira) | 121 ms, 2,4 MB | 1.166 ms, 24 MB |
+| `/api/acoes` (um chefe) | 14 ms, 272 KB | 205 ms, 2,7 MB |
+| `/api/pauta` | 17 ms | 220 ms |
+| `/api/produtividade` | 37 ms | 561 ms |
+
+Conclusão: até alguns milhares de ações abertas nada pesa. O único ponto que cresce sem limite é a lista inteira de ações; por isso a API ganhou paginação opcional. Nenhuma tela usa `limite` ainda: quando a lista passar de ~5 mil ações, as telas Ações devem paginar. Em PostgreSQL remoto a latência por consulta é maior que no SQLite em memória; repita a medição no banco real antes de decidir índices.
+
+## Por que ficaram de fora (E3, E4, E5)
+
+- **Camada de domínio em `rotas-acoes.js` (1.000+ linhas)**: é reorganização sem mudança de comportamento. O risco (regras de autoria, permissão e validação, todas cobertas por testes, mas numa área sensível) supera o ganho hoje. Faça junto com a próxima mudança grande nessas regras, não isoladamente.
+- **Perfis sem `CHECK` no banco (E4)**: cada perfil novo exigiu recriar `usuarios` (migrações 8, 19, 21, 24). Em PostgreSQL basta soltar a restrição; em SQLite exige recriar a tabela. Só vale na próxima vez que um perfil novo for necessário.
+- **PostgreSQL também em desenvolvimento (E5)**: o CI já roda os testes de PostgreSQL de verdade (job `postgres`); trocar o ambiente local seria conforto, não segurança.

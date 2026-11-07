@@ -46,7 +46,7 @@ function navSemana(rota, semana) {
 function motivoPrincipal(i) {
   if (i.impedimentos_criticos) return { chave: 'critico', classe: 'ruim', texto: plural(i.impedimentos_criticos, 'impedimento crítico aberto', 'impedimentos críticos abertos') };
   if (i.critico) return { chave: 'critico', classe: 'ruim', texto: 'Impedimento crítico informado' };
-  if (i.atrasadas) return { chave: 'atrasada', classe: 'ruim', texto: plural(i.atrasadas, 'ação atrasada', 'ações atrasadas') };
+  if (i.atrasadas) return { chave: 'atrasada', classe: 'ruim', texto: `${plural(i.atrasadas, 'ação atrasada', 'ações atrasadas')}${i.pior_atraso_dias ? ` · a pior há ${plural(i.pior_atraso_dias, 'dia', 'dias')}` : ''}` };
   if (i.atualizacao_pendente) return { chave: 'pendente', classe: 'atencao', texto: 'Atualização pendente' };
   if (i.vencendo) return { chave: 'vencendo', classe: 'atencao', texto: `${plural(i.vencendo, 'ação vence', 'ações vencem')} em até 2 dias` };
   if (!i.enviada) return { chave: 'aguardando', classe: 'suave', texto: 'Atualização ainda não enviada' };

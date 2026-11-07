@@ -58,7 +58,7 @@ Onde a coluna diz "regra na rota", a rota não usa `permit`: a decisão de quem 
 | POST `/diretrizes` | D, A, Adm | Direciona ação a todos os Centros ou seções escolhidas (com prazo) |
 | GET `/diretrizes` | D, A, Adm | Últimas ações direcionadas, com ciência por seção |
 | POST `/diretrizes/:id/secoes` | D, A, Adm | Acrescenta seções a um direcionamento |
-| GET `/acoes` | qualquer | Lista. Filtros: `situacao`, `prazo`, `origem=externa`, `escopo=todos` |
+| GET `/acoes` | qualquer | Lista. Filtros: `situacao`, `prazo`, `origem=externa`, `escopo=todos`. Paginação opcional: `limite` (1 a 500) e `offset`; o total da lista vem em `X-Total-Count`. Sem `limite`, a lista inteira |
 | POST `/acoes` | C, M, D, A, Adm | Cria ação |
 | GET `/acoes/:id` | qualquer | Detalhe, com `pode_*`, `somente_leitura`, `prazos`, `vistas` |
 | PATCH `/acoes/:id` | regra na rota | Edita título, detalhamento, prazo, status, prioridade, responsável, esforço |
