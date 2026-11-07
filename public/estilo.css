@@ -1386,3 +1386,25 @@ details.secao-rec[open] > summary::before { transform: rotate(90deg); }
 details.secao-rec > summary h3 { margin: 0; }
 details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
 @media (prefers-reduced-motion: reduce) { details.secao-rec > summary::before { transition: none; } }
+
+/* Cartão da unidade no Painel: motivo principal, quatro números e o cartão inteiro clicável. */
+.cartao.centro { position: relative; transition: box-shadow .15s, transform .15s; }
+.cartao.centro:hover { box-shadow: 0 2px 6px rgba(30,46,34,.08), 0 8px 22px rgba(30,46,34,.10); }
+.cartao.centro:focus-within { box-shadow: 0 0 0 2px var(--ink-2); }
+.cartao.centro .ver-detalhe::after { content: ""; position: absolute; inset: 0; border-radius: inherit; } /* o cartão todo é o link */
+.cartao.centro .motivo { margin: 10px 0 8px; font: 700 1.12rem/1.25 var(--head); }
+.cartao.centro .motivo.ruim { color: var(--vermelho); }
+.cartao.centro .motivo.atencao { color: var(--amarelo); }
+.cartao.centro .motivo.ok { color: var(--verde); }
+.cartao.centro .motivo.suave { color: var(--muted); font-weight: 600; }
+.numeros { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0 0 10px; }
+.numeros > div { background: var(--pale); border-radius: 8px; padding: 6px 8px 7px; min-width: 0; }
+.numeros dd { margin: 0; font: 700 1.3rem/1.1 var(--head); }
+.numeros dt { font-size: .7rem; line-height: 1.2; color: var(--muted); margin-top: 2px; }
+.numeros .zero dd { color: var(--muted); font-weight: 500; }
+.numeros .ruim { background: var(--vermelho-bg); }
+.numeros .ruim dd, .numeros .ruim dt { color: var(--vermelho); }
+.numeros .atencao { background: #fbf6d4; }
+.numeros .atencao dd, .numeros .atencao dt { color: var(--amarelo); }
+@media (prefers-reduced-motion: reduce) { .cartao.centro { transition: none; } }
+@media (max-width: 760px) { .numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

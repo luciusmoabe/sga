@@ -16,6 +16,7 @@ Origem: [avaliação especializada](avaliacao-especialista.md). Trabalho em bran
 | 2 | Agrupar ações por diretriz na tela Ações (G4a) | feito, com testes |
 | 2 | Ensaio de TV e ajuste de tamanhos (U2) | depende da TV real |
 | 3 | Tendência por unidade e calibragem do semáforo (G2, G3) | decisão (limiares) |
+| 3 | Hierarquia do cartão da unidade no Painel (U1, G2 em parte): motivo principal em destaque, quatro números fixos (atrasadas, vencem em 2 dias, pedidos de prazo, paradas), detalhe em letra pequena e cartão inteiro clicável | feito. **Falta** o "há quantos dias" do pior atraso, que exige mudar a consulta do painel |
 | 3 | Ficha da ação com endereço próprio e seções recolhíveis (U4) | feito: link `#/acao/ID`, ficha na URL (`?acao=ID`), botão "Copiar link da ação", Impedimentos e Comentários recolhíveis. Segue como diálogo (não virou tela cheia) |
 | 3 | Teste de ponta a ponta com axe (E1, acessibilidade): 7 jornadas e 25 telas, job `e2e` no CI | feito (puppeteer-core com o Chrome do sistema, sem baixar navegador). O axe achou contraste insuficiente em todas as telas e um rótulo de botão no celular: corrigidos |
 | 3 | MFA, trilha de auditoria, LGPD (3.5) | a fazer |

@@ -42,6 +42,17 @@ function navSemana(rota, semana) {
     <a class="btn btn-sec" href="#/${rota}?semana=${addDias(semana, 7)}" aria-label="Próxima semana">→</a>`;
 }
 
+/** A razão mais importante da cor da unidade, em uma linha. A ordem é a da gravidade: impedimento crítico, atraso, atualização pendente, prazo chegando. */
+function motivoPrincipal(i) {
+  if (i.impedimentos_criticos) return { chave: 'critico', classe: 'ruim', texto: plural(i.impedimentos_criticos, 'impedimento crítico aberto', 'impedimentos críticos abertos') };
+  if (i.critico) return { chave: 'critico', classe: 'ruim', texto: 'Impedimento crítico informado' };
+  if (i.atrasadas) return { chave: 'atrasada', classe: 'ruim', texto: plural(i.atrasadas, 'ação atrasada', 'ações atrasadas') };
+  if (i.atualizacao_pendente) return { chave: 'pendente', classe: 'atencao', texto: 'Atualização pendente' };
+  if (i.vencendo) return { chave: 'vencendo', classe: 'atencao', texto: `${plural(i.vencendo, 'ação vence', 'ações vencem')} em até 2 dias` };
+  if (!i.enviada) return { chave: 'aguardando', classe: 'suave', texto: 'Atualização ainda não enviada' };
+  return { chave: 'ok', classe: 'ok', texto: 'Sem pendências' };
+}
+
 // ---------- Painel da semana ----------
 export async function painel(raiz, { q }) {
   const semana = q.get('semana') || est.boot.semana;
@@ -65,22 +76,24 @@ export async function painel(raiz, { q }) {
     </div>
     <div class="espaco"></div>
     <div class="grade">${itens.map((i) => {
-      const fatos = [
-        i.enviada ? `<span>Atualização enviada em ${dataHora(i.enviada_em)}</span>` : i.atualizacao_pendente ? '<span class="atencao">Atualização pendente</span>' : '',
-        i.impedimentos_criticos ? `<span class="ruim">${plural(i.impedimentos_criticos, 'impedimento crítico aberto', 'impedimentos críticos abertos')}</span>`
-          : i.critico ? '<span class="ruim">Impedimento crítico informado</span>' : '',
-        i.atrasadas ? `<span class="ruim">${plural(i.atrasadas, 'ação atrasada', 'ações atrasadas')}</span>` : '',
-        i.vencendo ? `<span class="atencao">${plural(i.vencendo, 'ação vence', 'ações vencem')} em até 2 dias</span>` : '',
+      const motivo = motivoPrincipal(i);
+      // Só o que não está no motivo nem nos números aparece em letra pequena.
+      const detalhes = [
+        i.enviada ? `<span>Atualização enviada em ${dataHora(i.enviada_em)}</span>` : i.atualizacao_pendente && motivo.chave !== 'pendente' ? '<span class="atencao">Atualização pendente</span>' : '',
+        motivo.chave !== 'critico' && (i.impedimentos_criticos || i.critico)
+          ? `<span class="ruim">${i.impedimentos_criticos ? plural(i.impedimentos_criticos, 'impedimento crítico aberto', 'impedimentos críticos abertos') : 'Impedimento crítico informado'}</span>` : '',
         i.atrasadas_internas ? `<span class="suave">Resumo: ${i.atrasadas_internas} atrasada(s) em subseções (detalhe é da seção)</span>` : '',
-        i.pedidos_pendentes ? `<span class="atencao">${plural(i.pedidos_pendentes, 'pedido de novo prazo', 'pedidos de novo prazo')}</span>` : '',
-        i.paradas ? `<span class="atencao">${plural(i.paradas, 'ação', 'ações')} sem atualização há ${DIAS_SEM_MOVIMENTO}+ dias</span>` : '',
         `<span class="suave num">Tempo registrado na semana: ${fmtMin(i.tempo_semana)}</span>`,
       ].join('');
+      // Quatro números sempre no mesmo lugar: o olho compara as unidades sem ler. Zero fica apagado; acima de zero ganha a cor e o texto do rótulo.
+      const numero = (rotulo, n, classe) => `<div class="${n ? classe : 'zero'}"><dd class="num">${n}</dd><dt>${rotulo}</dt></div>`;
       return `<article class="cartao centro cor-${i.cor}">
         <div class="linha entre"><h3>${esc(i.secao.nome)}</h3>${sem(i.cor)}</div>
         <div class="meta">${esc(i.secao.sigla || '')} · ${i.secao.tipo === DIRETORIA_ADJUNTA ? 'Diretoria Adjunta' : esc(i.secao.chefe_nome || 'sem chefe atribuído')}${i.secao.na_reuniao ? '' : ' · fora da reunião'}${i.subsecoes ? ` · ${plural(i.subsecoes, 'subseção', 'subseções')}` : ''}</div>
-        <div class="fatos">${fatos}</div>
-        <div><a class="btn btn-sec btn-mini" href="#/centro/${i.secao.id}?semana=${semana}">Ver relato e ações</a></div>
+        <p class="motivo ${motivo.classe}">${motivo.texto}</p>
+        <dl class="numeros" aria-label="Números da unidade">${numero('Atrasadas', i.atrasadas, 'ruim')}${numero('Vencem em 2 dias', i.vencendo, 'atencao')}${numero(i.pedidos_pendentes === 1 ? 'Pedido de prazo' : 'Pedidos de prazo', i.pedidos_pendentes, 'atencao')}${numero(`Paradas ${DIAS_SEM_MOVIMENTO}+ dias`, i.paradas, 'atencao')}</dl>
+        <div class="fatos">${detalhes}</div>
+        <div><a class="btn btn-sec btn-mini ver-detalhe" href="#/centro/${i.secao.id}?semana=${semana}">Ver relato e ações</a></div>
       </article>`;
     }).join('')}</div>`;
 }
