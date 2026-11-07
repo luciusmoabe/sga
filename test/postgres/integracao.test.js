@@ -140,7 +140,8 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     assert.equal((await db.prepare('select count(*) n from schema_migrations').get()).n, 2);
     await db.exec(`alter table decisoes drop constraint decisoes_reuniao_id_fkey,
       add constraint decisoes_reuniao_id_fkey foreign key (reuniao_id) references reunioes(id) on delete cascade`);
-    assert.deepEqual(await aplicarMigracoes(db), [3, 4, 5, 6]);
+    // Tudo o que faltava: da versão 3 (as cascatas) até a última, e não só as quatro primeiras.
+    assert.deepEqual(await aplicarMigracoes(db), Array.from({ length: 24 }, (_, i) => i + 3));
     assert.deepEqual(await Promise.all(relacoes.map(([nome]) => db.prepare(`select * from ${nome} order by id`).all())), antes);
     await conferirIntegridade(db);
   });
