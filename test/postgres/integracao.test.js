@@ -38,7 +38,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     const primeira = await db.prepare('select id from acoes order by id limit 1').get();
     await db.prepare('update acoes set acao_pai_id=? where id!=?').run(primeira.id,primeira.id);
     await db.exec(await readFile(new URL('../../scripts/limpar-acoes-piloto.sql',import.meta.url),'utf8'));
-    for (const tabela of ['acoes','acao_comentarios','tempo','pedidos_prazo']) assert.equal((await db.prepare(`select count(*) n from ${tabela}`).get()).n,0);
+    for (const tabela of ['acoes','acao_comentarios','tempo','pedidos_prazo','acao_prazos','acao_vistas']) assert.equal((await db.prepare(`select count(*) n from ${tabela}`).get()).n,0);
     assert.deepEqual(await Promise.all(preservadas.map(tabela=>db.prepare(`select * from ${tabela}`).all())),antes);
   });
 

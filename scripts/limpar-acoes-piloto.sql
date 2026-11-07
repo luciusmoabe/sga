@@ -1,6 +1,7 @@
 -- Agilis / Supabase PostgreSQL
 -- ATENÇÃO: remove TODAS as ações, inclusive concluídas, encerradas e arquivadas,
--- e TODOS os comentários, impedimentos, itens de checklist, lançamentos de tempo e pedidos de prazo associados.
+-- e TODOS os comentários, impedimentos, itens de checklist, lançamentos de tempo, pedidos de prazo, histórico de prazos
+-- e registros de ciência (quem viu a ação) associados.
 -- Faça backup antes de executar e suspenda o uso do app durante a limpeza.
 -- Execute o arquivo inteiro no SQL Editor do projeto correto, como administrador.
 --
@@ -19,6 +20,8 @@ truncate table
   public.acao_checklist,
   public.tempo,
   public.pedidos_prazo,
+  public.acao_prazos,
+  public.acao_vistas,
   public.acoes
 continue identity restrict;
 
