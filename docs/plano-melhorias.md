@@ -12,7 +12,7 @@ Origem: [avaliação especializada](avaliacao-especialista.md). Trabalho em bran
 | 1 | Selos do cartão da ação: três à vista e o resto em "+N" (U5) | feito |
 | 1 | Dica de rolagem nas abas do celular (U8) | feito |
 | 2 | Lembretes e fechamento (G1) | decisão + desenho abaixo |
-| 2 | Agrupar ações por diretriz (G4a) | a fazer |
+| 2 | Agrupar ações por diretriz na tela Ações (G4a) | feito, com testes |
 | 2 | Ensaio de TV e ajuste de tamanhos (U2) | depende da TV real |
 | 3 | Tendência por unidade e calibragem do semáforo (G2, G3) | decisão (limiares) |
 | 3 | Ficha da ação com rota própria e seções recolhíveis (U4) | a fazer |

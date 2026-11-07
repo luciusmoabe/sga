@@ -7,6 +7,7 @@ import {
 } from './ui.js';
 import { abrirAcao, confirmarPrazoNasSecoes } from './acao-comum.js';
 import { itensDoRelato, resumoInternas } from './relato-vista.js';
+import { agruparPorDiretriz, partesDoResumo } from './agrupar-acoes.js';
 import { DIAS_SEM_MOVIMENTO, DIRETORIA_ADJUNTA, ehUnidadeDeAcompanhamento } from './regras.js';
 
 const NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
@@ -226,6 +227,7 @@ export async function acoes(raiz, _p) {
     <div class="cabeca"><div><h1>Ações</h1><div class="sub">Todas as ações direcionadas às seções. Abra uma ação para ver o detalhe.</div></div></div>
     <div class="cartao"><div class="linha filtros-acoes" style="margin-bottom:12px">
       <div class="filtro-busca" style="flex:1;min-width:200px"><label for="f-q">Buscar</label><input id="f-q" type="search" placeholder="Título ou detalhe"></div>
+      <label class="agrupar-opcao"><input type="checkbox" id="f-agrupar" checked> Agrupar por diretriz</label>
       <button type="button" class="btn btn-sec filtros-alternar" aria-expanded="false" aria-controls="filtros-extra">Filtros</button>
       <div class="filtros-extra linha" id="filtros-extra" style="margin:0">
       <div style="min-width:170px"><label for="f-secao">Seção</label><select id="f-secao"><option value="">Todas</option>${secoes.map((s) => `<option value="${s.id}">${esc(s.sigla || s.nome)}</option>`).join('')}</select></div>
@@ -239,16 +241,42 @@ export async function acoes(raiz, _p) {
     const aberto = $('.filtros-acoes', raiz).classList.toggle('filtros-abertos');
     el.setAttribute('aria-expanded', String(aberto));
   });
+  const gruposAbertos = new Set(); // grupos expandidos (só em memória; sobrevive ao recarregar a lista)
   const carregar = async () => {
     const p = new URLSearchParams();
     for (const [k, id] of [['secao', 'f-secao'], ['situacao', 'f-sit'], ['status', 'f-status'], ['origem', 'f-origem'], ['q', 'f-q']]) if ($(`#${id}`, raiz).value) p.set(k, $(`#${id}`, raiz).value);
     const lista = await get(`/acoes?${p}`);
-    $('#lista-acoes', raiz).innerHTML = lista.length ? `<table class="tabela-lista"><thead><tr><th>Ação</th><th>Seção</th><th>Prazo</th><th>Situação</th><th>Tempo</th></tr></thead><tbody>
-      ${lista.map((a) => `<tr class="clicavel" data-acao="${a.id}" tabindex="0"><td><b>${esc(a.titulo)}</b> ${a.demandada_diretor ? '<span class="pilula diretor">Diretriz</span> ' : ''}<span class="pilula prio-${a.prioridade}">${PRIO[a.prioridade]}</span></td>
+    // Dentro de um grupo o título já está no cabeçalho: a linha mostra a seção (e a prioridade), não o título repetido.
+    const linha = (a, filha = false) => `<tr class="clicavel${filha ? ' filha' : ''}" data-acao="${a.id}" tabindex="0"><td><b>${esc(filha ? (a.secao_nome || a.secao_sigla) : a.titulo)}</b> ${a.demandada_diretor && !filha ? '<span class="pilula diretor">Diretriz</span> ' : ''}<span class="pilula prio-${a.prioridade}">${PRIO[a.prioridade]}</span></td>
         <td data-rotulo="Seção">${esc(a.secao_sigla)}</td><td class="num" data-rotulo="Prazo">${br(a.prazo)}</td><td data-rotulo="Situação">${pilulaStatus(a)}${a.pedido_pendente ? ' <span class="pilula">Pediu novo prazo</span>' : ''}</td>
-        <td class="num" data-rotulo="Tempo">${fmtMin(a.tempo_total)}</td></tr>`).join('')}</tbody></table>` : vazio('Nenhuma ação encontrada', 'Ajuste os filtros ou direcione uma nova ação.');
+        <td class="num" data-rotulo="Tempo">${fmtMin(a.tempo_total)}</td></tr>`;
+    // Resumo do grupo: contagens por situação, cada uma com texto (a cor nunca é a única pista).
+    const CLASSE_RESUMO = { atrasadas: 'atraso', bloqueadas: 'st-bloqueada', emAndamento: 'st-em_andamento', aFazer: 'st-a_fazer', concluidas: 'st-concluida' };
+    const prazoDoGrupo = (r) => (r.prazoMin === r.prazoMax ? `prazo ${br(r.prazoMin)}` : `prazos de ${br(r.prazoMin)} a ${br(r.prazoMax)}`);
+    const grupo = (g) => {
+      const aberto = gruposAbertos.has(g.diretrizId);
+      return `<tbody class="grupo" data-grupo="${g.diretrizId}">
+        <tr class="grupo-cab"><td colspan="5"><button type="button" class="grupo-alternar" data-alternar-grupo="${g.diretrizId}" aria-expanded="${aberto}">
+          <span class="seta" aria-hidden="true">▸</span><b>${esc(g.titulo)}</b> <span class="pilula diretor">Diretriz</span>
+          <span class="suave pequeno">${plural(g.resumo.total, 'seção', 'seções')} · ${prazoDoGrupo(g.resumo)}</span>
+          <span class="grupo-resumo">${partesDoResumo(g.resumo).map((x) => `<span class="pilula ${CLASSE_RESUMO[x.chave]}">${x.texto}</span>`).join(' ')}</span>
+          <span class="sr-only">${aberto ? 'Recolher' : 'Expandir'} as ações desta diretriz</span></button></td></tr>
+        ${g.acoes.map((a) => linha(a, true).replace('<tr class="clicavel filha"', `<tr class="clicavel filha${aberto ? '' : ' oculto'}"`)).join('')}
+      </tbody>`;
+    };
+    const itens = $('#f-agrupar', raiz).checked ? agruparPorDiretriz(lista) : lista.map((acao) => ({ tipo: 'acao', acao }));
+    $('#lista-acoes', raiz).innerHTML = lista.length ? `<table class="tabela-lista"><thead><tr><th>Ação</th><th>Seção</th><th>Prazo</th><th>Situação</th><th>Tempo</th></tr></thead>
+      ${itens.map((x) => (x.tipo === 'grupo' ? grupo(x) : `<tbody>${linha(x.acao)}</tbody>`)).join('')}</table>` : vazio('Nenhuma ação encontrada', 'Ajuste os filtros ou direcione uma nova ação.');
   };
-  for (const id of ['f-secao', 'f-sit', 'f-status', 'f-origem']) $(`#${id}`, raiz).addEventListener('change', carregar);
+  for (const id of ['f-secao', 'f-sit', 'f-status', 'f-origem', 'f-agrupar']) $(`#${id}`, raiz).addEventListener('change', carregar);
+  on(raiz, 'click', '[data-alternar-grupo]', (el) => {
+    const id = Number(el.dataset.alternarGrupo);
+    const abrir = !gruposAbertos.has(id);
+    if (abrir) gruposAbertos.add(id); else gruposAbertos.delete(id);
+    el.setAttribute('aria-expanded', String(abrir));
+    for (const tr of el.closest('tbody').querySelectorAll('tr.filha')) tr.classList.toggle('oculto', !abrir);
+    $('.sr-only', el).textContent = `${abrir ? 'Recolher' : 'Expandir'} as ações desta diretriz`;
+  });
   let t;
   $('#f-q', raiz).addEventListener('input', () => { clearTimeout(t); t = setTimeout(carregar, 250); });
   const abrir = (el) => abrirAcao(el.dataset.acao, () => { carregar(); }).catch((e) => toast(e.message, 'erro'));
