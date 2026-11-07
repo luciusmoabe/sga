@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
+    "demo": "node server/demo.js",
     "seed": "node server/seed.js --reset",
     "migrate": "node server/migrate.js",
     "check:auth": "node server/verificar-auth.js",

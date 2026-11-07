@@ -6,7 +6,7 @@ Idioma do produto, dos textos da interface, dos commits e dos comentários: port
 
 ## Comandos
 
-- `npm install` · `npm start` (porta 3000) · `npm run dev` · `npm run seed` (recria dados fictícios) · `npm test`
+- `npm install` · `npm start` (porta 3000) · `npm run dev` · `npm run demo` (demonstração isolada: ignora o `.env`, SQLite temporário, porta 3222; `-- --zerar` recria) · `npm run seed` (recria dados fictícios) · `npm test`
 - `SGC_NOW=2026-09-22T09:30:00` muda o "agora" do servidor. Use em testes e demonstrações; nunca chame `new Date()` direto nas regras, use `agora()` de `server/logic.js`.
 - Sempre rode `npm test` depois de mexer em `server/`. Para a interface não há teste automatizado: suba o servidor e confira no navegador (telas de 1920x1080 para o Modo Reunião e 390 px para o chefe).
 - Datas: use as funções de `server/logic.js` e `public/js/datas.js`. O fuso de negócio é `America/Bahia`; datas civis usam aritmética UTC, e timestamps sem offset são interpretados nesse fuso. Não use getters locais de `Date` nas regras.

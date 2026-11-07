@@ -9,12 +9,12 @@
 
 ```bash
 npm install
-SGC_AUTH_MODE=demo DATABASE_URL="" npm start
+npm run demo
 ```
 
-Abra http://127.0.0.1:3000. O banco (`data/sgc.db`) é criado com dados fictícios. O modo demo escuta apenas em loopback e é recusado com `NODE_ENV=production` ou na Vercel. Para um banco isolado: `DATABASE_URL="" SGC_DB=/tmp/sgc-demo.db npm run seed`, iniciando depois com as mesmas variáveis.
+Abra http://127.0.0.1:3222. O comando é **isolado**: não lê o `.env`, descarta `DATABASE_URL` e usa um SQLite na pasta temporária do sistema (`agilis-demo/demo.db`), então nunca toca o Supabase. `npm run demo -- --zerar` recria o banco com os dados fictícios. Funciona igual no Windows (PowerShell), macOS e Linux. O modo demo escuta apenas em loopback e é recusado com `NODE_ENV=production` ou na Vercel.
 
-No PowerShell (Windows), defina as variáveis antes: `$env:SGC_AUTH_MODE="demo"; $env:DATABASE_URL=""; npm start`.
+> Evite montar a demonstração à mão com `DATABASE_URL=""`: no PowerShell, `$env:DATABASE_URL=""` apaga a variável e o `.env` volta a valer (com o banco real).
 
 ## Variáveis de ambiente
 

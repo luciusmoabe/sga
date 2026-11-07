@@ -13,16 +13,17 @@ Requisitos: Node.js 22.12 ou superior (testado em Node 24.11.1).
 
 ```bash
 npm install
-SGC_AUTH_MODE=demo DATABASE_URL="" npm start
+npm run demo
 ```
 
-Abra http://127.0.0.1:3000. Nesse modo local, o banco (`data/sgc.db`, SQLite) é criado com dados fictícios. O modo demo escuta apenas loopback e é recusado com `NODE_ENV=production` ou na Vercel.
+Abra http://127.0.0.1:3222. `npm run demo` é isolado: não lê o `.env`, descarta `DATABASE_URL` e usa um SQLite numa pasta temporária (`agilis-demo`), com dados fictícios; use `npm run demo -- --zerar` para recomeçar do zero. Funciona igual no Windows, macOS e Linux e nunca toca o Supabase. O modo demo escuta apenas loopback e é recusado com `NODE_ENV=production` ou na Vercel.
 
 O modo padrão usa Supabase Auth (e-mail e senha) e exige configuração institucional antes de iniciar. Veja [AUTENTICACAO.md](AUTENTICACAO.md) para configurar o projeto, migrar e vincular contas. As credenciais de demonstração não funcionam nesse modo.
 
 | Comando | O que faz |
 | --- | --- |
 | `npm start` | Sobe o servidor (porta 3000; mude com `PORT=3100 npm start`) |
+| `npm run demo` | Demonstração local isolada, com dados fictícios (porta 3222; `-- --zerar` recria o banco) |
 | `npm run dev` | Igual, reiniciando ao alterar arquivos do servidor |
 | `npm run seed` | Apaga o banco e recria os dados fictícios |
 | `npm run migrate -- --sqlite CAMINHO` | Aplica migrações ao arquivo SQLite indicado |
@@ -33,7 +34,7 @@ O modo padrão usa Supabase Auth (e-mail e senha) e exige configuração institu
 | `npm test` | Roda os testes de regras, API e concorrência SQLite em memória, além do adaptador PostgreSQL com pool simulado |
 | `npm run test:postgres` | Cria PostgreSQL temporário e valida migrações, rollback e concorrência entre duas APIs; requer binários locais ([instruções](TESTES_POSTGRESQL.md)) |
 
-Com `DATABASE_URL` preenchida, a aplicação usa PostgreSQL e o comando de seed é recusado. Para uma demonstração SQLite isolada, use `DATABASE_URL="" SGC_DB=/tmp/sgc-demo.db npm run seed` e inicie com as mesmas variáveis e `SGC_AUTH_MODE=demo`. O seed aguarda o commit completo antes de terminar. No modo institucional não há carga fictícia automática.
+Com `DATABASE_URL` preenchida (inclusive no `.env`), a aplicação usa PostgreSQL e o comando de seed é recusado. Para demonstração, use sempre `npm run demo`: definir `DATABASE_URL=""` à mão não é seguro no PowerShell, onde a variável é apagada e o `.env` volta a valer. O seed aguarda o commit completo antes de terminar. No modo institucional não há carga fictícia automática.
 
 PostgreSQL precisa estar migrado antes de iniciar esta versão; SQLite aplica as migrações ao iniciar. Consulte [MIGRACOES.md](MIGRACOES.md) para provisionamento, verificação de duplicidades e procedimento de atualização.
 
