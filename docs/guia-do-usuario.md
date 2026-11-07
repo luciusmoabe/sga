@@ -12,7 +12,7 @@ Os nomes das telas e dos tipos de unidade podem variar por empresa (vocabulário
 
 ## Chefe de seção
 
-1. **Início:** quadros "Chegaram para você" (ações novas), "Aguardando sua validação" e "Precisa de atenção" (atrasadas, sem atualização há 7 dias, prazo até a reunião, com botões rápidos de status e tempo), mais o aviso vigente.
+1. **Início:** o cartão **Sua semana** lista o que falta antes da reunião (a atualização, ações atrasadas, ações novas, validações e o que vence antes da reunião), mostra quantos itens já estão em dia e quanto falta para o prazo, e cada item leva direto ao que resolve. Enquanto a atualização estiver pendente, uma **faixa amarela** aparece no alto das outras telas, da sexta às 15h até a reunião (fica vermelha depois do prazo regular), com o botão para registrar. Além disso, os quadros "Chegaram para você" (ações novas), "Aguardando sua validação" e "Precisa de atenção" (atrasadas, sem atualização há 7 dias, prazo até a reunião, com botões rápidos de status e tempo), mais o aviso vigente.
 2. **Minhas ações:** abra a ação para mudar o status, registrar o **tempo em minutos**, comentar, criar tarefas e registrar impedimentos. *Concluir exige tempo maior que zero.*
 3. **Pedir novo prazo:** em ação criada por outra pessoa, use o pedido de prazo e aguarde a decisão.
 4. **Minha atualização:** confira o relato montado automaticamente, acrescente observações e envie até a **segunda, 18h**. Se algo mudar depois, a tela avisa que o relato está desatualizado; enviar de novo cria nova versão.

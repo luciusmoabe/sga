@@ -23,7 +23,7 @@ Onde a coluna diz "regra na rota", a rota não usa `permit`: a decisão de quem 
 
 | Rota | Quem | Função |
 | --- | --- | --- |
-| GET `/bootstrap` | qualquer | Usuário, empresa, vocabulário, contadores (`acoes_novas`, `acoes_a_validar`), semana de referência |
+| GET `/bootstrap` | qualquer | Usuário, empresa, vocabulário, contadores (`acoes_novas`, `acoes_a_validar`), semana de referência e `atualizacao_enviada` (a unidade do chefe/Administrador já enviou nesta semana; `null` para quem não envia) |
 | GET `/atualizacao` | C, Adm | Relato ao vivo da seção (`?resumo=1` pula o relato); traz `desatualizada` |
 | PUT `/atualizacao` | C, Adm | Envia a atualização (`semana`, `observacoes`); servidor recalcula e congela a cópia |
 | GET `/historico` | C, Adm | Histórico de atualizações da seção |

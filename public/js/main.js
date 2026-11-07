@@ -2,7 +2,7 @@
 import { PERFIL_DA_EMPRESA, dosPlural, nomeTipo } from './vocab.js';
 import { empresaLembrada, empresasDaEntrada, entrar, entrarSenha, get, lembrarEmpresa, sair, sessao, limparSessao, modoAuth, versao } from './api.js';
 import { atualizarSessao, est } from './estado.js';
-import { $, esc, on, trilho, toast } from './ui.js';
+import { $, esc, faixaPendente, on, trilho, toast } from './ui.js';
 import { acoes, centro, direcionar, painel, pauta, prazos } from './telas-diretor.js';
 import { historico, inicio, minhasAcoes } from './telas-chefe.js';
 import { atualizacao } from './atualizacao.js';
@@ -428,7 +428,7 @@ async function renderizar() {
     // No celular, a aba "Mais" fica marcada quando a tela atual não tem aba própria.
     $('[data-aba-mais]')?.classList.toggle('ativa', !document.querySelector('.abas-movel a[aria-current]'));
     // O trilho completo (com a pista) só no Início e no Painel; nas demais telas, uma linha.
-    $('#trilho').innerHTML = def.trilho ? trilho(est.boot, { compacto: rota !== 'painel' && rota !== 'inicio' }) : '';
+    $('#trilho').innerHTML = def.trilho ? trilho(est.boot, { compacto: rota !== 'painel' && rota !== 'inicio' }) + faixaPendente(est.boot, rota) : '';
     const conteudo = $('#conteudo');
     const novo = document.createElement('div');
     novo.id = 'conteudo';

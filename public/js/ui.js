@@ -106,6 +106,37 @@ export function on(raiz, tipo, seletor, fn) {
 }
 
 /** Trilho da Semana: mostra onde estamos entre uma reunião e a seguinte. */
+/** "2 dias e 3 h", "5 h", "40 min": o tempo que falta para um instante, em palavras curtas. */
+export function tempoRestante(ms) {
+  if (ms < 2 * 3600000) return `${Math.max(1, Math.round(ms / 60000))} min`;
+  const h = Math.max(0, Math.round(ms / 3600000));
+  const d = Math.floor(h / 24);
+  const r = h % 24;
+  return d ? `${plural(d, 'dia', 'dias')}${r ? ` e ${r} h` : ''}` : `${h} h`;
+}
+
+/**
+ * Faixa de aviso para quem envia a atualização da unidade e ainda não enviou: aparece da sexta 15h (o lembrete) até a reunião,
+ * nas telas com o trilho, menos onde o assunto já está na tela (Início e Atualização). Some sozinha quando a atualização é enviada.
+ * Quem não envia atualização (`atualizacao_enviada` nulo) nunca a vê.
+ */
+export function faixaPendente(boot, rota) {
+  if (boot.atualizacao_enviada !== false || rota === 'inicio' || rota === 'atualizacao') return '';
+  const dia = boot.reuniao_dia ?? 2;
+  const hora = boot.reuniao_hora || '10:00';
+  const agoraMs = agora().getTime();
+  const lembrete = instante(`${somarDias(boot.semana, -4)}T15:00:00`).getTime();
+  const reuniao = instante(`${boot.semana}T${hora}:00`).getTime();
+  if (agoraMs < lembrete || agoraMs >= reuniao) return '';
+  const veespera = somarDias(boot.semana, -1);
+  const fechamento = instante(`${veespera}T${String(HORA_FECHAMENTO).padStart(2, '0')}:00:00`).getTime();
+  const texto = agoraMs < fechamento
+    ? `A atualização da sua seção ainda não foi enviada. O prazo termina ${diaSemana(veespera)}, ${br(veespera)}, às ${HORA_FECHAMENTO}h (faltam ${tempoRestante(fechamento - agoraMs)}).`
+    : 'O prazo regular terminou e a atualização da sua seção ainda não foi enviada. Você ainda pode enviá-la até a reunião.';
+  return `<div class="faixa-pendente${agoraMs >= fechamento ? ' encerrado' : ''}" role="status"><span class="faixa-texto">${texto}</span>
+    <a class="btn btn-primario btn-mini" href="#/atualizacao">Registrar atualização</a></div>`;
+}
+
 /** `compacto`: uma linha só (sem a pista), para as telas em que o trilho completo só repete o que já se sabe. */
 export function trilho(boot, { compacto = false } = {}) {
   const semana = boot.semana;
@@ -130,13 +161,7 @@ export function trilho(boot, { compacto = false } = {}) {
     { t: fechamento, rot: 'Fechamento', sub: `${NOMES_DIA[(diaSemana + 6) % 7]} ${HORA_FECHAMENTO}h`, marco: true },
     { t: fim, rot: 'Reunião', sub: `${nomeDia} ${horaReuniao}`, marco: true },
   ];
-  const falta = (ms) => {
-    if (ms < 2 * 3600000) return `${Math.max(1, Math.round(ms / 60000))} min`;
-    const h = Math.max(0, Math.round(ms / 3600000));
-    const d = Math.floor(h / 24);
-    const r = h % 24;
-    return d ? `${plural(d, 'dia', 'dias')}${r ? ` e ${r} h` : ''}` : `${h} h`;
-  };
+  const falta = tempoRestante;
   let estado;
   if (agoraMs < fechamento) estado = `Atualizações abertas até ${NOMES_DIA_COMPLETO[(diaSemana + 6) % 7]}, ${br(diaAntes)}, às ${HORA_FECHAMENTO}h · faltam ${falta(fechamento - agoraMs)}`;
   else if (agoraMs < fim) estado = `Prazo regular encerrado; correções disponíveis · reunião em ${falta(fim - agoraMs)}`;

@@ -125,3 +125,32 @@ test('Reunião: o Diretor inicia, navega pelo teclado e encerra; a ata nasce em 
   assert.ok(detalhe.ata_texto && detalhe.ata_texto.length > 50, 'a ata foi gerada');
   assert.deepEqual(p.errosDaPagina, []);
 });
+
+test('Chefe sem atualização enviada vê a faixa de aviso nas telas de trabalho, e ela some ao enviar', async (t) => {
+  const app = await subir(t); if (!app) return;
+  const p = await app.abrir(CHEFE_COF, '#/minhas-acoes');
+  await p.waitForSelector('.faixa-pendente');
+  assert.match(await p.evaluate(() => document.querySelector('.faixa-pendente').innerText), /ainda não foi enviada/);
+  // No Início o assunto já está na tela ("Sua semana"): a faixa não repete.
+  await p.goto(`${app.base}/#/inicio`, { waitUntil: 'networkidle0' });
+  await esperarTexto(p, 'Sua semana');
+  assert.equal(await p.$('.faixa-pendente'), null, 'no Início a faixa não repete o cartão');
+  assert.match(await p.evaluate(() => document.querySelector('.sua-semana').innerText), /Enviar a atualização da semana/);
+  // O Diretor não envia atualização: não vê a faixa.
+  const d = await app.abrir(DIRETOR, '#/painel');
+  await esperarTexto(d, 'Painel da semana');
+  assert.equal(await d.$('.faixa-pendente'), null, 'o Diretor não vê a faixa');
+  await d.close(); // com duas páginas abertas o Chrome deixa a primeira em segundo plano, onde as esperas do puppeteer não avançam
+  await p.bringToFront();
+  // Depois de enviar, some, e o Início marca o item como em dia.
+  await p.goto(`${app.base}/#/atualizacao`, { waitUntil: 'networkidle0' });
+  await p.waitForSelector('#obs');
+  await clicarTexto(p, '#form-at button[type="submit"]', 'Enviar atualização'); // enviar pela tela renova o que a página sabe
+  await p.waitForFunction(() => location.hash === '#/inicio');
+  await p.goto(`${app.base}/#/minhas-acoes`, { waitUntil: 'networkidle0' });
+  await p.waitForSelector('article[data-id]');
+  assert.equal(await p.$('.faixa-pendente'), null, 'depois de enviar a faixa some');
+  await p.goto(`${app.base}/#/inicio`, { waitUntil: 'networkidle0' });
+  await esperarTexto(p, 'Atualização enviada em');
+  assert.deepEqual(p.errosDaPagina, []);
+});

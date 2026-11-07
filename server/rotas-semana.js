@@ -38,7 +38,10 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
            and a.atribuido_por is not null and a.atribuido_por != a.responsavel_id and a.validada_chefe_em is null`, empresaAtual(), ...ids)) : null,
     ]);
     const semana = refDiaReuniao(agora(), dia, HORA_CORTE_PADRAO);
+    // Quem envia a atualização da seção (chefe e Administrador vinculado): a unidade já enviou nesta semana? Alimenta a faixa de aviso.
+    const enviou = recebe ? !!(await q1('select 1 as ok from atualizacoes where secao_id = ? and semana = ? and empresa_id = ? limit 1', req.user.secao_id, semana, empresaAtual())) : null;
     return {
+      atualizacao_enviada: enviou,
       pedidos_pendentes: Number(pedidos?.n ?? 0),
       acoes_novas: Number(novas?.n ?? 0),
       acoes_a_validar: Number(aValidar?.n ?? 0),

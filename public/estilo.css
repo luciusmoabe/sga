@@ -1408,3 +1408,18 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
 .numeros .atencao dd, .numeros .atencao dt { color: var(--amarelo); }
 @media (prefers-reduced-motion: reduce) { .cartao.centro { transition: none; } }
 @media (max-width: 760px) { .numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Faixa de aviso (atualização pendente) e cartão "Sua semana" do Início. */
+.faixa-pendente { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-top: 10px; margin-bottom: 14px; padding: 10px 14px; border: 1px solid #e3d27a; border-left: 4px solid var(--amarelo); border-radius: 10px; background: #fbf6d4; color: var(--ink); }
+.faixa-pendente.encerrado { border-color: #e5b3ad; border-left-color: var(--vermelho); background: var(--vermelho-bg); }
+.faixa-pendente .faixa-texto { flex: 1 1 260px; font-size: .93rem; }
+.sua-semana.urgente { border-left: 4px solid var(--amarelo); }
+.sua-semana.encerrado { border-left: 4px solid var(--vermelho); }
+.semana-lista { list-style: none; margin: 8px 0 0; padding: 0; }
+.semana-lista li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); min-height: 44px; }
+.semana-lista li:first-child { border-top: 0; }
+.semana-marca { width: 22px; height: 22px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 700; border: 2px solid var(--line-str); color: var(--muted); }
+.semana-lista li.feito .semana-marca { background: var(--verde); border-color: var(--verde); color: #fff; }
+.semana-lista li.pendente .semana-marca { border-color: var(--amarelo); color: var(--amarelo); }
+.semana-lista li.feito .semana-texto { color: var(--muted); }
+.semana-texto { flex: 1; min-width: 0; }

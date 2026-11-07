@@ -1,9 +1,9 @@
 // Telas do chefe de seção: início, atualização semanal, ações e histórico.
 import { aoTopo, doTopo, oTopo, peloTopo } from './vocab.js';
 import { del, get, patch, post } from './api.js';
-import { est } from './estado.js';
+import { agora, est } from './estado.js';
 import {
-  $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, seloNova, STATUS, toast, vazio,
+  $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, seloNova, STATUS, tempoRestante, toast, vazio,
 } from './ui.js';
 import { abrirAcao, abrirEditarAcao, abrirNovoImpedimento, aceitaImpedimento, devolverAcao, lerOrigem, ligarOrigem, origemCamposHTML, validarAcao } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
@@ -142,6 +142,37 @@ function quadroValidarHTML(lista) {
   <div class="espaco"></div>`;
 }
 
+// ---------- Sua semana ----------
+/** O que falta fazer antes da reunião, num só lugar: cada item mostra se está em dia e leva ao que resolve. O de cima é o que vence primeiro. */
+function suaSemanaHTML({ up, semana, abertas, aValidar, atrasadas }) {
+  const veespera = addDias(semana, -1);
+  const fechamento = instante(`${veespera}T${String(HORA_FECHAMENTO).padStart(2, '0')}:00:00`).getTime();
+  const agoraMs = agora().getTime();
+  const novas = abertas.filter((a) => a.nova).length;
+  const antesDaReuniao = abertas.filter((a) => !a.atrasada && a.prazo < semana).length;
+  const prazo = `${diaSemana(veespera)}, ${br(veespera)}, às ${HORA_FECHAMENTO}h`;
+  const itens = [
+    { feito: !!up.atual,
+      texto: up.atual ? `Atualização enviada em ${dataHora(up.atual.enviada_em)}${up.atual.usuario_nome && up.atual.usuario_nome !== est.user.nome ? ` por ${esc(up.atual.usuario_nome)}` : ''}`
+        : agoraMs < fechamento ? `Enviar a atualização da semana (até ${prazo})` : 'Enviar a atualização da semana (o prazo regular terminou; ainda dá para enviar)',
+      link: '#/atualizacao', rotulo: up.atual ? 'Enviar correção' : 'Registrar atualização', principal: !up.atual },
+    { feito: !atrasadas, texto: atrasadas ? `${plural(atrasadas, 'ação atrasada', 'ações atrasadas')} para resolver` : 'Nenhuma ação atrasada', link: '#/minhas-acoes', rotulo: 'Ver ações' },
+    { feito: !novas, texto: novas ? `${plural(novas, 'ação nova', 'ações novas')} ainda não aberta${novas === 1 ? '' : 's'}` : 'Nenhuma ação nova por abrir', link: '#/minhas-acoes', rotulo: 'Abrir' },
+    { feito: !aValidar.length, texto: aValidar.length ? `${plural(aValidar.length, 'ação concluída', 'ações concluídas')} pela equipe para validar` : 'Nada aguardando a sua validação', link: '#/minhas-acoes', rotulo: 'Validar' },
+    { feito: !antesDaReuniao, texto: antesDaReuniao ? `${plural(antesDaReuniao, 'ação vence', 'ações vencem')} antes da reunião` : 'Nada vence antes da reunião', link: '#/minhas-acoes', rotulo: 'Ver ações' },
+  ];
+  const emDia = itens.filter((i) => i.feito).length;
+  const classe = !up.atual && agoraMs >= fechamento ? ' encerrado' : !up.atual && fechamento - agoraMs < 24 * 3600000 ? ' urgente' : '';
+  const prazoTexto = up.atual ? '' : agoraMs < fechamento ? ` · o prazo termina em ${tempoRestante(fechamento - agoraMs)}` : ' · prazo regular encerrado';
+  return `<section class="cartao sua-semana${classe}" aria-labelledby="sua-semana-titulo">
+    <div class="linha entre"><h2 id="sua-semana-titulo">Sua semana</h2><span class="suave pequeno">${emDia} de ${itens.length} em dia${prazoTexto}</span></div>
+    <ul class="semana-lista">${itens.map((i) => `<li class="${i.feito ? 'feito' : 'pendente'}">
+      <span class="semana-marca" aria-hidden="true">${i.feito ? '✓' : ''}</span>
+      <span class="semana-texto">${i.texto}<span class="sr-only">${i.feito ? ' — em dia.' : ' — pendente.'}</span></span>
+      ${i.feito && !i.principal && i.rotulo !== 'Enviar correção' ? '' : `<a class="btn ${i.principal ? 'btn-primario' : 'btn-fantasma'} btn-mini" href="${i.link}">${i.rotulo}</a>`}</li>`).join('')}</ul>
+  </section>`;
+}
+
 // ---------- Início ----------
 export async function inicio(raiz, { refresh }) {
   if (!est.user.secao_id) return semSecao(raiz);
@@ -161,11 +192,7 @@ export async function inicio(raiz, { refresh }) {
     ${quadroNovasHTML(abertas)}
     ${quadroValidarHTML(aValidar)}
     <div class="inicio-grade"><div class="inicio-principal">
-    <div class="cartao"><div class="linha entre"><div>
-      <h2>Sua atualização desta semana</h2>
-      ${up.atual ? `<p class="suave" style="margin:2px 0 0">Enviada em ${dataHora(up.atual.enviada_em)}${up.atual.usuario_nome && up.atual.usuario_nome !== est.user.nome ? ` por ${esc(up.atual.usuario_nome)}` : ''} (versão ${up.atual.versao}). Se algo mudou, envie uma correção.</p>`
-        : `<p style="margin:2px 0 0">Pendente. Atualizações abertas até ${diaSemana(addDias(semana, -1))}, <b>${br(addDias(semana, -1))}</b>, às ${HORA_FECHAMENTO}h.</p>`}</div>
-      <a class="btn btn-primario" href="#/atualizacao">${up.atual ? 'Enviar correção' : 'Registrar atualização'}</a></div></div>
+    ${suaSemanaHTML({ up, semana, abertas, aValidar, atrasadas })}
     <div class="espaco"></div>
     <div class="grade" style="grid-template-columns:repeat(4,1fr)">
       <div class="cartao"><div class="suave pequeno">Ações abertas</div><div style="font-family:var(--head);font-weight:650;font-size:2rem" class="num">${abertas.length}</div></div>

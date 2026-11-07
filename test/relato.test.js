@@ -252,3 +252,13 @@ test('só o Administrador exclui uma versão do relato; qualquer versão do hist
   // Nenhuma outra tabela é afetada: ações, tempo e impedimentos continuam intactos.
   assert.ok((await db.prepare('select count(*) n from acoes where secao_id = 1').get()).n > 0);
 });
+
+test('bootstrap: diz se a unidade já enviou a atualização da semana, só para quem a envia', async (t) => {
+  const { call } = await montar(t);
+  const COF = 4; // sem relato na semana do cenário
+  assert.equal((await call(DIRETOR, 'GET', '/bootstrap')).data.atualizacao_enviada, null, 'o Diretor não envia atualização');
+  assert.equal((await call(COF, 'GET', '/bootstrap')).data.atualizacao_enviada, false);
+  assert.equal((await call(COF, 'PUT', '/atualizacao', { semana: SEMANA, observacoes: 'Enviado' })).status, 200);
+  assert.equal((await call(COF, 'GET', '/bootstrap')).data.atualizacao_enviada, true);
+  assert.equal((await call(CHEFE_CPE, 'GET', '/bootstrap')).data.atualizacao_enviada, true, 'a outra unidade segue com o próprio relato');
+});
