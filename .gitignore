@@ -43,3 +43,6 @@ Agendum/
 .mcp.json
 .vercel
 .env*
+
+# PDFs gerados (guia do usuario, documentacao, avaliacao): regerados por scripts, nao versionados
+docs/*.pdf

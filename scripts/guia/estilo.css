@@ -1,0 +1,36 @@
+/* Estilo do Guia do Usuário em A4. Margens: 25 mm à esquerda (encadernação, como na ata) e 20 mm nas demais; 22 mm embaixo
+   (o rodapé fica nessa margem). Área útil: 165 x 255 mm. Nada é impresso fora dela, nem a capa. */
+@page{size:A4;margin:20mm 20mm 22mm 25mm}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font:10.2pt/1.55 "Segoe UI",Arial,sans-serif;color:#1d2b2f}
+.capa{height:254mm;page-break-after:always;border-radius:3mm;background:linear-gradient(160deg,#0b4f5c 0%,#0d6b57 100%);color:#fff;padding:16mm 14mm;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;position:relative}
+.capa:before{content:"";position:absolute;right:-40mm;top:-30mm;width:110mm;height:110mm;border-radius:50%;background:rgba(255,255,255,.07)}
+.capa:after{content:"";position:absolute;right:-12mm;bottom:-35mm;width:80mm;height:80mm;border-radius:50%;background:rgba(255,255,255,.06)}
+.capa .logo{background:#fff;border-radius:3mm;padding:3mm 5mm;display:inline-block;width:56mm;position:relative}.capa .logo img{width:100%;display:block}
+.capa h1{font:700 32pt/1.1 Georgia,serif;margin:0 0 6mm;border:0;color:#fff;padding:0}.capa .sub{font-size:13pt;opacity:.93;max-width:120mm}
+.capa .meta{font-size:10pt;opacity:.88;border-top:1px solid rgba(255,255,255,.4);padding-top:5mm;max-width:120mm;position:relative}
+.sumario{page-break-after:always}
+.sumario h1{font:700 22pt Georgia,serif;color:#0b4f5c;border-bottom:2px solid #0b4f5c;padding-bottom:3mm;margin:0 0 8mm}
+.sumario ol{list-style:none;padding:0;margin:0}.sumario li{border-bottom:1px solid #dbe5e7}
+.sumario a{display:flex;gap:5mm;align-items:baseline;padding:3.4mm 0;color:#1d2b2f;text-decoration:none;font-size:12pt}
+.sumario .n{font:700 12pt Georgia,serif;color:#0d6b57;width:9mm;flex:none}.sumario .t{flex:1}.sumario .pg{font:600 11pt "Segoe UI";color:#51666b;min-width:8mm;text-align:right}
+.sumario .obs{margin-top:10mm;font-size:9.5pt;color:#51666b}
+section.cap{page-break-before:always}
+.num{font:700 36pt Georgia,serif;color:#cfe3e0;line-height:1}
+h1{font:700 21pt Georgia,serif;color:#0b4f5c;margin:0 0 5mm;padding-bottom:3mm;border-bottom:2px solid #0b4f5c}
+h2{font:700 14pt Georgia,serif;color:#0b4f5c;margin:7mm 0 2.5mm;break-after:avoid}
+h3{font:700 11.3pt "Segoe UI",sans-serif;color:#0d6b57;margin:5mm 0 1.5mm;break-after:avoid}
+p{margin:0 0 3mm;orphans:3;widows:3}ul{margin:0 0 3mm;padding-left:5.5mm}li{margin-bottom:1mm}
+table{width:100%;border-collapse:collapse;margin:3mm 0 5mm;font-size:9.4pt;table-layout:auto}th,td{border:1px solid #c3d2d5;padding:2mm 3mm;vertical-align:top;text-align:left;overflow-wrap:anywhere}th{background:#e1eeee;color:#0b4f5c}tr{break-inside:avoid}
+figure{margin:4mm 0 6mm;break-inside:avoid;text-align:center}
+figure img{display:block;width:100%;max-height:200mm;object-fit:contain;border:1px solid #c3d2d5;border-radius:2mm;box-shadow:0 1px 5px rgba(11,79,92,.14)}
+figcaption{font-size:8.7pt;color:#51666b;margin-top:2mm;text-align:left}
+.duas{display:flex;gap:6mm;justify-content:center;break-inside:avoid}.duas figure{width:46%;margin:2mm 0}.cel img{max-height:150mm}
+.box{border-left:4px solid;border-radius:2mm;padding:2.5mm 4mm;margin:4mm 0;font-size:9.7pt;break-inside:avoid}.box b:first-child{display:block;font-size:8.5pt;text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5mm}
+.dica{background:#e7f3ee;border-color:#0d6b57}.dica b:first-child{color:#0d6b57}
+.aviso{background:#fff4e0;border-color:#d98a0b}.aviso b:first-child{color:#8a5500}
+.passos{counter-reset:p;list-style:none;padding:0;margin:2mm 0 4mm}.passos li{counter-increment:p;position:relative;padding:0 0 2mm 9mm;margin:0;break-inside:avoid}
+.passos li:before{content:counter(p);position:absolute;left:0;top:0;width:6mm;height:6mm;border-radius:50%;background:#0b4f5c;color:#fff;font:700 9pt/6mm "Segoe UI";text-align:center}
+.sem{font-weight:700;padding:1px 8px;border-radius:10px}.sem.v{background:#fde2e5;color:#b3122c}.sem.a{background:#fff3b8;color:#6e5000}.sem.g{background:#dff1e3;color:#1a6b34}
+.fim{margin-top:12mm;text-align:center;color:#51666b;font-size:9pt;border-top:1px solid #c3d2d5;padding-top:4mm}

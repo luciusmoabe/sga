@@ -58,6 +58,7 @@ O modelo está em `.env.example`. **Nunca versione `.env`, `.env.local` nem chav
 | `npm run plataforma:criar` | Cria o usuário do perfil Plataforma |
 | `npm test` | Suíte principal |
 | `npm run test:postgres` | Integração com PostgreSQL descartável |
+| `npm run guia` | Gera o Guia do Usuário em PDF (A4) em `docs/Guia-do-Usuario-Agilis.pdf`: sobe o sistema com dados fictícios, captura as telas no Chrome e monta o documento (`--saida` escolhe outro caminho) |
 | `npm run medir -- 20000` | Mede tempo e tamanho das respostas com N ações fictícias (banco em memória) |
 | `npm run test:e2e` | Jornadas críticas e acessibilidade (axe) no Chrome, com dados fictícios em memória |
 | `npm run push:chaves` | Gera as chaves VAPID dos avisos no celular |
@@ -137,3 +138,14 @@ O botão "Instalar aplicativo" aparece na barra lateral quando o navegador dispa
 | Avisos no celular indisponíveis na tela | Faltam as variáveis `SGC_VAPID_*` no servidor |
 | Lembretes não chegam | Sem agendador chamando `/api/interno/lembretes`, `SGC_LEMBRETES_CANAL` diferente de `push`, ou a pessoa não ativou os avisos (o resultado da chamada mostra `semAparelho`) |
 | Datas deslocadas em um dia | Uso de getters locais de `Date`; use as funções de `logic.js` / `datas.js` |
+
+## Guia do Usuário em PDF
+
+`npm run guia` gera `docs/Guia-do-Usuario-Agilis.pdf` (os PDFs de `docs/` não são versionados: regere quando as telas ou o texto mudarem).
+
+- **Onde editar:** o texto e as figuras estão em `scripts/guia/conteudo.mjs`; o estilo em `scripts/guia/estilo.css`; a lista de telas capturadas (`TELAS`) em `scripts/guia/gerar.mjs`. Ao acrescentar uma `fig('nome', 'legenda')` no texto, acrescente a captura `nome` em `TELAS`.
+- **Dados:** fictícios, num banco em memória, numa sexta-feira às 16h simuladas (a faixa de aviso e o "Sua semana" aparecem). Não toca em nenhum banco real e não usa o `.env`.
+- **Papel A4 e margens:** 25 mm à esquerda (encadernação, como na ata) e 20 mm no topo e na direita; 22 mm embaixo, onde fica o rodapé. A capa também respeita as margens (não vai até a borda da folha, para imprimir em qualquer impressora). Área útil: 165 × 255 mm.
+- **Conferir as margens:** `python scripts/verificar-margens-pdf.py docs/Guia-do-Usuario-Agilis.pdf` mede o que foi realmente impresso e falha se alguma página invadir as margens (pede `pip install pymupdf pillow`).
+- **Sumário:** os números de página são calculados renderizando o documento por partes; um capítulo sempre começa em página nova.
+- Requer o Chrome (`CHROME_PATH` aponta o executável).
