@@ -16,7 +16,7 @@ Origem: [avaliação especializada](avaliacao-especialista.md). Trabalho em bran
 | 2 | Agrupar ações por diretriz na tela Ações (G4a) | feito, com testes |
 | 2 | Ensaio de TV e ajuste de tamanhos (U2) | depende da TV real |
 | 3 | Tendência por unidade e calibragem do semáforo (G2, G3) | decisão (limiares) |
-| 3 | Ficha da ação com rota própria e seções recolhíveis (U4) | a fazer |
+| 3 | Ficha da ação com endereço próprio e seções recolhíveis (U4) | feito: link `#/acao/ID`, ficha na URL (`?acao=ID`), botão "Copiar link da ação", Impedimentos e Comentários recolhíveis. Segue como diálogo (não virou tela cheia) |
 | 3 | Teste de ponta a ponta (Playwright) com axe (E1, acessibilidade) | a fazer |
 | 3 | MFA, trilha de auditoria, LGPD (3.5) | a fazer |
 | 4 | Camada de domínio, `html` seguro, perfis sem `CHECK`, paginação (E2–E6) | a fazer |

@@ -1376,3 +1376,13 @@ tr.filha > td:first-child { padding-left: 28px; }
 @media (prefers-reduced-motion: reduce) { .grupo-alternar .seta { transition: none; } }
 @media (max-width: 760px) { .grupo-resumo { margin-left: 0; } tr.filha > td:first-child { padding-left: 0; } table.tabela-lista tr.grupo-cab { display: block; padding: 0; } }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* Seções recolhíveis da ficha da ação (Impedimentos, Comentários). */
+details.secao-rec { margin: 12px 0 6px; border-top: 1px solid var(--line); padding-top: 6px; }
+details.secao-rec > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; min-height: 36px; }
+details.secao-rec > summary::-webkit-details-marker { display: none; }
+details.secao-rec > summary::before { content: "▸"; font-size: .8rem; transition: transform .15s; }
+details.secao-rec[open] > summary::before { transform: rotate(90deg); }
+details.secao-rec > summary h3 { margin: 0; }
+details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { details.secao-rec > summary::before { transition: none; } }

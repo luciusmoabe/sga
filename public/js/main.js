@@ -19,9 +19,11 @@ import { equipe } from './equipe.js';
 import { acoesDosCentros, lePorTodosOsCentros } from './consulta.js';
 import { DIRETORIA_ADJUNTA } from './regras.js';
 import { abrirTrocaSenha, telaTrocaSenha } from './senha.js';
+import { abrirAcao, acaoEstaAberta, tirarAcaoDaUrl } from './acao-comum.js';
 import { abrirAvisosNoCelular, esquecerAvisosAoSair, recebeAvisos, restaurarAvisos } from './push.js';
 
 const GESTAO = ['diretor', 'apoio', 'administrador'];
+const LISTA_DE_ACOES = { chefe: 'minhas-acoes', membro: 'minhas-acoes', consulta: 'acoes-centros', diretor: 'acoes', apoio: 'acoes', administrador: 'acoes' };
 const LEITURA = ['diretor', 'apoio', 'administrador']; // telas de acompanhamento que o Administrador também consulta
 const TODOS = ['diretor', 'apoio', 'chefe', 'administrador'];
 const ROTAS = {
@@ -39,6 +41,8 @@ const ROTAS = {
   // Sem id: tela comum de início (nada é criado ao abrir a rota). Com id: Modo Reunião em tela cheia.
   reuniao: { f: (r, p) => (p.id ? viewReuniao(r, p) : inicioReuniao(r, p)), perfis: GESTAO, tv: (p) => !!p.id, titulo: 'Modo Reunião' },
   inicio: { f: inicio, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Início' },
+  // Link neutro de uma ação (`#/acao/ID`, o que o botão "Copiar link da ação" gera): cada perfil o leva à sua lista, com a ficha aberta.
+  acao: { f: (raiz, { id }) => { raiz.innerHTML = '<p class="suave">Abrindo a ação…</p>'; location.replace(`#/${LISTA_DE_ACOES[est.user.perfil] || 'acoes'}?acao=${Number(id) || 0}`); }, perfis: [...TODOS, 'consulta', 'membro'], titulo: 'Ação' },
   agenda: { f: agenda, perfis: [...TODOS, 'consulta', 'membro'], trilho: true, titulo: 'Agenda' },
   // Leitura das ações de todos os Centros: perfil Consulta e chefe com a permissão (a tela confere a permissão).
   'acoes-centros': { f: acoesDosCentros, perfis: ['consulta', 'chefe'], get titulo() { return `Ações ${dosPlural('centro')}`; } },
@@ -395,6 +399,8 @@ async function renderizar() {
   try {
     const modo = await modoAuth();
     if (minha !== gen) return;
+    // Quem abre o link de uma ação sem ter entrado volta a ela depois de entrar.
+    if (!est.user && /^#\/acao\/\d+/.test(location.hash) && !retorno) retorno = location.hash;
     if (modo === 'demo' && !sessao.userId) return await telaEntrada();
     await carregarSessao();
     if (minha !== gen) return;
@@ -430,6 +436,9 @@ async function renderizar() {
     if (minha !== gen) return;
     conteudo.replaceWith(novo);
     atualizarSelo();
+    // Endereço com `?acao=ID` (link compartilhado ou página recarregada): abre a ficha, a menos que já esteja aberta.
+    const idAcao = Number(q.get('acao'));
+    if (idAcao && !acaoEstaAberta()) abrirAcao(idAcao, refresh).catch((e) => { toast(e.message, 'erro'); tirarAcaoDaUrl(); });
   } catch (e) {
     if (minha !== gen) return;
     if (e.status === 401) {

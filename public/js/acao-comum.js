@@ -272,6 +272,35 @@ const validacaoHTML = (a) => {
   return a.validada_chefe && a.status === 'concluida' ? `<p class="pequeno suave">Validada pelo chefe${a.validada_chefe_por_nome ? ` (${esc(a.validada_chefe_por_nome)})` : ''} em ${dataHora(a.validada_chefe_em)}.</p>` : '';
 };
 
+// ---------- Endereço da ficha ----------
+// A ficha aberta vai na URL (`?acao=ID`, sem criar entrada no histórico): dá para copiar o link, recarregar a página e
+// continuar na mesma ação. Fechar a ficha tira o parâmetro. `#/acao/ID` é o link neutro, que cada perfil leva à sua lista.
+let acaoAberta = null;   // id da ficha aberta agora
+let reabrindo = false;   // a ficha fecha e reabre sozinha ao recarregar; a URL não pode piscar
+export const acaoEstaAberta = () => acaoAberta !== null;
+const urlComAcao = (id) => {
+  const [caminho, qs = ''] = (location.hash || '#/').slice(1).split('?');
+  const p = new URLSearchParams(qs);
+  if (id) p.set('acao', String(id)); else p.delete('acao');
+  const resto = p.toString();
+  return `#${caminho}${resto ? `?${resto}` : ''}`;
+};
+export const tirarAcaoDaUrl = () => history.replaceState(null, '', urlComAcao(null));
+const copiarTexto = async (texto) => {
+  try { await navigator.clipboard.writeText(texto); return true; }
+  catch { // sem permissão da área de transferência (http ou navegador antigo): seleção temporária
+    const t = document.createElement('textarea');
+    t.value = texto; t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.append(t); t.select();
+    const ok = document.execCommand?.('copy');
+    t.remove();
+    return !!ok;
+  }
+};
+/** Seção da ficha que o usuário recolhe (Impedimentos, Comentários…). Abre sozinha quando há o que agir ou ler. */
+const secaoRecolhivel = (titulo, quantidade, html, aberta) => `
+  <details class="secao-rec"${aberta ? ' open' : ''}><summary><h3>${titulo}${quantidade != null ? ` <span class="suave pequeno">(${quantidade})</span>` : ''}</h3></summary>${html}</details>`;
+
 export async function abrirAcao(id, aoMudar) {
   const a = await get(`/acoes/${id}`);
   // Quem executa a ação escolhe, na lista de responsáveis possíveis, o responsável de cada tarefa; para os demais, vazia.
@@ -285,6 +314,7 @@ export async function abrirAcao(id, aoMudar) {
   const ehMembro = est.user?.perfil === 'membro';
   const podeImp = !leitura && (!ehMembro || a.pode_executar);
   const corpo = `
+    <div class="linha" style="justify-content:flex-end;margin:-6px 0 4px"><button type="button" class="btn btn-fantasma btn-mini" data-copiar-link>Copiar link da ação</button></div>
     ${leitura ? '<div class="info">Somente leitura: você acompanha esta ação, mas quem a altera é a seção responsável.</div>'
     : ehMembro && !a.pode_executar ? '<div class="info">Esta ação é de outra pessoa da equipe. Você marca como feitas as tarefas atribuídas a você e pode comentar; o resto fica com quem a executa.</div>' : ''}
     ${a.demandada_diretor ? `
@@ -336,13 +366,15 @@ export async function abrirAcao(id, aoMudar) {
     ${a.pedidos.length ? `<h3 style="margin:10px 0 6px">Pedidos de novo prazo</h3>${a.pedidos.map((p) => `<div class="comentario pequeno">
       ${br(p.prazo_atual)} → <b>${br(p.novo_prazo)}</b> · ${esc(p.status)} <br><span class="suave">${esc(p.justificativa)}</span></div>`).join('')}` : ''}
     <div id="acao-checklist-bloco">${checklistBlocoHTML(a, responsaveis)}</div>
-    <h3 style="margin:12px 0 6px">Impedimentos</h3>
-    ${a.impedimentos.length ? a.impedimentos.map((i) => impedimentoHTML(i, podeImp)).join('') : '<p class="suave pequeno">Nenhum impedimento registrado.</p>'}
-    ${aceitaImpedimento(a) && podeImp ? '<button type="button" class="btn btn-sec btn-mini" data-novo-imp>Registrar impedimento</button>' : ''}
-    <h3 style="margin:12px 0 6px">Comentários</h3>
-    ${a.comentarios.length ? a.comentarios.map((c) => `<div class="comentario"><b>${esc(c.usuario_nome || '')}</b>
-      <span class="suave pequeno"> · ${dataHora(c.criado_em)}</span><br>${esc(c.texto)}</div>`).join('') : '<p class="suave pequeno">Nenhum comentário ainda.</p>'}
-    ${leitura || !a.pode_comentar ? '' : '<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>'}
+    ${secaoRecolhivel('Impedimentos', a.impedimentos.length, `
+      ${a.impedimentos.length ? a.impedimentos.map((i) => impedimentoHTML(i, podeImp)).join('') : '<p class="suave pequeno">Nenhum impedimento registrado.</p>'}
+      ${aceitaImpedimento(a) && podeImp ? '<button type="button" class="btn btn-sec btn-mini" data-novo-imp>Registrar impedimento</button>' : ''}`,
+      a.impedimentos.some((i) => i.aberto))}
+    ${secaoRecolhivel('Comentários', a.comentarios.length, `
+      ${a.comentarios.length ? a.comentarios.map((c) => `<div class="comentario"><b>${esc(c.usuario_nome || '')}</b>
+        <span class="suave pequeno"> · ${dataHora(c.criado_em)}</span><br>${esc(c.texto)}</div>`).join('') : '<p class="suave pequeno">Nenhum comentário ainda.</p>'}
+      ${leitura || !a.pode_comentar ? '' : '<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>'}`,
+      true)}
     ${validacaoHTML(a)}
     ${a.pode_editar || a.pode_mudar_demanda ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Editar ação</button>'
       : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Alterar prazo</button>' : ''}
@@ -361,7 +393,7 @@ export async function abrirAcao(id, aoMudar) {
     `}
     ${a.pode_excluir ? '<button type="button" class="btn btn-perigo" style="margin-top:12px" data-excluir>Excluir ação</button>' : ''}
 `;
-  abrirForm({
+  const dlgFicha = abrirForm({
     titulo: a.titulo,
     corpo,
     rotulo: 'Comentar',
@@ -374,7 +406,10 @@ export async function abrirAcao(id, aoMudar) {
     },
     aoAbrir: (dlg) => {
       // Depois de registrar ou resolver, reabre o detalhe já com o histórico novo.
-      const recarregar = async () => { dlg.close(); aoMudar?.(); await abrirAcao(a.id, aoMudar); };
+      const recarregar = async () => { reabrindo = true; dlg.close(); aoMudar?.(); try { await abrirAcao(a.id, aoMudar); } finally { reabrindo = false; } };
+      on(dlg, 'click', '[data-copiar-link]', async () => {
+        toast(await copiarTexto(`${location.origin}/#/acao/${a.id}`) ? 'Link da ação copiado.' : 'Não foi possível copiar o link.');
+      });
       // Atualiza só o topo (contador embutido no selo de status) e o bloco das tarefas: marcar, adicionar,
       // editar ou excluir uma tarefa não fecha e reabre a tela toda (o resto do diálogo — comentários,
       // impedimentos, rolagem — continua exatamente onde estava). A lista volta à ordem por data.
@@ -520,5 +555,13 @@ export async function abrirAcao(id, aoMudar) {
       });
       on(dlg, 'click', '[data-devolver]', () => devolverAcao(a, async () => { dlg.close(); aoMudar?.(); }));
     },
+  });
+  // A ficha passa a ter endereço (?acao=ID) enquanto estiver aberta; ao fechar, o endereço volta ao que era.
+  acaoAberta = a.id;
+  history.replaceState(null, '', urlComAcao(a.id));
+  dlgFicha.addEventListener('close', () => {
+    if (acaoAberta !== a.id || reabrindo) return;
+    acaoAberta = null;
+    tirarAcaoDaUrl();
   });
 }

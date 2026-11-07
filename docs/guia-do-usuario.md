@@ -8,6 +8,8 @@ Os nomes das telas e dos tipos de unidade podem variar por empresa (vocabulário
 - **Agenda:** calendário do mês à esquerda e, à direita, o painel do dia escolhido, com ações (pelo prazo) e tarefas (pela data). Círculo = ação, quadrado = tarefa; vermelho só quando aquela ação ou tarefa está atrasada. Filtros: *Mostrar* (Tudo/Ações/Tarefas), *De quem* ("Só o que é meu", para chefe e administrador com seção) e *Seção*. No celular ficam atrás do botão "Filtros".
 - **Celular:** abas inferiores e a folha "Mais" com o menu completo. Pode ser instalado como aplicativo.
 
+- **Link de uma ação:** na ficha de qualquer ação, "Copiar link da ação" gera um endereço que abre a ação direto para quem tem acesso a ela (depois de entrar, se for preciso). Recarregar a página mantém a ficha aberta.
+
 ## Chefe de seção
 
 1. **Início:** quadros "Chegaram para você" (ações novas), "Aguardando sua validação" e "Precisa de atenção" (atrasadas, sem atualização há 7 dias, prazo até a reunião, com botões rápidos de status e tempo), mais o aviso vigente.
