@@ -216,6 +216,23 @@ export function abrirEditarAcao(a, aoConcluir) {
   });
 }
 
+/** Ação cadastrada sem detalhamento: quem a executa ou responde por ela a descreve depois (o servidor confere `pode_descrever`). */
+function abrirDescrever(a, aoConcluir) {
+  abrirForm({
+    titulo: 'Descrever a ação',
+    corpo: `<p class="suave pequeno">Ação: <b>${esc(a.titulo)}</b></p>
+      <div class="campo"><label for="ds-detalhe">Detalhamento</label><textarea id="ds-detalhe" name="detalhe" required maxlength="2000" rows="6"></textarea></div>
+      <p class="suave pequeno">Depois de salvo, o detalhamento só muda por quem criou a ação, e o registro fica no histórico.</p>`,
+    rotulo: 'Salvar descrição',
+    aoEnviar: async (d) => {
+      if (!d.detalhe.trim()) throw new Error('Escreva a descrição da ação.');
+      await patch(`/acoes/${a.id}`, { detalhe: d.detalhe });
+      toast('Descrição salva.');
+      await aoConcluir?.();
+    },
+  });
+}
+
 // ---------- Redirecionar para outra seção ----------
 /** Ação em aberto pode mudar de seção: Diretor, Apoio e Administrador para qualquer seção ativa;
  *  o chefe, dentro da própria árvore (o servidor confere; `/secoes` já devolve só a árvore dele). */
@@ -340,7 +357,7 @@ export async function abrirAcao(id, aoMudar) {
           <div class="detalhes">Criada em ${dataHora(a.criada_em)} · Âmbito interno da seção</div>
         </div>
       </div>` : '')}
-    <p>${a.detalhe ? esc(a.detalhe) : '<span class="suave">Sem detalhamento.</span>'}</p>
+    <p>${a.detalhe ? esc(a.detalhe) : `<span class="suave">Sem detalhamento.</span>${!leitura && a.pode_descrever ? ' <button type="button" class="btn btn-sec btn-mini" data-descrever>Descrever a ação</button>' : ''}`}</p>
     <div class="linha" id="acao-badges" style="margin-bottom:10px;align-items:center;flex-wrap:wrap;gap:8px">${badgesHTML(a)}</div>
     ${a.responsavel_id || a.pode_atribuir ? responsavelHTML(a) : ''}
     ${!leitura && (a.pode_executar || a.pode_editar) ? `    <div class="linha" style="margin-bottom:10px;align-items:center">
@@ -505,6 +522,7 @@ export async function abrirAcao(id, aoMudar) {
         try { await validarAcao(a.id); dlg.close(); aoMudar?.(); } catch (e) { toast(e.message, 'erro'); }
       });
       on(dlg, 'click', '[data-editar-acao]', () => abrirEditarAcao(a, recarregar));
+      on(dlg, 'click', '[data-descrever]', () => abrirDescrever(a, recarregar));
       // Quem redireciona continua vendo a ação (o chefe só move dentro da própria árvore).
       on(dlg, 'click', '[data-redirecionar]', () => abrirRedirecionar(a, recarregar).catch((e) => toast(e.message, 'erro')));
       on(dlg, 'click', '[data-resolver-imp]', (el) => {

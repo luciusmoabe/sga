@@ -41,7 +41,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     return new Set(lista.filter((a) => !arvore.includes(a.secao_id)).map((a) => a.id));
   };
   const SEM_PERMISSOES = {
-    pode_editar: false, pode_mudar_prazo: false, pode_mudar_demanda: false, pode_excluir: false,
+    pode_editar: false, pode_descrever: false, pode_mudar_prazo: false, pode_mudar_demanda: false, pode_excluir: false,
     pode_executar: false, pode_comentar: false, pode_atribuir: false,
   };
   /** Marca `somente_leitura` e tira as permissões das ações que a pessoa só lê. O membro lê toda a árvore da seção,
@@ -284,6 +284,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const emCurso = !a.encerrada && !a.arquivada && a.status !== 'concluida';
     return {
       pode_editar: autor && !a.encerrada && !a.apresentada_em,
+      // Ação cadastrada sem detalhamento: quem a executa ou responde por ela pode descrevê-la depois, mesmo apresentada em reunião ou vinda de diretriz.
+      pode_descrever: !a.detalhe && !a.encerrada && !a.arquivada && (autor || (executa(user, a) && user.perfil !== 'consulta')),
       pode_mudar_prazo: autor && emCurso,
       pode_mudar_demanda: autor && !a.encerrada && !a.diretriz_id,
       pode_excluir: autor && !a.encerrada && a.status !== 'concluida' && !a.apresentada_em,
@@ -603,7 +605,10 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     // Status é da execução: o chefe da seção (ou o Administrador). Prioridade: quem executa ou o autor.
     // Título, detalhamento e prazo: só o autor (ver ehAutor e permissoes).
     const edicao = ['titulo', 'detalhe', 'prazo', 'demanda_diretor', 'demandante_externo'].some((k) => k in b);
-    if (edicao && !autor) throw falha(403, NAO_GERE);
+    // Descrever uma ação que ainda não tem detalhamento é permitido também a quem a executa (só o texto novo, sem mexer no resto).
+    const soDescricao = edicao && Object.keys(b).every((k) => k === 'detalhe' || !['titulo', 'prazo', 'demanda_diretor', 'demandante_externo'].includes(k))
+      && permissoes(req.user, a).pode_descrever;
+    if (edicao && !autor && !soDescricao) throw falha(403, NAO_GERE);
     if (b.status !== undefined || ((b.prioridade !== undefined || b.esforco !== undefined) && !autor)) await chefeGere(req.user, a);
     if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada {topo:pelo}.');
 
@@ -648,7 +653,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       const textoMudou = titulo !== a.titulo || (detalhe || null) !== (a.detalhe || null);
       const prazoMudou = prazo !== a.prazo;
       const pode = permissoes(req.user, a);
-      if (textoMudou && !pode.pode_editar) {
+      const soDescreveu = pode.pode_descrever && titulo === a.titulo;
+      if (textoMudou && !pode.pode_editar && !soDescreveu) {
         throw falha(409, 'Esta ação já foi apresentada em reunião: o título e o detalhamento não mudam mais. O prazo ainda pode ser alterado.');
       }
       if (prazoMudou && !pode.pode_mudar_prazo) throw falha(409, 'O prazo só muda enquanto a ação está em curso (não concluída nem arquivada).');

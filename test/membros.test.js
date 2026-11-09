@@ -371,6 +371,24 @@ test('equipe: o chefe vê os membros das subseções abaixo da sua seção', asy
   assert.ok(ids.includes(mSub) && ids.includes(mNeto));
   assert.equal((await call(BRUNO_COF, 'GET', '/equipe')).data.some((m) => m.id === mSub), false);
 });
+test('descrever: quem executa a ação a descreve depois de cadastrada, uma vez; depois só o autor edita', async (t) => {
+  const { db, call, m1, criar, detalhe, doDiretor } = await demo(t);
+  const id = await doDiretor('Sem detalhe');
+  assert.equal((await detalhe(ANA_CPE, id)).pode_descrever, true);
+  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { titulo: 'Outro' })).status, 403, 'título continua com o autor');
+  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { detalhe: 'Levantar os contratos.', titulo: 'Outro' })).status, 403);
+  assert.equal((await call(BRUNO_COF, 'PATCH', `/acoes/${id}`, { detalhe: 'x' })).status, 404, 'outra seção');
+  await db.prepare("update acoes set apresentada_em = '2026-09-18' where id = ?").run(id);
+  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { detalhe: 'Levantar os contratos.' })).status, 200, 'vale mesmo apresentada');
+  const depois = await detalhe(ANA_CPE, id);
+  assert.equal(depois.detalhe, 'Levantar os contratos.');
+  assert.equal(depois.pode_descrever, false);
+  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${id}`, { detalhe: 'Mudou' })).status, 403, 'já descrita: só o autor');
+  assert.equal((await call(DIRETOR, 'PATCH', `/acoes/${id}`, { detalhe: 'Mudou' })).status, 409, 'apresentada: o texto não muda mais');
+  // Ação do membro: o dono descreve a própria.
+  const minha = (await criar(m1, 'Do membro')).id;
+  assert.equal((await call(m1, 'PATCH', `/acoes/${minha}`, { detalhe: 'Texto' })).status, 200);
+});
 test('equipe: o chefe define o perfil do membro (membro ou suplente) na própria seção', async (t) => {
   const { db, call, m1, mCof } = await demo(t);
   const perfil = async (id) => (await db.prepare('select perfil from usuarios where id = ?').get(id)).perfil;

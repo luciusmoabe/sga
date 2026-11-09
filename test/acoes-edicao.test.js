@@ -174,7 +174,8 @@ test('ação apresentada em reunião: só o prazo muda, e ela não é excluída'
   const titulo = await call(ANA_CPE, 'PATCH', `/acoes/${propria}`, { titulo: 'Outro título' });
   assert.equal(titulo.status, 409);
   assert.match(titulo.data.erro, /apresentada em reunião/);
-  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${propria}`, { detalhe: 'Outro texto' })).status, 409);
+  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${propria}`, { detalhe: 'Primeira descrição' })).status, 200, 'sem detalhamento, ainda pode ser descrita');
+  assert.equal((await call(ANA_CPE, 'PATCH', `/acoes/${propria}`, { detalhe: 'Outro texto' })).status, 409, 'depois de descrita, o texto não muda mais');
   assert.equal((await call(ANA_CPE, 'DELETE', `/acoes/${propria}`)).status, 409);
   assert.equal((await call(ADMIN, 'DELETE', `/acoes/${propria}`)).status, 409, 'nem o Administrador');
   const prazo = await call(ANA_CPE, 'PATCH', `/acoes/${propria}`, { prazo: '2026-11-30' });
