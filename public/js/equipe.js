@@ -1,4 +1,4 @@
-// Minha equipe: o chefe cadastra, consulta e desativa os membros da equipe da própria seção (e das subseções).
+// Minha equipe: o chefe cadastra, consulta, define o perfil (membro ou suplente) e desativa os membros da equipe da própria seção (e das subseções).
 // O membro lê as ações da seção e executa só as que o chefe atribuiu a ele ou que ele criou; a validação do que ele conclui é do chefe.
 import { aoTopo, oTopo } from './vocab.js';
 import { get, patch, post } from './api.js';
@@ -6,9 +6,17 @@ import { est } from './estado.js';
 import { TAM_SENHA } from './regras.js';
 import { abrirForm, confirmar, esc, on, plural, toast, vazio } from './ui.js';
 
+const PERFIS = { membro: 'Membro da equipe', suplente: 'Suplente do chefe' };
+const perfilDe = (m) => (m.suplente ? 'suplente' : 'membro');
+const rotuloPerfil = (m) => (m.chefe_subsecao ? 'Chefe da subseção' : PERFIS[perfilDe(m)]);
 const situacao = (m) => (!m.ativo ? '<span class="pilula enc">Inativo</span>'
   : m.trocar_senha ? '<span class="pilula" title="Ainda vai criar a própria senha no primeiro acesso">Aguardando o 1º acesso</span>'
     : '<span class="pilula st-concluida">Ativo</span>');
+
+const campoPerfil = (pre, atual) => `<div class="campo"><label>Perfil</label><div class="escolha">
+  <label><input type="radio" name="perfil" value="membro"${atual === 'membro' ? ' checked' : ''}> ${PERFIS.membro}</label>
+  <label><input type="radio" name="perfil" value="suplente"${atual === 'suplente' ? ' checked' : ''}> ${PERFIS.suplente}</label></div>
+  <div class="dica">Membro: lê as ações da seção e executa só as que você atribuir a ele ou que ele criar; não vê relatos, reuniões nem atas. Suplente: tem os mesmos poderes que você na seção, para responder na sua ausência.</div></div>`;
 
 export async function equipe(raiz, { refresh }) {
   if (!est.user.secao_id) {
@@ -25,14 +33,15 @@ export async function equipe(raiz, { refresh }) {
       <button type="button" class="btn btn-primario" id="btn-novo-membro">+ Novo membro</button>
     </div>
     ${lista.length ? `<div class="cartao"><div class="tabela-rolagem"><table class="tabela-lista">
-      <thead><tr><th>Nome</th><th>E-mail</th><th>Ações abertas</th><th>Situação</th><th></th></tr></thead><tbody>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Ações abertas</th><th>Situação</th><th></th></tr></thead><tbody>
       ${lista.map((m) => `<tr data-id="${m.id}">
         <td><b>${esc(m.nome)}</b>${m.secao_id !== est.user.secao_id ? ` <span class="pilula" title="Subseção">${esc(m.secao_sigla)}</span>` : ''}</td>
         <td data-rotulo="E-mail">${esc(m.email || '')}</td>
+        <td data-rotulo="Perfil">${rotuloPerfil(m)}</td>
         <td class="num" data-rotulo="Ações abertas">${m.acoes_abertas}</td>
         <td data-rotulo="Situação">${situacao(m)}</td>
-        <td><div class="linha" style="gap:6px;flex-wrap:wrap">${m.ativo
-    ? '<button type="button" class="btn btn-fantasma btn-mini" data-senha>Redefinir senha</button><button type="button" class="btn btn-fantasma btn-mini" data-desativar>Desativar</button>'
+        <td><div class="linha" style="gap:6px;flex-wrap:wrap">${m.chefe_subsecao ? '' : m.ativo
+    ? '<button type="button" class="btn btn-fantasma btn-mini" data-perfil>Mudar perfil</button><button type="button" class="btn btn-fantasma btn-mini" data-senha>Redefinir senha</button><button type="button" class="btn btn-fantasma btn-mini" data-desativar>Desativar</button>'
     : '<button type="button" class="btn btn-sec btn-mini" data-reativar>Reativar</button>'}</div></td></tr>`).join('')}
       </tbody></table></div></div>`
     : `<div class="cartao">${vazio('Nenhum membro na equipe', 'Cadastre as pessoas da sua equipe para atribuir ações a elas.')}</div>`}`;
@@ -46,14 +55,28 @@ export async function equipe(raiz, { refresh }) {
       <div class="campo"><label for="nm-email">E-mail de login</label><input id="nm-email" name="email" type="email" required maxlength="160" autocomplete="off"></div>
       <div class="campo"><label for="nm-senha">Senha inicial</label><input id="nm-senha" name="senha" type="password" required minlength="${TAM_SENHA.min}" maxlength="${TAM_SENHA.max}" autocomplete="new-password">
         <div class="dica">De ${TAM_SENHA.min} a ${TAM_SENHA.max} caracteres. É provisória: a pessoa cria a própria senha no primeiro acesso. Entregue-a diretamente a ela.</div></div>
-      <p class="suave pequeno">O membro lê as ações da sua seção e executa só as que você atribuir a ele ou que ele criar. Não vê relatos, reuniões nem atas.</p>`,
+      ${campoPerfil('nm', 'membro')}`,
     rotulo: 'Criar membro e login',
     aoEnviar: async (d, form) => {
-      try { await post('/equipe', { nome: d.nome, email: d.email, senha: d.senha }); } finally { form.querySelector('[name="senha"]').value = ''; d.senha = ''; }
-      toast('Membro cadastrado. Entregue a senha provisória a ele.');
+      try { await post('/equipe', { nome: d.nome, email: d.email, senha: d.senha, perfil: d.perfil }); } finally { form.querySelector('[name="senha"]').value = ''; d.senha = ''; }
+      toast('Cadastro feito. Entregue a senha provisória à pessoa.');
       await refresh();
     },
   }));
+
+  on(raiz, 'click', '[data-perfil]', (el) => {
+    const m = membroDe(el);
+    abrirForm({
+      titulo: `Perfil de ${m.nome}`,
+      corpo: campoPerfil('mp', perfilDe(m)),
+      rotulo: 'Salvar perfil',
+      aoEnviar: async (d) => {
+        await patch(`/equipe/${m.id}`, { perfil: d.perfil });
+        toast('Perfil atualizado.');
+        await refresh();
+      },
+    });
+  });
 
   on(raiz, 'click', '[data-senha]', (el) => {
     const m = membroDe(el);

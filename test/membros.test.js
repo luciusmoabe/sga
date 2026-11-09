@@ -330,7 +330,10 @@ test('demanda de entidade externa: nome obrigatório, exclusiva da demanda do Di
 test('equipe: o chefe lista e desativa os membros da própria seção; Diretor e Administrador mudam o perfil', async (t) => {
   const { db, call, m1, m2, mCof, criar } = await demo(t);
   const equipe = (await call(ANA_CPE, 'GET', '/equipe')).data;
-  assert.deepEqual(equipe.map((m) => m.id).sort(), [m1, m2].sort());
+  assert.deepEqual(equipe.filter((m) => !m.chefe_subsecao).map((m) => m.id).sort(), [m1, m2].sort());
+  const chefeSub = equipe.find((m) => m.id === GABRIELA_IND);
+  assert.ok(chefeSub?.chefe_subsecao, 'o chefe da subseção aparece na lista, só para leitura');
+  assert.ok(!equipe.some((m) => m.id === ANA_CPE), 'o titular não se lista');
   assert.deepEqual((await call(BRUNO_COF, 'GET', '/equipe')).data.map((m) => m.id), [mCof]);
   assert.equal((await call(DIRETOR, 'GET', '/equipe')).status, 403);
 
@@ -357,6 +360,39 @@ test('equipe: o chefe lista e desativa os membros da própria seção; Diretor e
   assert.ok((await call(ANA_CPE, 'GET', '/equipe')).data.some((m) => m.id === apoio));
   assert.equal((await call(ADMIN, 'PATCH', `/usuarios/${apoio}`, { perfil: 'apoio' })).status, 200);
   assert.equal((await db.prepare('select secao_id from usuarios where id = ?').get(apoio)).secao_id, null);
+});
+test('equipe: o chefe vê os membros das subseções abaixo da sua seção', async (t) => {
+  const { db, call } = await demo(t);
+  const sub = (await db.prepare("select id from secoes where tipo = 'subsecao' and pai_id = ?").get(CPE)).id;
+  const neto = (await db.prepare("select id from secoes where tipo = 'subsecao' and pai_id = ?").get(sub)).id;
+  const mSub = (await db.prepare('insert into usuarios (nome, email, perfil, secao_id) values (?, ?, ?, ?)').run('Paulo Sá', 'paulo.sa@exemplo.invalid', 'membro', sub)).lastInsertRowid;
+  const mNeto = (await db.prepare('insert into usuarios (nome, email, perfil, secao_id) values (?, ?, ?, ?)').run('Rita Melo', 'rita.melo@exemplo.invalid', 'membro', neto)).lastInsertRowid;
+  const ids = (await call(ANA_CPE, 'GET', '/equipe')).data.map((m) => m.id);
+  assert.ok(ids.includes(mSub) && ids.includes(mNeto));
+  assert.equal((await call(BRUNO_COF, 'GET', '/equipe')).data.some((m) => m.id === mSub), false);
+});
+test('equipe: o chefe define o perfil do membro (membro ou suplente) na própria seção', async (t) => {
+  const { db, call, m1, mCof } = await demo(t);
+  const perfil = async (id) => (await db.prepare('select perfil from usuarios where id = ?').get(id)).perfil;
+  assert.equal((await call(ANA_CPE, 'PATCH', `/equipe/${m1}`, { perfil: 'diretor' })).status, 400, 'só membro ou suplente');
+  assert.equal((await call(ANA_CPE, 'PATCH', `/equipe/${m1}`, {})).status, 400);
+  assert.equal((await call(BRUNO_COF, 'PATCH', `/equipe/${m1}`, { perfil: 'suplente' })).status, 404, 'é de outra equipe');
+  assert.equal((await call(ANA_CPE, 'PATCH', `/equipe/${ANA_CPE}`, { perfil: 'membro' })).status, 409, 'não mexe em si');
+
+  const sup = await call(ANA_CPE, 'PATCH', `/equipe/${m1}`, { perfil: 'suplente' });
+  assert.equal(sup.status, 200);
+  assert.equal(sup.data.suplente, true);
+  assert.equal(await perfil(m1), 'chefe');
+  assert.equal((await db.prepare('select chefe_id from secoes where id = ?').get(CPE)).chefe_id, ANA_CPE, 'o titular não muda');
+  assert.ok((await call(ANA_CPE, 'GET', '/equipe')).data.find((m) => m.id === m1).suplente);
+  assert.ok(!(await call(m1, 'GET', '/equipe')).data.some((m) => m.id === m1), 'não lista a si mesmo');
+  assert.equal((await call(BRUNO_COF, 'GET', '/equipe')).data.some((m) => m.id === m1), false);
+
+  const volta = await call(ANA_CPE, 'PATCH', `/equipe/${m1}`, { perfil: 'membro' });
+  assert.equal(volta.data.suplente, false);
+  assert.equal(await perfil(m1), 'membro');
+  assert.equal((await call(ANA_CPE, 'PATCH', `/equipe/${GABRIELA_IND}`, { perfil: 'membro' })).status, 404, 'chefe de subseção não é da equipe');
+  assert.equal((await call(BRUNO_COF, 'PATCH', `/equipe/${mCof}`, { perfil: 'suplente' })).status, 200);
 });
 const detalheNome = async (call, uid, id) => (await call(uid, 'GET', `/acoes/${id}`)).data.responsavel_nome;
 
