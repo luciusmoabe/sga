@@ -59,6 +59,8 @@ test('o acesso à Configuração vale para o Apoio e o Chefe; outros perfis não
   assert.equal((await call(DIRETOR, 'PATCH', `/usuarios/${APOIO}`, { acesso_configuracao: 'sim' })).status, 400);
   assert.equal((await call(CHEFE, 'POST', '/secoes', { nome: 'Y', tipo: 'centro' })).status, 403, 'sem o acesso');
   assert.equal((await call(CHEFE, 'GET', '/usuarios')).status, 403);
+  assert.equal((await call(CHEFE, 'PUT', '/config', { combinados_frequencia: 'sempre', reuniao_hora: '11:00' })).status, 403, 'sem o acesso');
+  assert.equal((await call(CHEFE, 'PUT', '/config/ata', { ata_cabecalho: 'x', ata_brasao: '' })).status, 403);
 
   // O Chefe assinalado abre a estrutura (e lê os usuários para escolher chefes), mas não mexe em contas.
   const liberou = await call(DIRETOR, 'PATCH', `/usuarios/${CHEFE}`, { acesso_configuracao: true });
@@ -73,6 +75,11 @@ test('o acesso à Configuração vale para o Apoio e o Chefe; outros perfis não
   assert.equal((await call(CHEFE, 'GET', '/usuarios')).status, 200);
   assert.equal((await call(CHEFE, 'PATCH', `/usuarios/${APOIO}`, { perfil: 'chefe' })).status, 403, 'contas continuam com o Diretor');
   assert.equal((await call(CHEFE, 'PATCH', `/usuarios/${CHEFE}`, { acesso_configuracao: false })).status, 403);
+
+  // A configuração da reunião e o cabeçalho da ata da instituição também são dele (Configuração › Reunião e › Ata).
+  assert.equal((await call(CHEFE, 'PUT', '/config', { combinados_frequencia: 'sempre', reuniao_hora: '11:00' })).status, 200);
+  assert.equal((await call(CHEFE, 'PUT', '/config/ata', { ata_cabecalho: 'Instituição e unidade', ata_brasao: '' })).status, 200);
+  assert.equal((await call(DIRETOR, 'GET', '/config')).data.reuniao_hora, '11:00');
 
   // Trocar o perfil desliga; voltar não restaura sozinho.
   const mudou = await call(DIRETOR, 'PATCH', `/usuarios/${CHEFE}`, { perfil: 'consulta', secao_id: null });

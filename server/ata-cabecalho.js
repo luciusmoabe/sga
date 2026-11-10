@@ -1,4 +1,4 @@
-import { falha, h, permit } from './helpers.js';
+import { falha, h, permitGestaoOuConfiguracao } from './helpers.js';
 import { empresaAtual } from './empresa.js';
 
 /** Valida o texto e os brasões do cabeçalho da ata (o da instituição e o de cada seção seguem a mesma regra).
@@ -20,7 +20,7 @@ export function validarCabecalho(corpo) {
 }
 
 export function rotasCabecalhoAta(app, { db, cfg }) {
-  app.put('/api/config/ata', permit('diretor', 'apoio', 'administrador'), h(async req => {
+  app.put('/api/config/ata', permitGestaoOuConfiguracao, h(async req => {
     const { ata_cabecalho, ata_brasao, ata_brasao_esq } = validarCabecalho(req.body);
     return db.transaction(async () => {
       const itens = [['ata_cabecalho', ata_cabecalho.trim()], ['ata_brasao', ata_brasao]];

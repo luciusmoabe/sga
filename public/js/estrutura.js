@@ -139,6 +139,8 @@ export async function estrutura(raiz, { refresh, painel }) {
     <section id="estrutura-nomes" class="estrutura-painel" aria-labelledby="titulo-nomes" hidden>${painelNomes()}</section>
   </div>`;
   ligarConfiguracaoAta(raiz, config);
+  // Quem conduz reuniões da própria equipe (o chefe) tem o cabeçalho da ata da sua seção em outro lugar: aqui é o da instituição.
+  if (est.user?.perfil === 'chefe') raiz.querySelector('#config-ata')?.insertAdjacentHTML('afterbegin', '<div class="info">Este é o cabeçalho da <b>instituição</b>. O das atas das reuniões da <b>sua seção</b> fica em <a href="#/cabecalho-equipe">Reuniões da equipe › Cabeçalho da ata</a>.</div>');
   const renderSecoes = () => {
     const html = filhos(null).map(no).join('');
     raiz.querySelector('#lista-secoes').innerHTML = html ? `<ul class="estrutura-arvore">${html}</ul>` : `<div class="estrutura-vazio"><strong>${secoes.length ? 'Nenhuma seção encontrada' : 'Sua estrutura começa aqui'}</strong><p>${secoes.length ? 'Experimente outro termo ou altere o filtro de situação.' : 'Adicione a primeira seção para organizar as responsabilidades da equipe.'}</p></div>`;

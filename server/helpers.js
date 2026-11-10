@@ -33,6 +33,11 @@ export const temAcessoConfiguracao = (user) => ['diretor', 'administrador'].incl
 export const permitConfiguracao = (req, res, next) => (
   temAcessoConfiguracao(req.user) ? next() : next(falha(403, 'Seu perfil não tem acesso à configuração. Peça {topo:ao} para liberar.')));
 
+/** A configuração da reunião e do cabeçalho da ata da instituição: a gestão (Diretor, Apoio e Administrador) e quem recebeu o acesso à Configuração. */
+export const permitGestaoOuConfiguracao = (req, res, next) => (
+  ['diretor', 'apoio', 'administrador'].includes(req.user.perfil) || temAcessoConfiguracao(req.user)
+    ? next() : next(falha(403, 'Seu perfil não tem acesso a esta ação.')));
+
 export const json = (s, padrao) => {
   try {
     return s ? JSON.parse(s) : padrao;

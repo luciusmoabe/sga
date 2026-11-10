@@ -1,5 +1,5 @@
 import { FREQUENCIAS, HORA_PADRAO, INTERVALOS_REUNIAO, LIMITE_COMBINADOS, addDays, agora, br, cicloDe, ehDiaReuniao, ehISO, parseISO, refReuniao, reuniaoSeguinte } from './logic.js';
-import { arvoresDosCentros, cartoesReuniao, falha, h, json, permit, permitConfiguracao, texto } from './helpers.js';
+import { arvoresDosCentros, cartoesReuniao, falha, h, json, permit, permitConfiguracao, permitGestaoOuConfiguracao, texto } from './helpers.js';
 import { registrosReuniao } from './reuniao-registros.js';
 import { empresaAtual } from './empresa.js';
 import { TIPOS_OPCIONAIS, completarVocabulario, todasAs, validarVocabulario } from '../public/js/vocabulario.js';
@@ -93,7 +93,7 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
   }));
 
   app.get('/api/config', h(async () => await cfg()));
-  app.put('/api/config', gestao, h(async (req) => {
+  app.put('/api/config', permitGestaoOuConfiguracao, h(async (req) => {
     const f = req.body?.combinados_frequencia;
     if (!FREQUENCIAS.includes(f)) throw falha(400, 'Escolha quando os combinados aparecem: sempre, na primeira reunião do mês ou quando mudarem.');
     const valores = [['combinados_frequencia', f]];
