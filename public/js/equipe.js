@@ -6,17 +6,17 @@ import { est } from './estado.js';
 import { TAM_SENHA } from './regras.js';
 import { abrirForm, confirmar, esc, on, plural, toast, vazio } from './ui.js';
 
-const PERFIS = { membro: 'Membro da equipe', suplente: 'Suplente do chefe' };
-const perfilDe = (m) => (m.suplente ? 'suplente' : 'membro');
-const rotuloPerfil = (m) => (m.chefe_subsecao ? 'Chefe da subseção' : PERFIS[perfilDe(m)]);
+const PERFIS = { membro: 'Membro da equipe', suplente: 'Suplente do chefe', titular: 'Chefe da subseção' };
+const perfilDe = (m) => (m.chefe_subsecao ? 'titular' : m.suplente ? 'suplente' : 'membro');
+const rotuloPerfil = (m) => PERFIS[perfilDe(m)];
 const situacao = (m) => (!m.ativo ? '<span class="pilula enc">Inativo</span>'
   : m.trocar_senha ? '<span class="pilula" title="Ainda vai criar a própria senha no primeiro acesso">Aguardando o 1º acesso</span>'
     : '<span class="pilula st-concluida">Ativo</span>');
 
 const campoPerfil = (pre, atual) => `<div class="campo"><label>Perfil</label><div class="escolha">
   <label><input type="radio" name="perfil" value="membro"${atual === 'membro' ? ' checked' : ''}> ${PERFIS.membro}</label>
-  <label><input type="radio" name="perfil" value="suplente"${atual === 'suplente' ? ' checked' : ''}> ${PERFIS.suplente}</label></div>
-  <div class="dica">Membro: lê as ações da seção e executa só as que você atribuir a ele ou que ele criar; não vê relatos, reuniões nem atas. Suplente: tem os mesmos poderes que você na seção, para responder na sua ausência.</div></div>`;
+  ${atual === 'titular' ? `<label><input type="radio" name="perfil" value="suplente" checked disabled> ${PERFIS.titular} (atual)</label>` : `<label><input type="radio" name="perfil" value="suplente"${atual === 'suplente' ? ' checked' : ''}> ${PERFIS.suplente}</label>`}</div>
+  <div class="dica">Membro: lê as ações da seção e executa só as que você atribuir a ele ou que ele criar; não vê relatos, reuniões nem atas. Suplente: tem os mesmos poderes do titular da seção, para responder na ausência dele.${atual === 'titular' ? ' Ao passar o chefe da subseção para membro, a subseção fica sem titular até o Diretor indicar outro.' : ''}</div></div>`;
 
 export async function equipe(raiz, { refresh }) {
   if (!est.user.secao_id) {
@@ -29,7 +29,7 @@ export async function equipe(raiz, { refresh }) {
   raiz.innerHTML = `
     <div class="cabeca linha entre" style="align-items:flex-start">
       <div><h1>Minha equipe</h1>
-        <div class="sub">${plural(ativos, 'membro ativo', 'membros ativos')}${lista.length > ativos ? ` · ${plural(lista.length - ativos, 'inativo', 'inativos')}` : ''}. Eles leem as ações da seção e executam as que você atribui a eles.</div></div>
+        <div class="sub">${plural(ativos, 'pessoa ativa', 'pessoas ativas')}${lista.length > ativos ? ` · ${plural(lista.length - ativos, 'inativo', 'inativos')}` : ''}. Os membros leem as ações da seção e executam as que você atribui a eles.</div></div>
       <button type="button" class="btn btn-primario" id="btn-novo-membro">+ Novo membro</button>
     </div>
     ${lista.length ? `<div class="cartao"><div class="tabela-rolagem"><table class="tabela-lista">
@@ -40,7 +40,7 @@ export async function equipe(raiz, { refresh }) {
         <td data-rotulo="Perfil">${rotuloPerfil(m)}</td>
         <td class="num" data-rotulo="Ações abertas">${m.acoes_abertas}</td>
         <td data-rotulo="Situação">${situacao(m)}</td>
-        <td><div class="linha" style="gap:6px;flex-wrap:wrap">${m.chefe_subsecao ? '' : m.ativo
+        <td><div class="linha" style="gap:6px;flex-wrap:wrap">${m.ativo
     ? '<button type="button" class="btn btn-fantasma btn-mini" data-perfil>Mudar perfil</button><button type="button" class="btn btn-fantasma btn-mini" data-senha>Redefinir senha</button><button type="button" class="btn btn-fantasma btn-mini" data-desativar>Desativar</button>'
     : '<button type="button" class="btn btn-sec btn-mini" data-reativar>Reativar</button>'}</div></td></tr>`).join('')}
       </tbody></table></div></div>`
@@ -71,6 +71,7 @@ export async function equipe(raiz, { refresh }) {
       corpo: campoPerfil('mp', perfilDe(m)),
       rotulo: 'Salvar perfil',
       aoEnviar: async (d) => {
+        if (!d.perfil) throw new Error('Escolha o novo perfil.');
         await patch(`/equipe/${m.id}`, { perfil: d.perfil });
         toast('Perfil atualizado.');
         await refresh();
@@ -96,14 +97,14 @@ export async function equipe(raiz, { refresh }) {
   on(raiz, 'click', '[data-desativar]', async (el) => {
     const m = membroDe(el);
     const ok = await confirmar({
-      titulo: 'Desativar membro',
-      texto: `${esc(m.nome)} perde o acesso agora.${m.acoes_abertas ? ` As ${m.acoes_abertas === 1 ? 'ação' : `${m.acoes_abertas} ações`} abertas atribuídas a ele continuam com o nome dele até você atribuí-las a outra pessoa.` : ''}`,
+      titulo: m.chefe_subsecao ? 'Desativar chefe da subseção' : m.suplente ? 'Desativar suplente' : 'Desativar membro',
+      texto: `${esc(m.nome)} perde o acesso agora.${m.chefe_subsecao ? ' A subseção fica sem chefe titular até o Diretor indicar outro.' : ''}${m.acoes_abertas ? ` As ${m.acoes_abertas === 1 ? 'ação' : `${m.acoes_abertas} ações`} abertas atribuídas a ele continuam com o nome dele até você atribuí-las a outra pessoa.` : ''}`,
       rotulo: 'Desativar', perigo: true,
     });
     if (!ok) return;
-    try { await patch(`/equipe/${m.id}`, { ativo: false }); toast('Membro desativado.'); await refresh(); } catch (e) { erro(e); }
+    try { await patch(`/equipe/${m.id}`, { ativo: false }); toast('Acesso desativado.'); await refresh(); } catch (e) { erro(e); }
   });
   on(raiz, 'click', '[data-reativar]', async (el) => {
-    try { await patch(`/equipe/${membroDe(el).id}`, { ativo: true }); toast('Membro reativado.'); await refresh(); } catch (e) { erro(e); }
+    try { await patch(`/equipe/${membroDe(el).id}`, { ativo: true }); toast('Acesso reativado.'); await refresh(); } catch (e) { erro(e); }
   });
 }

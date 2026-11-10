@@ -342,7 +342,8 @@ test('equipe: o chefe lista e desativa os membros da própria seção; Diretor e
   assert.equal((await call(ANA_CPE, 'GET', '/equipe')).data.find((m) => m.id === m1).acoes_abertas, 1);
 
   assert.equal((await call(BRUNO_COF, 'PATCH', `/equipe/${m1}`, { ativo: false })).status, 404, 'é de outra equipe');
-  assert.equal((await call(ANA_CPE, 'PATCH', `/equipe/${GABRIELA_IND}`, { ativo: false })).status, 404, 'chefe não é membro');
+  assert.equal((await call(BRUNO_COF, 'PATCH', `/equipe/${GABRIELA_IND}`, { ativo: false })).status, 404, 'chefe de subseção de outra equipe');
+  assert.equal((await call(ANA_CPE, 'PATCH', `/equipe/${ANA_CPE}`, { ativo: false })).status, 409, 'não mexe em si');
   assert.equal((await call(ANA_CPE, 'PATCH', `/equipe/${m1}`, { ativo: 'não' })).status, 400);
   const off = await call(ANA_CPE, 'PATCH', `/equipe/${m1}`, { ativo: false });
   assert.equal(off.status, 200);
@@ -389,6 +390,44 @@ test('descrever: quem executa a ação a descreve depois de cadastrada, uma vez;
   const minha = (await criar(m1, 'Do membro')).id;
   assert.equal((await call(m1, 'PATCH', `/acoes/${minha}`, { detalhe: 'Texto' })).status, 200);
 });
+test('equipe: o chefe de um Centro gere os chefes das subseções (perfil, desativar, reativar); suplente do Centro, não', async (t) => {
+  const { db, call, m1 } = await demo(t);
+  const chefeDa = async () => (await db.prepare('select chefe_id from secoes where id = (select secao_id from usuarios where id = ?)').get(GABRIELA_IND)).chefe_id;
+  assert.equal(await chefeDa(), GABRIELA_IND, 'é a titular da subseção');
+  const lista = (await call(ANA_CPE, 'GET', '/equipe')).data;
+  assert.equal(lista.find((m) => m.id === GABRIELA_IND).papel, 'titular');
+  assert.equal((await call(ANA_CPE, 'PATCH', `/equipe/${GABRIELA_IND}`, { perfil: 'suplente' })).status, 409, 'já é titular');
+
+  // Desativar a titular libera a chefia da subseção e derruba a sessão; reativar não a devolve sozinha.
+  const off = await call(ANA_CPE, 'PATCH', `/equipe/${GABRIELA_IND}`, { ativo: false });
+  assert.equal(off.status, 200);
+  assert.equal(off.data.ativo, false);
+  assert.equal(await chefeDa(), null);
+  assert.equal((await call(GABRIELA_IND, 'GET', '/bootstrap')).status, 401, 'conta inativa não entra');
+  assert.equal((await call(ANA_CPE, 'PATCH', `/equipe/${GABRIELA_IND}`, { ativo: true })).data.ativo, true);
+
+  // Sem titular, o chefe do Centro não nomeia suplente numa subseção (o Diretor indica o titular antes).
+  const sub = (await db.prepare('select secao_id from usuarios where id = ?').get(GABRIELA_IND)).secao_id;
+  const novo = (await db.prepare("insert into usuarios (nome, email, perfil, secao_id) values ('Paulo Sá', 'paulo.sa@exemplo.invalid', 'membro', ?)").run(sub)).lastInsertRowid;
+  assert.equal((await call(ANA_CPE, 'PATCH', `/equipe/${novo}`, { perfil: 'suplente' })).status, 409);
+  await db.prepare('update secoes set chefe_id = ? where id = ?').run(GABRIELA_IND, sub);
+  assert.equal((await call(ANA_CPE, 'PATCH', `/equipe/${novo}`, { perfil: 'suplente' })).status, 200, 'com titular, vale');
+  assert.equal((await call(ANA_CPE, 'GET', '/equipe')).data.find((m) => m.id === novo).papel, 'suplente');
+
+  // Titular rebaixada a membro: perde a chefia da subseção.
+  const rebaixada = await call(ANA_CPE, 'PATCH', `/equipe/${GABRIELA_IND}`, { perfil: 'membro' });
+  assert.equal(rebaixada.status, 200);
+  assert.equal(rebaixada.data.papel, 'membro');
+  assert.equal(await chefeDa(), null);
+
+  // Suplente do Centro (outro chefe da mesma seção) não mexe em quem está abaixo do titular nem em outros suplentes.
+  await call(ANA_CPE, 'PATCH', `/equipe/${m1}`, { perfil: 'suplente' });
+  const outro = (await db.prepare("insert into usuarios (nome, email, perfil, secao_id) values ('Rui Lins', 'rui.lins@exemplo.invalid', 'chefe', ?)").run(CPE)).lastInsertRowid;
+  assert.equal((await call(m1, 'PATCH', `/equipe/${outro}`, { perfil: 'membro' })).status, 404, 'suplente não cuida de suplente');
+  assert.equal((await call(m1, 'PATCH', `/equipe/${ANA_CPE}`, { ativo: false })).status, 404, 'nem do titular');
+  assert.ok(!(await call(m1, 'GET', '/equipe')).data.some((x) => x.id === outro));
+  assert.ok((await call(ANA_CPE, 'GET', '/equipe')).data.some((x) => x.id === outro), 'o titular vê o suplente');
+});
 test('equipe: o chefe define o perfil do membro (membro ou suplente) na própria seção', async (t) => {
   const { db, call, m1, mCof } = await demo(t);
   const perfil = async (id) => (await db.prepare('select perfil from usuarios where id = ?').get(id)).perfil;
@@ -409,7 +448,7 @@ test('equipe: o chefe define o perfil do membro (membro ou suplente) na própria
   const volta = await call(ANA_CPE, 'PATCH', `/equipe/${m1}`, { perfil: 'membro' });
   assert.equal(volta.data.suplente, false);
   assert.equal(await perfil(m1), 'membro');
-  assert.equal((await call(ANA_CPE, 'PATCH', `/equipe/${GABRIELA_IND}`, { perfil: 'membro' })).status, 404, 'chefe de subseção não é da equipe');
+  assert.equal((await call(BRUNO_COF, 'PATCH', `/equipe/${GABRIELA_IND}`, { perfil: 'membro' })).status, 404, 'chefe de subseção de outra equipe');
   assert.equal((await call(BRUNO_COF, 'PATCH', `/equipe/${mCof}`, { perfil: 'suplente' })).status, 200);
 });
 const detalheNome = async (call, uid, id) => (await call(uid, 'GET', `/acoes/${id}`)).data.responsavel_nome;

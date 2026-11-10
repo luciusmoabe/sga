@@ -168,11 +168,9 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     if(auth.mode!=='supabase') throw falha(400,'Login requer Supabase Auth.');
     const id=Number(req.params.id), b=req.body || {};
     if(req.user.perfil==='chefe') {
-      // O chefe só redefine a senha dos membros da própria equipe; e-mail e demais perfis ficam com o Diretor.
-      const t=await q1('select perfil, secao_id from usuarios where id=? and empresa_id=?',id,empresaAtual());
-      const ids=req.user.secao_id ? await subarvore(db,req.user.secao_id) : [];
-      if(!t || t.perfil!=='membro' || !ids.includes(t.secao_id)) throw falha(403,'Você redefine o acesso apenas dos membros da sua equipe.');
-      if(b.email) throw falha(403,'Para trocar o e-mail de um membro, peça {topo:ao}. Você pode redefinir a senha.');
+      // O chefe só redefine a senha de quem é da sua equipe (membros, suplentes e chefes das subseções); e-mail fica com o Diretor.
+      if(!req.user.secao_id || !(await alvoDaEquipe(req.user,id))) throw falha(403,'Você redefine o acesso apenas de quem é da sua equipe.');
+      if(b.email) throw falha(403,'Para trocar o e-mail de um membro da equipe, peça {topo:ao}. Você pode redefinir a senha.');
     }
     const conta=await q1('select * from auth_contas where usuario_id=? and projeto=?',id,auth.supabaseUrl);
     if(!conta) throw falha(404,'Usuário sem login vinculado.');
@@ -272,17 +270,40 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     return await q1('select * from usuarios where id = ? and empresa_id = ?', id, empresaAtual());
   })));
   // ---------- Equipe: membros da própria seção ----------
-  // O chefe (e o Administrador vinculado a uma seção) cadastra, consulta e desativa os membros da equipe da sua seção e
-  // das subseções. Excluir conta e mudar perfil continuam com o Diretor e o Administrador.
+  // O chefe (e o Administrador vinculado a uma seção) cadastra, consulta, muda o perfil, redefine a senha e desativa quem está
+  // na sua equipe: os membros da seção e das subseções, os chefes das subseções abaixo e, para o titular, os suplentes da própria
+  // seção. Excluir conta e criar chefe de subseção continuam com o Diretor e o Administrador.
   const semSecao = () => { throw falha(409, 'Você ainda não está vinculado a uma seção. Peça {topo:ao} para atribuí-lo a uma seção.'); };
-  const MEMBRO_DA_EQUIPE = `select u.id, u.nome, u.email, u.ativo, u.trocar_senha, u.secao_id, s.sigla as secao_sigla,
-      u.perfil,
+  const MEMBRO_DA_EQUIPE = `select u.id, u.nome, u.email, u.ativo, u.trocar_senha, u.secao_id, u.perfil, s.sigla as secao_sigla,
+      s.chefe_id as secao_chefe_id, s.tipo as secao_tipo,
       (select count(*) from acoes a where a.responsavel_id = u.id and a.empresa_id = u.empresa_id and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0) as acoes_abertas,
       (select count(*) from auth_contas c where c.usuario_id = u.id) as tem_login
     from usuarios u join secoes s on s.id = u.secao_id`;
-  // `suplente`: chefe a mais na própria seção de quem consulta; `chefe_subsecao`: chefe de uma subseção abaixo (só leitura aqui, a conta é gerida pelo Diretor).
-  const membroOut = (m, secaoDoChefe) => ({ ...m, ativo: !!m.ativo, suplente: m.perfil === 'chefe' && m.secao_id === secaoDoChefe, chefe_subsecao: m.perfil === 'chefe' && m.secao_id !== secaoDoChefe, trocar_senha: !!m.trocar_senha, acoes_abertas: Number(m.acoes_abertas), tem_login: Number(m.tem_login) > 0 });
-  // O chefe escolhe entre dois perfis: Membro da equipe (padrão) e Suplente (chefe a mais na própria seção, com os poderes do titular).
+  /** O papel da pessoa na equipe de `user`: `membro`, `suplente` (chefe a mais, que não é o titular da seção) ou `titular`
+   *  (titular de uma subseção abaixo). Sem papel (null) = não é da equipe de quem consulta. */
+  const papelNaEquipe = (user, a, ids) => {
+    if (!a || a.id === user.id || !ids.includes(a.secao_id)) return null;
+    if (a.perfil === 'membro') return 'membro';
+    if (a.perfil !== 'chefe') return null;
+    const titular = a.secao_chefe_id === a.id;
+    if (a.secao_id === user.secao_id) {
+      // Na própria seção, só o titular (e o Administrador) cuida dos suplentes; ninguém cuida do titular por aqui.
+      if (titular) return null;
+      return user.perfil === 'administrador' || a.secao_chefe_id === user.id ? 'suplente' : null;
+    }
+    return titular ? 'titular' : 'suplente';
+  };
+  const alvoDaEquipe = async (user, id) => {
+    const a = await q1(`${MEMBRO_DA_EQUIPE} where u.id = ? and u.empresa_id = ?`, id, empresaAtual());
+    const papel = papelNaEquipe(user, a, await subarvore(db, user.secao_id));
+    return papel ? { ...a, papel } : null;
+  };
+  const membroOut = (m) => {
+    const papel = m.perfil === 'membro' ? 'membro' : m.secao_chefe_id === m.id ? 'titular' : 'suplente';
+    return { id: m.id, nome: m.nome, email: m.email, ativo: !!m.ativo, trocar_senha: !!m.trocar_senha, secao_id: m.secao_id, secao_sigla: m.secao_sigla,
+      perfil: m.perfil, papel, suplente: papel === 'suplente', chefe_subsecao: papel === 'titular', acoes_abertas: Number(m.acoes_abertas), tem_login: Number(m.tem_login) > 0 };
+  };
+  // O chefe escolhe entre dois perfis: Membro da equipe (padrão) e Suplente (chefe a mais na seção, com os poderes do titular).
   const perfilDaEquipe = (v) => {
     if (v == null || v === 'membro') return 'membro';
     if (v === 'suplente') return 'suplente';
@@ -291,10 +312,9 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
   app.get('/api/equipe', permit('chefe', 'administrador'), h(async (req) => {
     if (!req.user.secao_id) semSecao();
     const ids = await subarvore(db, req.user.secao_id);
-    // Além dos membros da árvore, entram os suplentes da própria seção e os chefes das subseções abaixo (não o titular, nem quem consulta).
-    return (await q(`${MEMBRO_DA_EQUIPE} where u.empresa_id = ? and u.secao_id in (${marks(ids)}) and (u.perfil = 'membro'
-      or (u.perfil = 'chefe' and u.id != ? and (u.secao_id != ? or coalesce(s.chefe_id, 0) != u.id))) order by u.ativo desc, u.nome, u.id`,
-    empresaAtual(), ...ids, req.user.id, req.user.secao_id)).map((m) => membroOut(m, req.user.secao_id));
+    const linhas = await q(`${MEMBRO_DA_EQUIPE} where u.empresa_id = ? and u.secao_id in (${marks(ids)}) and u.perfil in ('membro', 'chefe') and u.id != ?
+      order by u.ativo desc, u.nome, u.id`, empresaAtual(), ...ids, req.user.id);
+    return linhas.filter((m) => papelNaEquipe(req.user, m, ids)).map(membroOut);
   }));
   app.post('/api/equipe', permit('chefe', 'administrador'), h(async (req, res) => {
     if (auth.mode !== 'supabase') throw falha(400, 'Criação de login disponível somente com Supabase Auth.');
@@ -310,28 +330,31 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     if (!req.user.secao_id) semSecao();
     const id = Number(req.params.id);
     const b = req.body || {};
-    if ('ativo' in b && typeof b.ativo !== 'boolean') throw falha(400, 'Informe se o membro fica ativo ou inativo.');
-    if (!('ativo' in b) && !('perfil' in b)) throw falha(400, 'Informe o perfil ou se o membro fica ativo ou inativo.');
+    if ('ativo' in b && typeof b.ativo !== 'boolean') throw falha(400, 'Informe se a pessoa fica ativa ou inativa.');
+    if (!('ativo' in b) && !('perfil' in b)) throw falha(400, 'Informe o perfil ou se a pessoa fica ativa ou inativa.');
     const perfilNovo = 'perfil' in b ? perfilDaEquipe(b.perfil) : null;
     if (id === req.user.id) throw falha(409, 'Você não altera a própria conta por aqui.');
-    const ids = await subarvore(db, req.user.secao_id);
-    const alvo = await q1(`select u.perfil, u.secao_id, s.chefe_id, s.tipo from usuarios u join secoes s on s.id = u.secao_id where u.id = ? and u.empresa_id = ?`, id, empresaAtual());
-    const ehMembro = alvo?.perfil === 'membro' && ids.includes(alvo.secao_id);
-    const ehSuplente = alvo?.perfil === 'chefe' && alvo.secao_id === req.user.secao_id && alvo.chefe_id !== id;
-    if (!ehMembro && !ehSuplente) throw falha(404, 'Membro não encontrado na sua equipe.');
-    if (perfilNovo === 'suplente' && ehMembro) {
-      if (alvo.tipo === DIRETORIA_ADJUNTA) throw falha(400, SEM_CHEFE);
-      if (alvo.secao_id !== req.user.secao_id) throw falha(409, 'O suplente é da própria seção. Quem trabalha numa subseção fica como membro ou é cadastrado pelo chefe dela.');
+    const alvo = await alvoDaEquipe(req.user, id);
+    if (!alvo) throw falha(404, 'Pessoa não encontrada na sua equipe.');
+    if (perfilNovo === 'suplente' && alvo.papel === 'titular') throw falha(409, 'Esta pessoa já é a chefe titular da subseção.');
+    if (perfilNovo === 'suplente' && alvo.papel === 'membro') {
+      if (alvo.secao_tipo === DIRETORIA_ADJUNTA) throw falha(400, SEM_CHEFE);
+      // Numa subseção, o suplente só faz sentido com um titular; sem ele, quem indica o chefe é {topo:o}.
+      if (alvo.secao_id !== req.user.secao_id && !alvo.secao_chefe_id) throw falha(409, 'Esta subseção ainda não tem chefe titular. Peça {topo:ao} para indicar o titular antes de nomear um suplente.');
     }
     await db.transaction(async () => {
-      if (perfilNovo && perfilNovo !== (ehSuplente ? 'suplente' : 'membro')) {
+      if (perfilNovo && perfilNovo !== (alvo.papel === 'membro' ? 'membro' : 'suplente')) {
         await run('update usuarios set perfil = ?, ver_outros_centros = 0 where id = ? and empresa_id = ?', perfilNovo === 'suplente' ? 'chefe' : 'membro', id, empresaAtual());
       }
       if ('ativo' in b) await run('update usuarios set ativo = ? where id = ? and empresa_id = ?', b.ativo ? 1 : 0, id, empresaAtual());
+      // O titular que deixa de ser chefe (vira membro ou é desativado) libera a chefia da subseção, como na Configuração.
+      if (alvo.papel === 'titular' && (perfilNovo === 'membro' || b.ativo === false)) {
+        await run('update secoes set chefe_id = null where id = ? and chefe_id = ? and empresa_id = ?', alvo.secao_id, id, empresaAtual());
+      }
       // Quem sai da equipe perde a sessão aberta na hora; as ações atribuídas a ele continuam com o nome dele, para o chefe reatribuir.
       if (b.ativo === false) await run('delete from auth_sessoes_senha where conta_id in (select id from auth_contas where usuario_id = ?)', id);
     });
-    return membroOut(await q1(`${MEMBRO_DA_EQUIPE} where u.id = ? and u.empresa_id = ?`, id, empresaAtual()), req.user.secao_id);
+    return membroOut(await q1(`${MEMBRO_DA_EQUIPE} where u.id = ? and u.empresa_id = ?`, id, empresaAtual()));
   }));
   app.delete('/api/usuarios/:id', permit('diretor', 'administrador'), h(req => excluirCadastro(db,'usuarios',Number(req.params.id))));
   app.delete('/api/secoes/:id', permitConfiguracao, h(req => excluirCadastro(db,'secoes',Number(req.params.id))));
