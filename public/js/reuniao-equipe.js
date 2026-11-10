@@ -1,7 +1,7 @@
 // Reunião do chefe com a equipe da própria seção, com a mesma estrutura da reunião do Diretor (reuniao.js, atas.js):
 //   - lista das atas, agrupadas pelo tipo da unidade (Diretoria Adjunta, Centros, Coordenações, Subseções);
-//   - Modo Reunião (tela cheia, setas do teclado): visão geral e um cartão por pessoa, presença, decisões, informações,
-//     ações criadas ao vivo e data da próxima reunião;
+//   - Modo Reunião (tela cheia, setas do teclado): visão geral e um cartão por seção subordinada (quem apresenta são as seções, não as
+//     pessoas, e a seção do próprio chefe não é apresentada), presença, decisões, informações, ações criadas ao vivo e data da próxima reunião;
 //   - ata: montada ao encerrar, revisada em rascunho e enviada a quem participou.
 import { del, get, patch, post, put } from './api.js';
 import { est } from './estado.js';
@@ -128,10 +128,10 @@ export async function viewReuniaoEquipe(raiz, { id: idRota }) {
 
   const topo = () => `<header class="tv-topo">
       <div><h1>Reunião da equipe · ${esc(S.reuniao.secao_sigla || S.reuniao.secao_nome)}</h1>
-        <div class="suave">${diaSemana(S.reuniao.data)}, ${br(S.reuniao.data)} · ${plural(presentes().length, 'presente', 'presentes')} · ${plural(S.reuniao.decisoes.length, 'decisão', 'decisões')} · ${plural(S.novas.length, 'nova ação', 'novas ações')}</div></div>
-      <div class="tv-passos" role="navigation" aria-label="Pessoas da reunião">
+        <div class="suave">${diaSemana(S.reuniao.data)}, ${br(S.reuniao.data)} · ${plural(S.cartoes.length, 'seção', 'seções')} · ${plural(presentes().length, 'presente', 'presentes')} · ${plural(S.reuniao.decisoes.length, 'decisão', 'decisões')} · ${plural(S.novas.length, 'nova ação', 'novas ações')}</div></div>
+      <div class="tv-passos" role="navigation" aria-label="Seções da reunião">
         <button class="btn btn-fantasma" data-a="visao" title="Visão geral">Visão geral</button>
-        ${S.cartoes.map((c, i) => `<button class="tv-passo cor-${c.cor} ${S.passo === 'pessoa' && S.idx === i ? 'atual' : ''}" data-a="pessoa" data-i="${i}" aria-label="${esc(c.nome)}: ${c.cor}" title="${esc(c.nome)}"></button>`).join('')}
+        ${S.cartoes.map((c, i) => `<button class="tv-passo cor-${c.cor} ${S.passo === 'secao' && S.idx === i ? 'atual' : ''}" data-a="secao" data-i="${i}" aria-label="${esc(c.sigla || c.nome)}: ${c.cor}" title="${esc(c.nome)}"></button>`).join('')}
       </div>
       <div class="linha"><button class="btn btn-sec" data-a="presenca">Presença (${presentes().length})</button><button class="btn btn-sec" data-a="informacao">Registrar informação</button>
         <button class="btn btn-sec" data-a="proxima">${S.reuniao.proxima_em ? `Próxima: ${br(S.reuniao.proxima_em).slice(0, 5)}` : 'Próxima reunião'}</button>
@@ -147,32 +147,31 @@ export async function viewReuniaoEquipe(raiz, { id: idRota }) {
     if (c.atrasadas) f.push(plural(c.atrasadas, 'ação atrasada', 'ações atrasadas'));
     if (c.vencem) f.push(`${plural(c.vencem, 'vence', 'vencem')} em até 2 dias`);
     if (c.paradas) f.push(`${plural(c.paradas, 'ação', 'ações')} sem atualização há ${DIAS_SEM_MOVIMENTO}+ dias`);
-    return f.length ? f.join(' · ') : (c.abertas ? `${plural(c.abertas, 'ação em dia', 'ações em dia')}` : 'Nenhuma ação em aberto');
+    return f.length ? f.join(' · ') : (c.abertas ? plural(c.abertas, 'ação em dia', 'ações em dia') : 'Nenhuma ação em aberto');
   };
 
   const visao = () => {
-    const pedem = S.cartoes.map((c, i) => ({ c, i })).filter((x) => x.c.presente && x.c.cor !== 'verde');
-    const verdes = S.cartoes.map((c, i) => ({ c, i })).filter((x) => x.c.presente && x.c.cor === 'verde');
-    const ausentes = S.cartoes.filter((c) => !c.presente);
-    const gerais = S.reuniao.decisoes.filter((d) => !d.responsavel_id);
+    const pedem = S.cartoes.map((c, i) => ({ c, i })).filter((x) => x.c.cor !== 'verde');
+    const verdes = S.cartoes.map((c, i) => ({ c, i })).filter((x) => x.c.cor === 'verde');
+    const gerais = S.reuniao.decisoes.filter((d) => !d.secao_id);
     return `<div class="tv-palco"><div class="tv-cabeca"><h2>Visão geral</h2><span class="suave">Em ordem de necessidade: primeiro quem precisa de atenção.</span></div>
-      ${pedem.length ? `<div class="tv-grade">${pedem.map(({ c, i }) => `<button class="tv-secao cor-${c.cor}" data-a="pessoa" data-i="${i}">
-        <span class="linha" style="justify-content:space-between"><b>${esc(c.nome)}</b>${sem(c.cor)}</span><small>${esc(c.secao_sigla || 'Reunião')}</small><span>${esc(resumo(c))}</span></button>`).join('')}</div>`
-        : '<p class="nada">Ninguém pede atenção agora.</p>'}
+      ${!S.cartoes.length ? '<p class="nada">A sua seção não tem seções subordinadas para apresentar. Use a reunião para registrar a presença, as decisões e as informações.</p>'
+        : pedem.length ? `<div class="tv-grade">${pedem.map(({ c, i }) => `<button class="tv-secao cor-${c.cor}" data-a="secao" data-i="${i}">
+        <span class="linha" style="justify-content:space-between"><b>${esc(c.nome)}</b>${sem(c.cor)}</span><small>${esc(c.chefe_nome || 'sem chefe')} · ${esc(c.sigla || '')}</small><span>${esc(resumo(c))}</span></button>`).join('')}</div>`
+        : '<p class="nada">Nenhuma seção pede atenção.</p>'}
       ${verdes.length ? `<div class="tv-cartao"><div class="tv-verdes"><span>${sem('verde')} <b>No verde: relato oral é opcional.</b></span>
-        ${verdes.map(({ c, i }) => `<button class="btn btn-sec" data-a="pessoa" data-i="${i}">${esc(c.nome)}</button>`).join('')}</div></div>` : ''}
-      ${ausentes.length ? `<p class="nada">Ausentes: ${ausentes.map((c) => esc(c.nome)).join(', ')}. Marque a presença para incluí-los.</p>` : ''}
+        ${verdes.map(({ c, i }) => `<button class="btn btn-sec" data-a="secao" data-i="${i}">${esc(c.sigla || c.nome)}</button>`).join('')}</div></div>` : ''}
       ${gerais.length ? `<div class="tv-decisoes">${gerais.map((d) => `<div><b>Geral</b> · ${esc(d.texto)}</div>`).join('')}</div>` : ''}</div>
       <footer class="tv-rodape"><div class="linha"><button class="btn btn-sec" data-a="acao-nova">Nova ação</button><button class="btn btn-sec" data-a="decisao-geral">Decisão geral</button></div>
-        <button class="btn btn-primario" data-a="pessoa" data-i="0" ${S.cartoes.length ? '' : 'disabled'}>Começar pelas pessoas →</button></footer>`;
+        <button class="btn btn-primario" data-a="secao" data-i="0" ${S.cartoes.length ? '' : 'disabled'}>Começar pelas seções →</button></footer>`;
   };
 
-  const pessoa = () => {
+  const secao = () => {
     const c = S.cartoes[S.idx];
-    if (!c) return '<div class="tv-palco"><p class="nada">Ninguém na reunião.</p></div>';
-    const decs = c.usuario_id ? S.reuniao.decisoes.filter((d) => d.responsavel_id === c.usuario_id) : [];
+    if (!c) return '<div class="tv-palco"><p class="nada">Nenhuma seção subordinada.</p></div>';
+    const decs = S.reuniao.decisoes.filter((d) => d.secao_id === c.secao_id);
     return `<div class="tv-palco"><div class="tv-cabeca"><h2>${esc(c.nome)}</h2>${sem(c.cor)}
-        <span class="suave">${c.presente ? '' : 'ausente · '}${S.idx + 1} de ${S.cartoes.length}</span></div>
+        <span class="suave">${esc(c.chefe_nome || 'sem chefe')} · ${S.idx + 1} de ${S.cartoes.length}</span></div>
       <div class="tv-blocos">
         <div class="tv-relato">
           <div class="tv-cartao tv-caixa"><h3>Feito</h3>${lista(c.feitas.map((a) => li(`${a.titulo} · concluída em ${dataHora(a.concluida_em)}`)), 'Nada concluído desde a reunião anterior.')}</div>
@@ -182,10 +181,10 @@ export async function viewReuniaoEquipe(raiz, { id: idRota }) {
           <div class="tv-cartao tv-caixa"><h3>Apoio necessário</h3>${c.apoios.length ? c.apoios.map((a) => `<p style="margin:0 0 6px;font-size:1.1rem">${esc(a.acao_titulo)}: ${esc(a.apoio)}</p>`).join('') : '<p class="nada">Nada informado.</p>'}</div>
         </div>
         <div class="tv-acoes">
-          <div class="tv-caixa"><h3>${c.usuario_id ? `Ações de ${esc(c.nome.split(' ')[0])}` : 'Ações sem responsável'}</h3></div>
+          <div class="tv-caixa"><h3>Ações da seção</h3></div>
           ${c.acoes.length ? c.acoes.map((a) => `<button type="button" class="tv-acao ${a.situacao === 'atrasada' ? 'atrasada' : ''}" data-abrir-acao="${a.id}"><span class="linha1"><b>${esc(a.titulo)}</b><span>${STATUS[a.status]}</span></span>
-            <small>${esc(a.secao_sigla || '')} · prazo ${br(a.prazo)}${a.situacao === 'atrasada' ? ' · atrasada' : a.situacao === 'parada' ? ' · sem atualização' : ''}</small></button>`).join('') : '<p class="nada">Nenhuma ação em aberto.</p>'}
-          ${decs.length ? `<div class="tv-caixa"><h3>Decisões sobre ${esc(c.nome.split(' ')[0])}</h3></div><div class="tv-decisoes">${decs.map((d) => `<div class="tv-decisao"><span>${esc(d.texto)}</span>
+            <small>${esc(a.secao_sigla || '')}${a.responsavel_nome ? ` · ${esc(a.responsavel_nome)}` : ''} · prazo ${br(a.prazo)}${a.situacao === 'atrasada' ? ' · atrasada' : a.situacao === 'parada' ? ' · sem atualização' : ''}</small></button>`).join('') : '<p class="nada">Nenhuma ação em aberto.</p>'}
+          ${decs.length ? `<div class="tv-caixa"><h3>Decisões desta seção</h3></div><div class="tv-decisoes">${decs.map((d) => `<div class="tv-decisao"><span>${esc(d.texto)}</span>
             <span class="tv-decisao-acoes"><button type="button" class="btn btn-fantasma btn-mini" data-editar-dec="${d.id}">Editar</button><button type="button" class="btn btn-fantasma btn-mini" data-excluir-dec="${d.id}">Excluir</button></span></div>`).join('')}</div>` : ''}
         </div>
       </div></div>
@@ -195,11 +194,11 @@ export async function viewReuniaoEquipe(raiz, { id: idRota }) {
   };
 
   const desenhar = () => {
-    raiz.innerHTML = `${topo()}${S.passo === 'pessoa' ? pessoa() : visao()}`;
+    raiz.innerHTML = `${topo()}${S.passo === 'secao' ? secao() : visao()}`;
     raiz.querySelector('.tv-passo.atual, [data-a=prox], .btn-primario')?.focus({ preventScroll: true });
   };
   const irPara = (passo, idx = S.idx) => { S.passo = passo; S.idx = idx; desenhar(); };
-  const atual = () => (S.passo === 'pessoa' ? S.cartoes[S.idx] : null);
+  const atual = () => (S.passo === 'secao' ? S.cartoes[S.idx] : null);
   const depois = async (msg) => { if (msg) toast(msg); await recarregar(); desenhar(); };
 
   const formInformacao = (info = null) => abrirForm({
@@ -229,10 +228,10 @@ export async function viewReuniaoEquipe(raiz, { id: idRota }) {
   const formDecisao = (geral) => {
     const c = geral ? null : atual();
     abrirForm({
-      titulo: c ? `Decisão: ${c.nome}` : 'Decisão geral',
+      titulo: c ? `Decisão: ${c.sigla || c.nome}` : 'Decisão geral',
       corpo: '<div class="campo"><label for="dc-t">O que foi decidido</label><textarea id="dc-t" name="texto" maxlength="600" required></textarea></div>',
       rotulo: 'Registrar decisão',
-      aoEnviar: async (d) => { await post(`/reunioes-equipe/${S.id}/decisoes`, { texto: d.texto, responsavel_id: c?.usuario_id ?? null }); await depois('Decisão registrada.'); },
+      aoEnviar: async (d) => { await post(`/reunioes-equipe/${S.id}/decisoes`, { texto: d.texto, secao_id: c?.secao_id ?? null }); await depois('Decisão registrada.'); },
     });
   };
   const formDecisaoEditar = (d) => abrirForm({
@@ -244,16 +243,20 @@ export async function viewReuniaoEquipe(raiz, { id: idRota }) {
   const formAcao = () => {
     const c = atual();
     abrirForm({
-      titulo: c ? `Nova ação para ${c.nome}` : 'Nova ação',
+      titulo: c ? `Nova ação para ${c.sigla || c.nome}` : 'Nova ação',
       corpo: `<div class="campo"><label for="na-t">O que precisa ser feito</label><input id="na-t" name="titulo" maxlength="140" required></div>
         <div class="campo"><label for="na-d">Detalhamento (opcional)</label><textarea id="na-d" name="detalhe" maxlength="2000"></textarea></div>
+        <div class="campo"><label for="na-s">Para qual seção</label><select id="na-s" name="secao_id">
+          ${S.cartoes.map((x) => `<option value="${x.secao_id}" ${c && x.secao_id === c.secao_id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}
+          <option value="${est.user.secao_id}" ${c ? '' : S.cartoes.length ? '' : 'selected'}>Minha seção</option></select>
+          <div class="dica">A seção que recebe a ação fica ciente e o chefe dela distribui o trabalho.</div></div>
         <div class="dois"><div class="campo"><label for="na-p">Prazo</label><input id="na-p" type="date" name="prazo" required min="${esc(est.boot.hoje)}" value="${addDias(est.boot.hoje, 7)}"></div>
-          <div class="campo"><label for="na-pr">Prioridade</label><select id="na-pr" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div></div>
-        <div class="campo"><label for="na-r">Responsável</label><select id="na-r" name="responsavel_id"><option value="">Eu mesmo (sem delegar)</option>
-          ${S.reuniao.participantes.filter((p) => p.usuario_id !== est.user.id).map((p) => `<option value="${p.usuario_id}" ${c && p.usuario_id === c.usuario_id ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}</select></div>`,
+          <div class="campo"><label for="na-pr">Prioridade</label><select id="na-pr" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div></div>`,
       rotulo: 'Criar ação',
       aoEnviar: async (d) => {
-        const a = await post('/acoes', { secao_id: est.user.secao_id, titulo: d.titulo, detalhe: d.detalhe, prazo: d.prazo, prioridade: d.prioridade, ...(d.responsavel_id ? { responsavel_id: Number(d.responsavel_id) } : {}) });
+        const a = await post('/acoes', { secao_id: est.user.secao_id, titulo: d.titulo, detalhe: d.detalhe, prazo: d.prazo, prioridade: d.prioridade });
+        // O chefe cria na própria seção e a manda para a subordinada, como no redirecionamento de ações (o histórico guarda o motivo).
+        if (Number(d.secao_id) !== est.user.secao_id) await post(`/acoes/${a.id}/redirecionar`, { secao_id: Number(d.secao_id), motivo: 'Definida na reunião da equipe.' });
         await post(`/reunioes-equipe/${S.id}/acoes`, { acao_id: a.id });
         S.novas.push({ titulo: d.titulo });
         await depois('Ação criada.');
@@ -278,9 +281,9 @@ export async function viewReuniaoEquipe(raiz, { id: idRota }) {
     const a = el.dataset.a;
     try {
       if (a === 'visao') irPara('visao');
-      else if (a === 'pessoa') irPara('pessoa', Number(el.dataset.i ?? 0));
-      else if (a === 'prox') irPara('pessoa', Math.min(S.cartoes.length - 1, S.idx + 1));
-      else if (a === 'ant') irPara('pessoa', Math.max(0, S.idx - 1));
+      else if (a === 'secao') irPara('secao', Number(el.dataset.i ?? 0));
+      else if (a === 'prox') irPara('secao', Math.min(S.cartoes.length - 1, S.idx + 1));
+      else if (a === 'ant') irPara('secao', Math.max(0, S.idx - 1));
       else if (a === 'acao-nova') formAcao();
       else if (a === 'informacao') formInformacao();
       else if (a === 'presenca') formPresenca();
@@ -300,10 +303,10 @@ export async function viewReuniaoEquipe(raiz, { id: idRota }) {
   const teclas = (ev) => {
     if (document.querySelector('dialog[open]') || /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) return;
     if (ev.key === 'ArrowRight') {
-      if (S.passo === 'visao' && S.cartoes.length) irPara('pessoa', 0);
-      else if (S.passo === 'pessoa') irPara('pessoa', Math.min(S.cartoes.length - 1, S.idx + 1));
+      if (S.passo === 'visao' && S.cartoes.length) irPara('secao', 0);
+      else if (S.passo === 'secao') irPara('secao', Math.min(S.cartoes.length - 1, S.idx + 1));
     } else if (ev.key === 'ArrowLeft') {
-      if (S.passo === 'pessoa') { if (S.idx === 0) irPara('visao'); else irPara('pessoa', S.idx - 1); }
+      if (S.passo === 'secao') { if (S.idx === 0) irPara('visao'); else irPara('secao', S.idx - 1); }
     } else if (ev.key === 'Escape' && S.passo !== 'visao') irPara('visao');
   };
   document.addEventListener('keydown', teclas);

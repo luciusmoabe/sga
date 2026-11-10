@@ -45,62 +45,63 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
       order by case when u.secao_id = ? then 0 else 1 end, case when u.perfil = 'chefe' then 0 else 1 end, u.nome, u.id`, empresaAtual(), ...ids, secaoId);
   };
 
-  // Um cartão por pessoa, como o cartão de cada seção na reunião do Diretor: o que fez, o que vem, impedimentos, apoio e as ações.
-  const pauta = async (r, participantes) => {
-    const ids = await subarvore(db, r.secao_id);
+  // Um cartão por seção subordinada, como o cartão de cada seção na reunião do Diretor: quem apresenta são as seções, não as pessoas, e
+  // a seção do próprio chefe não é apresentada. Cada cartão soma as subseções abaixo da seção (a cor vale a pior).
+  const pauta = async (r) => {
     const dia = hoje();
     const ate2 = addDays(dia, 2);
     const ate7 = addDays(dia, 7);
     const limiteParada = addDays(dia, -(DIAS_SEM_MOVIMENTO - 1));
+    const filhas = await q(`select s.id, s.nome, s.sigla, s.chefe_id, u.nome as chefe_nome from secoes s left join usuarios u on u.id = s.chefe_id
+      where s.pai_id = ? and s.ativa = 1 and s.empresa_id = ? order by s.ordem, s.id`, r.secao_id, empresaAtual());
+    const dono = new Map(); // seção da árvore -> seção subordinada que a apresenta
+    for (const f of filhas) for (const id of await subarvore(db, f.id)) dono.set(id, f.id);
+    const ids = [...dono.keys()];
+    if (!ids.length) return [];
     const inicio = (await q1('select max(data) as d from reunioes_equipe where secao_id = ? and empresa_id = ? and id != ? and data < ?', r.secao_id, empresaAtual(), r.id, r.data))?.d || addDays(r.data, -7);
     const [abertas, feitas, imps] = await Promise.all([
-      q(`select a.id, a.titulo, a.prazo, a.status, a.responsavel_id, s.sigla as secao_sigla, substr(coalesce(a.movimentada_em, a.criada_em), 1, 10) as movimento
-        from acoes a join secoes s on s.id = a.secao_id
+      q(`select a.id, a.titulo, a.prazo, a.status, a.secao_id, s.sigla as secao_sigla, u.nome as responsavel_nome, substr(coalesce(a.movimentada_em, a.criada_em), 1, 10) as movimento
+        from acoes a join secoes s on s.id = a.secao_id left join usuarios u on u.id = a.responsavel_id
         where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
         order by a.prazo, a.id`, empresaAtual(), ...ids),
-      q(`select a.id, a.titulo, a.responsavel_id, a.concluida_em from acoes a
+      q(`select a.id, a.titulo, a.secao_id, a.concluida_em from acoes a
         where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and a.status = 'concluida' and a.concluida_em is not null and substr(a.concluida_em, 1, 10) >= ?
         order by a.concluida_em, a.id`, empresaAtual(), ...ids, inicio),
-      q(`select i.id, i.descricao, i.critico, i.apoio, a.id as acao_id, a.titulo as acao_titulo, a.responsavel_id
+      q(`select i.id, i.descricao, i.critico, i.apoio, a.id as acao_id, a.titulo as acao_titulo, a.secao_id
         from impedimentos i join acoes a on a.id = i.acao_id
         where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and i.resolvido_em is null and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
         order by i.critico desc, i.id`, empresaAtual(), ...ids),
     ]);
     const marcar = (a) => ({
-      id: a.id, titulo: a.titulo, prazo: a.prazo, status: a.status, secao_sigla: a.secao_sigla,
+      id: a.id, titulo: a.titulo, prazo: a.prazo, status: a.status, secao_sigla: a.secao_sigla, responsavel_nome: a.responsavel_nome || null,
       situacao: a.prazo < dia ? 'atrasada' : a.prazo <= ate2 ? 'vence' : a.movimento < limiteParada ? 'parada' : 'normal',
     });
-    const montar = (base, acoesBrutas, feitasDe, impsDe) => {
-      const acoes = acoesBrutas.map(marcar).sort((x, y) => ORDEM_SITUACAO[x.situacao] - ORDEM_SITUACAO[y.situacao]);
+    const cartoes = filhas.map((f) => {
+      const minha = (x) => dono.get(x.secao_id) === f.id;
+      const acoes = abertas.filter(minha).map(marcar).sort((x, y) => ORDEM_SITUACAO[x.situacao] - ORDEM_SITUACAO[y.situacao]);
+      const impsDe = imps.filter(minha);
       const atrasadas = acoes.filter((a) => a.situacao === 'atrasada').length;
       const vencem = acoes.filter((a) => a.situacao === 'vence').length;
       const paradas = acoes.filter((a) => a.situacao === 'parada').length;
-      const critico = impsDe.some((i) => i.critico);
       return {
-        ...base, abertas: acoes.length, atrasadas, vencem, paradas, acoes,
-        cor: atrasadas || critico ? 'vermelho' : vencem || paradas || impsDe.length ? 'amarelo' : 'verde',
-        feitas: feitasDe.map((a) => ({ id: a.id, titulo: a.titulo, concluida_em: a.concluida_em })),
+        secao_id: f.id, nome: f.nome, sigla: f.sigla || null, chefe_id: f.chefe_id || null, chefe_nome: f.chefe_nome || null,
+        abertas: acoes.length, atrasadas, vencem, paradas, acoes,
+        cor: atrasadas || impsDe.some((i) => i.critico) ? 'vermelho' : vencem || paradas || impsDe.length ? 'amarelo' : 'verde',
+        feitas: feitas.filter(minha).map((a) => ({ id: a.id, titulo: a.titulo, concluida_em: a.concluida_em })),
         proximas: acoes.filter((a) => a.situacao !== 'atrasada' && a.prazo <= ate7).map(({ id, titulo, prazo }) => ({ id, titulo, prazo })),
         impedimentos: impsDe.map((i) => ({ id: i.id, acao_id: i.acao_id, acao_titulo: i.acao_titulo, descricao: i.descricao, critico: !!i.critico, apoio: i.apoio || null })),
         apoios: impsDe.filter((i) => i.apoio).map((i) => ({ acao_titulo: i.acao_titulo, apoio: i.apoio })),
       };
-    };
-    const doParticipante = new Set(participantes.map((p) => p.usuario_id));
-    const cartoes = participantes.map((p) => montar(
-      { usuario_id: p.usuario_id, nome: p.nome, secao_sigla: p.secao_sigla || null, presente: !!p.presente },
-      abertas.filter((a) => a.responsavel_id === p.usuario_id), feitas.filter((a) => a.responsavel_id === p.usuario_id), imps.filter((i) => i.responsavel_id === p.usuario_id)));
-    const semDono = (x) => x.responsavel_id == null || !doParticipante.has(x.responsavel_id);
-    const extra = montar({ usuario_id: null, nome: 'Sem responsável na reunião', secao_sigla: null, presente: true }, abertas.filter(semDono), feitas.filter(semDono), imps.filter(semDono));
-    if (extra.abertas || extra.feitas.length || extra.impedimentos.length) cartoes.push(extra);
-    // Em ordem de necessidade, como na reunião do Diretor: quem está presente e mais precisa de atenção vem primeiro.
-    return cartoes.map((c, i) => ({ c, i })).sort((x, y) => (Number(!x.c.presente) - Number(!y.c.presente)) || (ORDEM_COR[x.c.cor] - ORDEM_COR[y.c.cor]) || (x.i - y.i)).map((x) => x.c);
+    });
+    // Em ordem de necessidade, como na reunião do Diretor: quem mais precisa de atenção vem primeiro.
+    return cartoes.map((c, i) => ({ c, i })).sort((x, y) => (ORDEM_COR[x.c.cor] - ORDEM_COR[y.c.cor]) || (x.i - y.i)).map((x) => x.c);
   };
 
   const participantesDe = (reuniaoId) => q(`select p.usuario_id, p.nome, p.presente, p.ordem, u.perfil, s.sigla as secao_sigla
     from reuniao_equipe_participantes p join usuarios u on u.id = p.usuario_id left join secoes s on s.id = u.secao_id
     where p.reuniao_id = ? order by p.ordem, p.usuario_id`, reuniaoId);
-  const decisoesDe = (reuniaoId) => q(`select d.id, d.texto, d.responsavel_id, u.nome as responsavel_nome, d.criada_em
-    from reuniao_equipe_decisoes d left join usuarios u on u.id = d.responsavel_id where d.reuniao_id = ? order by d.id`, reuniaoId);
+  const decisoesDe = (reuniaoId) => q(`select d.id, d.texto, d.secao_id, s.sigla as secao_sigla, s.nome as secao_nome, d.responsavel_id, u.nome as responsavel_nome, d.criada_em
+    from reuniao_equipe_decisoes d left join usuarios u on u.id = d.responsavel_id left join secoes s on s.id = d.secao_id where d.reuniao_id = ? order by d.id`, reuniaoId);
   const informacoesDe = (reuniaoId) => q('select id, texto, criada_em from reuniao_equipe_informacoes where reuniao_id = ? order by id', reuniaoId);
   const novasAcoesDe = (reuniaoId) => q(`select a.id, a.titulo, a.prazo, a.prioridade, u.nome as responsavel_nome from reuniao_equipe_acoes x
     join acoes a on a.id = x.acao_id left join usuarios u on u.id = a.responsavel_id where x.reuniao_id = ? and a.empresa_id = ? order by a.id`, reuniaoId, empresaAtual());
@@ -152,7 +153,7 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
     const r = await reuniaoDe(req.params.id);
     const participantes = await participantesDe(r.id);
     if (conduz(req.user, r)) {
-      return { ...(await completa(r, participantes)), ...(r.status === 'em_andamento' ? { cartoes: await pauta(r, participantes) } : {}) };
+      return { ...(await completa(r, participantes)), ...(r.status === 'em_andamento' ? { cartoes: await pauta(r) } : {}) };
     }
     const presente = participantes.some((p) => p.usuario_id === req.user.id && p.presente);
     const acima = req.user.perfil === 'chefe' && req.user.secao_id ? (await subarvore(db, req.user.secao_id)).includes(r.secao_id) : false;
@@ -190,11 +191,21 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
     if (!(await q1('select 1 as ok from reuniao_equipe_participantes where reuniao_id = ? and usuario_id = ?', r.id, id))) throw falha(400, 'Escolha o responsável entre os participantes da reunião.');
     return id;
   };
+  // A decisão pode ser de uma seção subordinada (ou de uma abaixo dela) ou geral (sem seção).
+  const secaoValida = async (r, valor) => {
+    if (valor == null || valor === '') return null;
+    const id = Number(valor);
+    if (id === r.secao_id || !(await subarvore(db, r.secao_id)).includes(id)) {
+      const filha = await q1('select 1 as ok from secoes where id = ? and pai_id = ? and empresa_id = ?', id, r.secao_id, empresaAtual());
+      if (!filha) throw falha(400, 'Escolha uma das seções subordinadas.');
+    }
+    return id;
+  };
   app.post('/api/reunioes-equipe/:id/decisoes', soChefe, h(async (req, res) => comReuniao(req.params.id, req.user, async (r) => {
     emAndamento(r);
     const t = texto(req.body?.texto, 600);
     if (!t) throw falha(400, 'Escreva a decisão.');
-    await run('insert into reuniao_equipe_decisoes (reuniao_id, texto, responsavel_id, criada_em, criada_por) values (?,?,?,?,?)', r.id, t, await responsavelValido(r, req.body?.responsavel_id), agoraISO(), req.user.id);
+    await run('insert into reuniao_equipe_decisoes (reuniao_id, texto, secao_id, responsavel_id, criada_em, criada_por) values (?,?,?,?,?,?)', r.id, t, await secaoValida(r, req.body?.secao_id), await responsavelValido(r, req.body?.responsavel_id), agoraISO(), req.user.id);
     res.status(201);
     return { ok: true };
   })));
@@ -261,16 +272,16 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
     else linhas.push('- Presença não registrada.');
     linhas.push('');
     if (ausentes.length) { linhas.push('Ausentes:'); ausentes.forEach((p) => linhas.push(`- ${p.nome}`)); linhas.push(''); }
-    const cartoes = await pauta(r, participantes);
+    const cartoes = await pauta(r);
     const comAcoes = cartoes.filter((c) => c.abertas > 0);
-    linhas.push('Situação das ações em aberto:');
+    linhas.push('Situação das ações das seções subordinadas:');
     if (comAcoes.length) {
-      comAcoes.forEach((c) => linhas.push(`- ${c.nome}: ${c.abertas} em aberto, ${c.atrasadas} atrasada(s), ${c.vencem} vencendo em até 2 dias, ${c.paradas} sem atualização há ${DIAS_SEM_MOVIMENTO}+ dias.`));
-    } else linhas.push('- Nenhuma ação em aberto.');
+      comAcoes.forEach((c) => linhas.push(`- ${c.sigla || c.nome}: ${c.abertas} em aberto, ${c.atrasadas} atrasada(s), ${c.vencem} vencendo em até 2 dias, ${c.paradas} sem atualização há ${DIAS_SEM_MOVIMENTO}+ dias.`));
+    } else linhas.push(cartoes.length ? '- Nenhuma ação em aberto.' : '- A seção não tem seções subordinadas.');
     linhas.push('');
     const decisoes = await decisoesDe(r.id);
     linhas.push('Decisões:');
-    if (decisoes.length) decisoes.forEach((x) => linhas.push(`- ${x.texto}${x.responsavel_nome ? ` (responsável: ${x.responsavel_nome})` : ''}`));
+    if (decisoes.length) decisoes.forEach((x) => linhas.push(`- [${x.secao_sigla || 'Geral'}] ${x.texto}${x.responsavel_nome ? ` (responsável: ${x.responsavel_nome})` : ''}`));
     else linhas.push('- Nenhuma decisão registrada.');
     linhas.push('');
     const novas = await novasAcoesDe(r.id);
@@ -287,7 +298,7 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
     const criticos = cartoes.flatMap((c) => c.impedimentos.filter((i) => i.critico));
     if (criticos.length) {
       linhas.push('Impedimentos críticos em aberto:');
-      criticos.forEach((i) => linhas.push(`- "${i.acao_titulo}": ${i.descricao}${i.apoio ? ` (apoio solicitado: ${i.apoio})` : ''}`));
+      cartoes.forEach((c) => c.impedimentos.filter((i) => i.critico).forEach((i) => linhas.push(`- [${c.sigla || c.nome}] "${i.acao_titulo}": ${i.descricao}${i.apoio ? ` (apoio solicitado: ${i.apoio})` : ''}`)));
       linhas.push('');
     }
     if (r.proxima_em) linhas.push(`Próxima reunião: ${DIAS[parseISO(r.proxima_em).getUTCDay()]}, ${br(r.proxima_em)}.`);
