@@ -318,7 +318,7 @@ const filtroEmpresa = (alias = '') => (temEmpresa()
   : { sql: '', args: [] });
 
 /** Tabelas de chave própria ou composta, sem coluna `id`: o INSERT nelas não pode pedir `RETURNING id` (dá erro no PostgreSQL). */
-const TABELAS_SEM_ID = ['config', 'reuniao_participantes', 'acao_vistas'];
+const TABELAS_SEM_ID = ['config', 'reuniao_participantes', 'acao_vistas', 'reuniao_equipe_participantes'];
 /** No PostgreSQL, todo INSERT devolve o `id` gerado (lastInsertRowid), salvo os que já têm RETURNING e os de tabelas sem `id`. */
 export const pedeRetornarId = (sql) => /^\s*insert\s+into/i.test(sql) && !/returning/i.test(sql)
   && !new RegExp(`\\binto\\s+(?:${TABELAS_SEM_ID.join('|')})\\b`, 'i').test(sql);

@@ -9,6 +9,7 @@ import { rotasPush } from './push.js';
 import { criarContexto } from './contexto.js';
 import { rotasAcoes } from './rotas-acoes.js';
 import { rotasEstrutura } from './rotas-estrutura.js';
+import { rotasReunioesEquipe } from './reunioes-equipe.js';
 import { rotasSemana } from './rotas-semana.js';
 import { rotasReunioes } from './reunioes.js';
 import { rotasAvisos } from './rotas-avisos.js';
@@ -98,6 +99,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth, em
   // decidido dentro das rotas (executa/ehAutor em rotas-acoes.js).
   const ROTAS_MEMBRO = [
     ['GET', /^\/(bootstrap|secoes|tarefas|avisos\/atual)$/],
+    ['GET', /^\/reunioes-equipe(\/\d+)?$/], // as atas das reuniões da equipe de que participou
     ['GET', /^\/acoes(\/\d+(\/(responsaveis|executores))?)?$/],
     ['POST', /^\/acoes$/],
     ['PATCH', /^\/acoes\/\d+$/],
@@ -112,6 +114,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth, em
   });
 
   rotasEstrutura(app, { ...ctx, auth, adminAuth: contas });
+  rotasReunioesEquipe(app, ctx);
   rotasPush(app, { db, emissor: emissorPush });
   const { criarDiretriz, SELECT_ACAO, acaoOut, visiveisAcoes } = rotasAcoes(app, ctx);
   rotasProdutividade(app, { ...ctx, visiveisAcoes });

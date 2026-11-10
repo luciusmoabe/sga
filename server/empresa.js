@@ -25,7 +25,7 @@ export const escopoDaEmpresa = (req, res, next) => (req.user ? comEmpresa(req.us
 // Com SGC_LINT_EMPRESA=1 (ligado nos testes), toda consulta feita dentro de uma requisição autenticada que leia, grave ou
 // apague uma tabela raiz sem mencionar `empresa_id` falha na hora. Junções por chave primária (`join secoes s on s.id = ...`)
 // partem de uma linha que já foi filtrada e ficam de fora; `from`, `update`, `delete from` e `insert into` não.
-const RAIZES = ['secoes', 'usuarios', 'diretrizes', 'acoes', 'combinados', 'avisos', 'reunioes', 'atualizacoes', 'config'];
+const RAIZES = ['secoes', 'usuarios', 'diretrizes', 'acoes', 'combinados', 'avisos', 'reunioes', 'reunioes_equipe', 'atualizacoes', 'config'];
 const REFERENCIA = new RegExp(`\\b(?:from|update|into)\\s+(${RAIZES.join('|')})\\b`, 'gi');
 
 // Exceção declarada: a consulta que PRECISA olhar todas as empresas (e-mail único no sistema inteiro) leva /*global*/.

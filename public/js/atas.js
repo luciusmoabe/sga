@@ -15,7 +15,7 @@ const cls = { em_andamento: 'st-em_andamento', rascunho: 'st-bloqueada', enviada
 
 // A leitura sempre escapa o texto antes de aplicar qualquer marcação, então não há risco de alguém
 // injetar tags pelo campo. Ver `ata-marcacao.js` para a análise compartilhada com o PDF.
-function renderizarAta(texto) {
+export function renderizarAta(texto) {
   const linhaHTML = (t, paragrafo = false) => (paragrafo ? segmentosDaLinhaAta(t) : segmentosInline(t)).map(s => {
     let html = esc(s.texto);
     if (s.italico) html = `<em>${html}</em>`;
