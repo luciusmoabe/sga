@@ -34,8 +34,9 @@ const ROTAS = {
   acoes: { f: acoes, perfis: LEITURA, titulo: 'Ações' },
   prazos: { f: prazos, perfis: LEITURA, titulo: 'Pedidos de prazo' },
   pauta: { f: pauta, perfis: LEITURA, titulo: 'Pauta' },
-  estrutura: { f: estrutura, perfis: ['diretor', 'administrador'], titulo: 'Configuração' },
-  configuracao: { f: (raiz, p) => est.user.perfil === 'apoio' ? configuracaoAta(raiz) : estrutura(raiz, { ...p, painel: 'ata' }), perfis: GESTAO, titulo: 'Configuração' },
+  // O Apoio só abre a Configuração completa se o Diretor ou o Administrador assinalou o acesso; sem isso, só a da ata.
+  estrutura: { f: (raiz, p) => (est.user.perfil === 'apoio' && !est.user.acesso_configuracao ? configuracaoAta(raiz) : estrutura(raiz, p)), perfis: ['diretor', 'apoio', 'administrador'], titulo: 'Configuração' },
+  configuracao: { f: (raiz, p) => (est.user.perfil === 'apoio' && !est.user.acesso_configuracao ? configuracaoAta(raiz) : estrutura(raiz, { ...p, painel: 'ata' })), perfis: GESTAO, titulo: 'Configuração' },
   avisos: { f: avisos, perfis: ['diretor', 'administrador'], titulo: 'Avisos' },
   combinados: { f: combinados, perfis: TODOS, titulo: 'Combinados' },
   reunioes: { f: (r, p) => (p.id ? reuniaoDetalhe(r, p) : reunioes(r, p)), perfis: LEITURA, titulo: 'Reuniões e atas' },

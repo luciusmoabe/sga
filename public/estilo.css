@@ -984,6 +984,18 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 .estrutura-vazio { text-align: center; padding: 48px 20px; }
 .estrutura-vazio strong { font-family: var(--head); font-size: 1.1rem; }
 .estrutura-vazio p { color: var(--muted); margin: 8px 0 0; }
+.form-reuniao { display: grid; gap: 24px; max-width: 880px; }
+.form-grupo { border: 0; margin: 0; padding: 0; min-width: 0; }
+.form-grupo legend { padding: 0; margin-bottom: 12px; font-family: var(--head); font-weight: 700; font-size: 1.02rem; color: var(--ink); }
+.form-grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.form-grade .campo { margin: 0; }
+.form-grade .form-nota { grid-column: span 2; margin: 0; padding-top: 26px; color: var(--muted); font-size: .88rem; line-height: 1.5; }
+.form-rodape { display: flex; justify-content: flex-end; padding-top: 16px; border-top: 1px solid var(--line); }
+@media (max-width: 760px) {
+  .form-grade { grid-template-columns: 1fr; }
+  .form-grade .form-nota { grid-column: auto; padding-top: 0; }
+  .form-rodape .btn { width: 100%; }
+}
 .estrutura-aviso { background: var(--pale); border-left: 3px solid var(--ink-2); padding: 16px; margin-bottom: 24px; line-height: 1.6; }
 #estrutura-reuniao form { max-width: 650px; }
 @media (max-width: 760px) {

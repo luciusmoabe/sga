@@ -26,6 +26,13 @@ export const permit = (...perfis) => (req, res, next) =>
     ? next()
     : next(falha(403, 'Seu perfil não tem acesso a esta ação.'));
 
+/** Configuração da estrutura (seções e nomes das unidades): o Diretor e o Administrador, e o Apoio que eles assinalaram
+ *  (`usuarios.acesso_configuracao`). Contas e perfis continuam só com o Diretor e o Administrador. */
+export const permitConfiguracao = (req, res, next) => (
+  ['diretor', 'administrador'].includes(req.user.perfil) || (req.user.perfil === 'apoio' && Number(req.user.acesso_configuracao) === 1)
+    ? next()
+    : next(falha(403, 'Seu perfil não tem acesso à configuração. Peça {topo:ao} para liberar.')));
+
 export const json = (s, padrao) => {
   try {
     return s ? JSON.parse(s) : padrao;

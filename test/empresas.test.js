@@ -41,6 +41,7 @@ async function fotografia(db) {
 // Colunas que migrações posteriores acrescentaram (esforço, devoluções e início da execução das ações) não fazem parte desta comparação.
 const semEmpresa = (linhas, tabela) => linhas.map(({ empresa_id, ...resto }) => {
   if (tabela === 'acoes') { const { esforco, devolucoes, iniciada_em, ...antigas } = resto; return antigas; }
+  if (tabela === 'usuarios') { const { acesso_configuracao, ...antigos } = resto; return antigos; } // coluna nova da migração 28
   return resto;
 });
 
@@ -49,7 +50,7 @@ test('migração 22 mantém todos os dados do órgão atual, sem alterar nenhum,
   const antes = await fotografia(db);
   assert.ok(Object.values(antes).filter((l) => l.length).length >= 12, 'o cenário tem dados em várias tabelas');
 
-  assert.deepEqual(await aplicarMigracoes(db), [22, 23, 24, 25, 26, 27]);
+  assert.deepEqual(await aplicarMigracoes(db), [22, 23, 24, 25, 26, 27, 28]);
 
   const depois = await fotografia(db);
   assert.deepEqual(Object.keys(depois), Object.keys(antes), 'nenhuma tabela some');
@@ -91,7 +92,7 @@ test('depois da contração só valem as chaves únicas por empresa, e os dados 
   for (const nome of ['uq_config_empresa_chave', 'uq_reuniao_em_andamento_empresa', 'uq_reuniao_em_andamento']) assert.ok(indices22.includes(nome), `${nome} existe na versão 22`);
   const antes = { config: await db.prepare('select * from config order by chave').all(), reunioes: await db.prepare('select * from reunioes').all() };
 
-  assert.deepEqual(await aplicarMigracoes(db), [23, 24, 25, 26, 27]);
+  assert.deepEqual(await aplicarMigracoes(db), [23, 24, 25, 26, 27, 28]);
   const indices = (await db.prepare("select name from sqlite_master where type = 'index'").all()).map((i) => i.name);
   assert.ok(!indices.includes('uq_reuniao_em_andamento'), 'a chave global de reunião em andamento caiu');
   assert.ok(indices.includes('uq_reuniao_em_andamento_empresa') && RAIZES.filter((r) => r !== 'config').every((r) => indices.includes(`idx_${r}_empresa`)));

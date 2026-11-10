@@ -1,5 +1,5 @@
 import { FREQUENCIAS, HORA_PADRAO, INTERVALOS_REUNIAO, LIMITE_COMBINADOS, addDays, agora, br, cicloDe, ehDiaReuniao, ehISO, parseISO, refReuniao, reuniaoSeguinte } from './logic.js';
-import { arvoresDosCentros, cartoesReuniao, falha, h, json, permit, texto } from './helpers.js';
+import { arvoresDosCentros, cartoesReuniao, falha, h, json, permit, permitConfiguracao, texto } from './helpers.js';
 import { registrosReuniao } from './reuniao-registros.js';
 import { empresaAtual } from './empresa.js';
 import { TIPOS_OPCIONAIS, completarVocabulario, todasAs, validarVocabulario } from '../public/js/vocabulario.js';
@@ -142,7 +142,7 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
   }));
 
   // Nomes dos tipos de unidade e do topo, próprios de cada empresa (o Diretor e o Administrador editam em Configuração).
-  app.put('/api/config/vocabulario', permit('diretor', 'administrador'), h(async (req) => {
+  app.put('/api/config/vocabulario', permitConfiguracao, h(async (req) => {
     let v;
     try { v = validarVocabulario(req.body?.vocabulario); } catch (e) { throw falha(400, e.message); }
     // Não dá para reduzir os níveis abaixo da profundidade que a árvore já tem.

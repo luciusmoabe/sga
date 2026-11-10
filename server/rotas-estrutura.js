@@ -3,7 +3,7 @@ import { subarvore, nivel } from './db.js';
 import { DIRETORIA_ADJUNTA, TAM_SENHA, TIPOS_SECAO } from './logic.js';
 
 const SEM_CHEFE = 'A Diretoria Adjunta não tem chefe: quem faz parte dela é Administrador, cadastrado pelo servidor.';
-import { falha, h, marks, permit, texto } from './helpers.js';
+import { falha, h, marks, permit, permitConfiguracao, texto } from './helpers.js';
 import { empresaAtual } from './empresa.js';
 import { oTipo, usaTipo } from '../public/js/vocabulario.js';
 
@@ -48,7 +48,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     await run('update secoes set chefe_id = ? where id = ? and empresa_id = ?', chefeId, secaoId, empresaAtual());
   };
 
-  app.post('/api/secoes', permit('diretor', 'administrador'), h(async (req, res) => db.transaction(async () => {
+  app.post('/api/secoes', permitConfiguracao, h(async (req, res) => db.transaction(async () => {
     if (db.isPg) await db.prepare('select pg_advisory_xact_lock(7319, 2)').get();
     const b = req.body || {};
     const nome = texto(b.nome, 120);
@@ -85,7 +85,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     return (await listaSecoes(req.user)).find((s) => s.id === id);
   })));
 
-  app.patch('/api/secoes/:id', permit('diretor', 'administrador'), h(async (req) => db.transaction(async () => {
+  app.patch('/api/secoes/:id', permitConfiguracao, h(async (req) => db.transaction(async () => {
     if (db.isPg) await db.prepare('select pg_advisory_xact_lock(7319, 2)').get();
     const id = Number(req.params.id);
     const s = await q1('select * from secoes where id = ? and empresa_id = ?', id, empresaAtual());
@@ -228,6 +228,10 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     // Leitura das ações de todos os Centros: só faz sentido para o chefe (a gestão já vê tudo; a Consulta existe para isso).
     if ('ver_outros_centros' in b && typeof b.ver_outros_centros !== 'boolean') throw falha(400, 'Informe se a pessoa pode consultar as ações de todos os Centros.');
     if (b.ver_outros_centros === true && perfil !== 'chefe') throw falha(400, 'A consulta às ações de todos os Centros vale só para o perfil Chefe de seção.');
+    // Acesso do Apoio à Configuração: só o Diretor e o Administrador assinalam (esta rota é deles), e só vale para o Apoio.
+    if ('acesso_configuracao' in b && typeof b.acesso_configuracao !== 'boolean') throw falha(400, 'Informe se o Apoio terá acesso à Configuração.');
+    if (b.acesso_configuracao === true && perfil !== 'apoio') throw falha(400, 'O acesso à Configuração vale só para o perfil Apoio.');
+    const acessoConfig = perfil === 'apoio' ? ('acesso_configuracao' in b ? Number(b.acesso_configuracao) : Number(u.acesso_configuracao || 0)) : 0;
     const verOutros = perfil === 'chefe' ? ('ver_outros_centros' in b ? Number(b.ver_outros_centros) : u.ver_outros_centros) : 0;
     if ('nome' in b) {
       const nome=texto(b.nome,120);
@@ -260,7 +264,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
       if(!s?.ativa) throw falha(400,'Escolha a seção ativa do membro da equipe.');
     }
     await run('update secoes set chefe_id=null where chefe_id=? and empresa_id=?',id,empresaAtual());
-    await run('update usuarios set perfil=?,ativo=?,secao_id=?,ver_outros_centros=? where id=? and empresa_id=?',perfil,ativo,['chefe','membro'].includes(perfil) && ativo ? secao : null,verOutros,id,empresaAtual());
+    await run('update usuarios set perfil=?,ativo=?,secao_id=?,ver_outros_centros=?,acesso_configuracao=? where id=? and empresa_id=?',perfil,ativo,['chefe','membro'].includes(perfil) && ativo ? secao : null,verOutros,acessoConfig,id,empresaAtual());
     if(perfil==='chefe' && ativo && secao) {
       const r=await run('update secoes set chefe_id=? where id=? and chefe_id is null and ativa=1 and empresa_id=?',id,secao,empresaAtual());
       if(r.changes!==1) throw falha(409,'Seção alterada por outra operação. Atualize a página.');
@@ -330,5 +334,5 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     return membroOut(await q1(`${MEMBRO_DA_EQUIPE} where u.id = ? and u.empresa_id = ?`, id, empresaAtual()), req.user.secao_id);
   }));
   app.delete('/api/usuarios/:id', permit('diretor', 'administrador'), h(req => excluirCadastro(db,'usuarios',Number(req.params.id))));
-  app.delete('/api/secoes/:id', permit('diretor', 'administrador'), h(req => excluirCadastro(db,'secoes',Number(req.params.id))));
+  app.delete('/api/secoes/:id', permitConfiguracao, h(req => excluirCadastro(db,'secoes',Number(req.params.id))));
 }
