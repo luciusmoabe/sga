@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { CHEFE_COF, DIRETOR, subir } from './ajuda.js';
 
 const TELAS_DIRETOR = ['painel', 'direcionar', 'acoes', 'prazos', 'combinados', 'reunioes', 'agenda', 'produtividade', 'avisos', 'estrutura', 'reuniao'];
-const TELAS_CHEFE = ['inicio', 'minhas-acoes', 'atualizacao', 'agenda', 'equipe', 'historico', 'combinados', 'reunioes-equipe'];
+const TELAS_CHEFE = ['inicio', 'minhas-acoes', 'atualizacao', 'agenda', 'equipe', 'historico', 'combinados', 'reunioes-equipe', 'agenda-equipe', 'combinados-equipe'];
 
 // "regra@tela": violações que já existiam. Preenchida depois da primeira execução (veja a mensagem de falha do teste).
 const CONHECIDAS = new Set([

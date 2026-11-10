@@ -207,7 +207,7 @@ test('mesma estrutura da reunião do Diretor: cartão por seção, informações
   assert.ok(ata.includes('Novas ações:\n- Nova da reunião [Marta Lima] — prazo 10/10/2026 — prioridade alta'));
   assert.ok(ata.includes('Informações:\n- Sexta (13/11) é ponto facultativo.'));
   assert.ok(ata.includes(`Impedimentos críticos em aberto:\n- [${sub.sigla}] "Atrasada da subseção": Sem acesso ao sistema (apoio solicitado: TI)`));
-  assert.ok(ata.includes('Próxima reunião: terça-feira, 06/10/2026.'));
+  assert.ok(ata.includes('Próxima reunião: terça-feira, 06/10/2026, às 10:00.'));
   assert.equal((await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/informacoes`, { texto: 'Tarde' })).status, 409, 'encerrada');
   assert.equal((await call(ANA_CPE, 'PATCH', `/reunioes-equipe/${id}`, { proxima_em: '2026-10-13' })).status, 200, 'ainda dá para ajustar enquanto é rascunho');
   assert.equal((await call(marta, 'PATCH', `/reunioes-equipe/${id}`, { proxima_em: '2026-10-20' })).status, 403);
@@ -251,4 +251,186 @@ test('nova ação ao vivo para uma seção subordinada: o chefe cria na própria
   // Uma ação de fora da árvore não entra.
   const alheia = await call(BRUNO_COF, 'POST', '/acoes', { secao_id: 2, titulo: 'De outra seção', prazo: '2026-10-30' });
   assert.equal((await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/acoes`, { acao_id: alheia.data.id })).status, 404);
+});
+
+test('a ação criada na seção do chefe e atribuída a alguém de uma seção subordinada é apresentada por essa seção', async (t) => {
+  const { db, call } = await demo(t);
+  const sub = (await db.prepare("select id from secoes where tipo = 'subsecao' and pai_id = ?").get(CPE)).id;
+  const chefeSub = (await db.prepare("select id from usuarios where perfil = 'chefe' and secao_id = ?").get(sub)).id;
+  // Criada na seção do chefe (CPE), mas com responsável da subseção: é o caso comum de quem delega para baixo.
+  const ins = async (titulo, prazo, resp) => (await db.prepare(`insert into acoes (secao_id, titulo, prazo, prazo_original, status, prioridade, criada_em, responsavel_id, criado_por)
+    values (?, ?, ?, ?, 'a_fazer', 'media', '2026-09-18T10:00:00', ?, ?)`).run(CPE, titulo, prazo, prazo, resp, ANA_CPE)).lastInsertRowid;
+  const delegada = await ins('Delegada à subseção', '2026-09-10', chefeSub);
+  await ins('Só da própria seção', '2026-09-10', null);
+  await db.prepare(`insert into impedimentos (acao_id, descricao, critico, apoio, criado_por, criado_em) values (?, 'Falta o acesso', 0, 'TI', ?, '2026-09-18T10:00:00')`).run(delegada, ANA_CPE);
+  const id = (await call(ANA_CPE, 'POST', '/reunioes-equipe/iniciar')).data.reuniao.id;
+  const cartao = (await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.cartoes.find((c) => c.secao_id === sub);
+  assert.ok(cartao.acoes.some((a) => a.titulo === 'Delegada à subseção'), 'aparece na lista de ações da seção');
+  assert.ok(!cartao.acoes.some((a) => a.titulo === 'Só da própria seção'), 'a ação sem ninguém da subseção continua fora');
+  assert.equal(cartao.acoes.filter((a) => a.titulo === 'Delegada à subseção').length, 1, 'sem duplicar');
+  assert.equal(cartao.impedimentos[0].descricao, 'Falta o acesso');
+});
+
+test('cada seção pode ter o seu cabeçalho da ata; sem um, a tela usa o da instituição', async (t) => {
+  const { db, call, marta } = await demo(t);
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  await db.prepare("insert into config (chave, valor, empresa_id) values ('ata_cabecalho', 'Instituição\nUnidade', 1)").run();
+  // Ponto de partida: o cabeçalho da instituição.
+  const inicial = (await call(ANA_CPE, 'GET', '/reunioes-equipe/cabecalho')).data;
+  assert.equal(inicial.propria, false);
+  assert.equal(inicial.ata_cabecalho, 'Instituição\nUnidade');
+  // Só o chefe da seção edita.
+  assert.equal((await call(marta, 'PUT', '/reunioes-equipe/cabecalho', { ata_cabecalho: 'x', ata_brasao: '' })).status, 403);
+  assert.equal((await call(DIRETOR, 'GET', '/reunioes-equipe/cabecalho')).status, 403);
+  assert.equal((await call(ANA_CPE, 'PUT', '/reunioes-equipe/cabecalho', { ata_cabecalho: 'x'.repeat(1501), ata_brasao: '' })).status, 400);
+  assert.equal((await call(ANA_CPE, 'PUT', '/reunioes-equipe/cabecalho', { ata_cabecalho: 'Centro X', ata_brasao: 'data:image/png;base64,AAAA' })).status, 400, 'brasão inválido');
+
+  const salvo = await call(ANA_CPE, 'PUT', '/reunioes-equipe/cabecalho', { ata_cabecalho: 'Centro de Planejamento\nAta da equipe', ata_brasao: png, ata_brasao_esq: '' });
+  assert.equal(salvo.status, 200);
+  assert.equal(salvo.data.propria, true);
+  assert.equal((await call(ANA_CPE, 'GET', '/reunioes-equipe/cabecalho')).data.ata_cabecalho, 'Centro de Planejamento\nAta da equipe');
+  // Outra seção não vê nem muda o dele.
+  assert.equal((await call(BRUNO_COF, 'GET', '/reunioes-equipe/cabecalho')).data.propria, false);
+
+  // A ata da reunião traz o cabeçalho da seção; a outra seção segue com o da instituição (null: a tela usa o da instituição).
+  const id = (await call(ANA_CPE, 'POST', '/reunioes-equipe/iniciar')).data.reuniao.id;
+  assert.equal((await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.cabecalho.ata_cabecalho, 'Centro de Planejamento\nAta da equipe');
+  await call(ANA_CPE, 'PUT', `/reunioes-equipe/${id}/presenca`, { presentes: [ANA_CPE, marta] });
+  await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/encerrar`);
+  await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/enviar-ata`);
+  assert.equal((await call(marta, 'GET', `/reunioes-equipe/${id}`)).data.cabecalho.ata_brasao, png, 'quem lê a ata vê o cabeçalho da seção');
+
+  // Voltar ao cabeçalho da instituição.
+  assert.equal((await call(ANA_CPE, 'DELETE', '/reunioes-equipe/cabecalho')).status, 200);
+  assert.equal((await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.cabecalho, null);
+  assert.equal((await call(ANA_CPE, 'GET', '/reunioes-equipe/cabecalho')).data.propria, false);
+});
+
+test('agenda própria da seção: dia, horário, periodicidade e data da próxima reunião, independentes da organização-mãe', async (t) => {
+  const { call } = await demo(t);
+  const inicial = (await call(ANA_CPE, 'GET', '/reunioes-equipe/agenda')).data;
+  assert.equal(inicial.intervalo, 7);
+  assert.equal(inicial.propria, false, 'sem agenda própria, vale a da instituição');
+  assert.equal(inicial.semana, '2026-09-22');
+  assert.equal((await call(DIRETOR, 'GET', '/reunioes-equipe/agenda')).status, 403);
+  assert.equal((await call(ANA_CPE, 'PUT', '/reunioes-equipe/agenda', { reuniao_intervalo: 10 })).status, 400);
+  assert.equal((await call(ANA_CPE, 'PUT', '/reunioes-equipe/agenda', { reuniao_hora: '25:00' })).status, 400);
+  assert.equal((await call(ANA_CPE, 'PUT', '/reunioes-equipe/agenda', { reuniao_proxima: '2026-09-01' })).status, 400);
+
+  // Quinta-feira, 14h, quinzenal: só desta seção.
+  const salva = await call(ANA_CPE, 'PUT', '/reunioes-equipe/agenda', { reuniao_dia: 4, reuniao_hora: '14:00', reuniao_intervalo: 14 });
+  assert.equal(salva.status, 200);
+  assert.deepEqual([salva.data.dia, salva.data.hora, salva.data.intervalo, salva.data.propria], [4, '14:00', 14, true]);
+  assert.ok(salva.data.proxima, 'quinzenal parte da próxima reunião prevista');
+  assert.equal(salva.data.semana, salva.data.proxima);
+  // A organização-mãe e a outra seção não mudam.
+  assert.equal((await call(DIRETOR, 'GET', '/bootstrap')).data.reuniao_intervalo, 7);
+  assert.equal((await call(BRUNO_COF, 'GET', '/reunioes-equipe/agenda')).data.intervalo, 7);
+  // Adiar só a próxima.
+  const adiada = await call(ANA_CPE, 'PUT', '/reunioes-equipe/agenda', { reuniao_proxima: '2026-10-01' });
+  assert.equal(adiada.data.semana, '2026-10-01');
+  assert.equal(adiada.data.anterior, '2026-09-17', 'o trilho vai da reunião anterior (15 dias antes) à próxima');
+  assert.equal((await call(ANA_CPE, 'PUT', '/reunioes-equipe/agenda', { reuniao_proxima: null })).data.proxima, null);
+
+  // A reunião iniciada guarda a data de referência da agenda da seção e a ata anuncia a próxima, no horário da seção.
+  await call(ANA_CPE, 'PUT', '/reunioes-equipe/agenda', { reuniao_dia: 2, reuniao_hora: '15:30', reuniao_intervalo: 14, reuniao_proxima: '2026-09-22' });
+  const ini = (await call(ANA_CPE, 'POST', '/reunioes-equipe/iniciar')).data;
+  assert.equal(ini.reuniao.semana, '2026-09-22');
+  assert.equal((await call(ANA_CPE, 'PUT', '/reunioes-equipe/agenda', { reuniao_proxima: '2026-10-20' })).status, 409, 'não muda a data com reunião em andamento');
+  const enc = await call(ANA_CPE, 'POST', `/reunioes-equipe/${ini.reuniao.id}/encerrar`);
+  assert.ok(enc.data.ata_texto.includes('Próxima reunião: terça-feira, 06/10/2026, às 15:30.'));
+});
+
+test('combinados da seção: cadastro, arquivar, ordem, frequência e cópia guardada em cada reunião', async (t) => {
+  const { call, marta } = await demo(t);
+  assert.equal((await call(marta, 'GET', '/reunioes-equipe/combinados')).status, 403, 'o cadastro é do chefe da seção');
+  assert.equal((await call(ANA_CPE, 'POST', '/reunioes-equipe/combinados', { texto: '' })).status, 400);
+  const c1 = (await call(ANA_CPE, 'POST', '/reunioes-equipe/combinados', { texto: 'Uma pessoa fala por vez.' })).data.combinado;
+  const c2 = (await call(ANA_CPE, 'POST', '/reunioes-equipe/combinados', { texto: 'Celular no silencioso.' })).data.combinado;
+  assert.equal((await call(ANA_CPE, 'PATCH', `/reunioes-equipe/combinados/${c2.id}`, { mover: 'cima' })).status, 200);
+  assert.deepEqual((await call(ANA_CPE, 'GET', '/reunioes-equipe/combinados')).data.itens.map((c) => c.id), [c2.id, c1.id]);
+  // Outra seção tem a sua lista.
+  assert.equal((await call(BRUNO_COF, 'GET', '/reunioes-equipe/combinados')).data.itens.length, 0);
+  assert.equal((await call(BRUNO_COF, 'PATCH', `/reunioes-equipe/combinados/${c1.id}`, { ativo: false })).status, 404);
+
+  const ini = await call(ANA_CPE, 'POST', '/reunioes-equipe/iniciar');
+  assert.equal(ini.data.mostrar_combinados, true);
+  const id = ini.data.reuniao.id;
+  assert.deepEqual((await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.combinados_snapshot.map((c) => c.texto), ['Celular no silencioso.', 'Uma pessoa fala por vez.']);
+  // Arquivar muda a lista de agora, não a cópia da reunião.
+  await call(ANA_CPE, 'PATCH', `/reunioes-equipe/combinados/${c1.id}`, { arquivado: true });
+  assert.equal((await call(ANA_CPE, 'GET', '/reunioes-equipe/combinados')).data.itens.length, 1);
+  assert.equal((await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.combinados_snapshot.length, 2);
+  assert.equal((await call(ANA_CPE, 'POST', '/reunioes-equipe/iniciar')).data.mostrar_combinados, false, 'retomar não repete a abertura');
+
+  // Frequência: só quando mudarem.
+  await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/encerrar`);
+  await call(ANA_CPE, 'PUT', '/reunioes-equipe/agenda', { combinados_frequencia: 'quando_mudarem' });
+  assert.equal((await call(ANA_CPE, 'POST', '/reunioes-equipe/iniciar')).data.mostrar_combinados, false, 'nada mudou desde a última reunião');
+});
+
+test('revisão da ata: quem esteve presente sugere, o chefe responde e as versões ficam guardadas', async (t) => {
+  const { call, marta, nuno } = await demo(t);
+  const id = (await call(ANA_CPE, 'POST', '/reunioes-equipe/iniciar')).data.reuniao.id;
+  await call(ANA_CPE, 'PUT', `/reunioes-equipe/${id}/presenca`, { presentes: [ANA_CPE, marta] });
+  const ata = (await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/encerrar`)).data.ata_texto;
+  assert.equal((await call(marta, 'POST', `/reunioes-equipe/${id}/sugestoes`, { tipo: 'correcao', texto: 'x' })).status, 409, 'a ata ainda não foi publicada');
+  await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/enviar-ata`);
+
+  const lida = (await call(marta, 'GET', `/reunioes-equipe/${id}`)).data;
+  assert.equal(lida.pode_sugerir, true);
+  assert.equal(lida.revisoes.length, 1, 'a primeira versão publicada fica guardada');
+  assert.equal((await call(nuno, 'POST', `/reunioes-equipe/${id}/sugestoes`, { tipo: 'correcao', texto: 'x' })).status, 403, 'quem não esteve presente não sugere');
+  assert.equal((await call(marta, 'POST', `/reunioes-equipe/${id}/sugestoes`, { tipo: 'outro', texto: 'x' })).status, 400);
+  assert.equal((await call(marta, 'POST', `/reunioes-equipe/${id}/sugestoes`, { tipo: 'inclusao', texto: 'Incluir a pauta de segurança.' })).status, 201);
+  const pendente = (await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.sugestoes[0];
+  assert.equal(pendente.status, 'pendente');
+  assert.equal(pendente.usuario_nome, 'Marta Lima');
+  assert.equal((await call(marta, 'POST', `/reunioes-equipe/${id}/sugestoes/${pendente.id}/responder`, { status: 'acolhida', resposta: 'ok' })).status, 403, 'quem responde é o chefe');
+  assert.equal((await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/sugestoes/${pendente.id}/responder`, { status: 'acolhida' })).status, 400, 'a resposta é obrigatória');
+
+  const nova = `${ata}\n\nPauta de segurança incluída.`;
+  const resp = await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/sugestoes/${pendente.id}/responder`, { status: 'acolhida', resposta: 'Incluído.', ata_texto: nova, ata_base: ata });
+  assert.equal(resp.status, 200);
+  const depois = (await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data;
+  assert.equal(depois.ata_texto, nova);
+  assert.equal(depois.sugestoes[0].status, 'acolhida');
+  assert.equal(depois.revisoes.length, 2, 'a versão nova entra no histórico');
+  assert.equal((await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/sugestoes/${pendente.id}/responder`, { status: 'acolhida', resposta: 'de novo' })).status, 409, 'já respondida');
+  // Corrigir a ata enviada também guarda a versão.
+  assert.equal((await call(ANA_CPE, 'PUT', `/reunioes-equipe/${id}/ata`, { ata_texto: `${nova}\nRevisada.`, ata_base: nova })).status, 200);
+  assert.equal((await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.revisoes.length, 3);
+});
+
+test('o chefe decide ao vivo os pedidos de prazo das ações que ele criou; os demais seguem com o Diretor', async (t) => {
+  const { db, call } = await demo(t);
+  const sub = (await db.prepare("select id from secoes where tipo = 'subsecao' and pai_id = ?").get(CPE)).id;
+  const chefeSub = (await db.prepare("select id from usuarios where perfil = 'chefe' and secao_id = ?").get(sub)).id;
+  const ins = async (criador, titulo) => (await db.prepare(`insert into acoes (secao_id, titulo, prazo, prazo_original, status, prioridade, criada_em, criado_por)
+    values (?, ?, '2026-10-10', '2026-10-10', 'a_fazer', 'media', '2026-09-18T10:00:00', ?)`).run(sub, titulo, criador)).lastInsertRowid;
+  const daChefe = await ins(ANA_CPE, 'Criada pela chefe do Centro');
+  const doDiretor = await ins(DIRETOR, 'Criada pelo Diretor');
+  const pedir = async (acao) => { assert.equal((await call(chefeSub, 'POST', `/acoes/${acao}/pedido-prazo`, { novo_prazo: '2026-10-20', justificativa: 'Falta de pessoal' })).status, 201); };
+  await pedir(daChefe);
+  await pedir(doDiretor);
+  const pedidos = (await db.prepare('select id, acao_id from pedidos_prazo').all());
+  const pDaChefe = pedidos.find((p) => p.acao_id === daChefe).id;
+  const pDoDiretor = pedidos.find((p) => p.acao_id === doDiretor).id;
+
+  const id = (await call(ANA_CPE, 'POST', '/reunioes-equipe/iniciar')).data.reuniao.id;
+  const cartao = (await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.cartoes.find((c) => c.secao_id === sub);
+  assert.deepEqual(cartao.pedidos.map((p) => p.acao_titulo), ['Criada pela chefe do Centro'], 'só os das ações que ela criou');
+
+  // O chefe decide só os seus; o do Diretor continua com o Diretor.
+  assert.equal((await call(ANA_CPE, 'POST', `/pedidos-prazo/${pDoDiretor}/decidir`, { aprovar: true, reuniao_equipe_id: id })).status, 403);
+  assert.equal((await call(chefeSub, 'POST', `/pedidos-prazo/${pDaChefe}/decidir`, { aprovar: true })).status, 403, 'quem pediu não decide');
+  assert.equal((await call(ANA_CPE, 'POST', `/pedidos-prazo/${pDaChefe}/decidir`, { aprovar: true, reuniao_equipe_id: 999 })).status, 409);
+  assert.equal((await call(ANA_CPE, 'POST', `/pedidos-prazo/${pDaChefe}/decidir`, { aprovar: true, reuniao_equipe_id: id })).status, 200);
+  assert.equal((await db.prepare('select prazo from acoes where id = ?').get(daChefe)).prazo, '2026-10-20');
+  assert.equal((await call(ANA_CPE, 'POST', `/pedidos-prazo/${pDaChefe}/decidir`, { aprovar: false, reuniao_equipe_id: id })).status, 409, 'já decidido');
+  assert.equal((await call(DIRETOR, 'POST', `/pedidos-prazo/${pDoDiretor}/decidir`, { aprovar: false })).status, 200);
+
+  const enc = await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/encerrar`);
+  assert.match(enc.data.ata_texto, /Pedidos de novo prazo decididos:\n- \[\w+\] "Criada pela chefe do Centro": novo prazo 20\/10\/2026 aprovado\./);
+  assert.equal((await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.pedidos_decididos.length, 1);
 });

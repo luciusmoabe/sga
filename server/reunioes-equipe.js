@@ -7,15 +7,17 @@
 //     Administrador. O Diretor e o Apoio não leem estas atas.
 import { subarvore } from './db.js';
 import { empresaAtual } from './empresa.js';
-import { falha, h, marks, permit, texto } from './helpers.js';
-import { DIAS_SEM_MOVIMENTO, addDays, br, ehISO, parseISO } from './logic.js';
+import { falha, h, json, marks, permit, texto } from './helpers.js';
+import { extrasReuniaoEquipe } from './reunioes-equipe-extras.js';
+import { validarCabecalho } from './ata-cabecalho.js';
+import { DIAS_SEM_MOVIMENTO, addDays, br, ehISO, parseISO, reuniaoSeguinte } from './logic.js';
 
 const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 const ORDEM_SITUACAO = { atrasada: 0, vence: 1, parada: 2, normal: 3 };
 const ORDEM_COR = { vermelho: 0, amarelo: 1, verde: 2 };
 const PRIO = { alta: 'alta', media: 'média', baixa: 'baixa' };
 
-export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
+export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje, cfg }) {
   const conduz = (user, r) => user.perfil === 'chefe' && !!user.secao_id && user.secao_id === r.secao_id;
   const soChefe = permit('chefe');
   const travar = async () => { if (db.isPg) await q1('select pg_advisory_xact_lock(7319, 3)'); };
@@ -35,7 +37,8 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
     return fn(r);
   });
   const fmt = (r) => ({ id: r.id, secao_id: r.secao_id, secao_nome: r.secao_nome, secao_sigla: r.secao_sigla, secao_tipo: r.secao_tipo, data: r.data, status: r.status,
-    iniciada_em: r.iniciada_em, encerrada_em: r.encerrada_em, enviada_em: r.enviada_em, ata_texto: r.ata_texto, proxima_em: r.proxima_em ?? null });
+    iniciada_em: r.iniciada_em, encerrada_em: r.encerrada_em, enviada_em: r.enviada_em, ata_texto: r.ata_texto, proxima_em: r.proxima_em ?? null,
+    semana: r.semana || r.data, combinados_snapshot: json(r.combinados_snapshot, []) });
 
   /** Quem pode participar: membros, suplentes e chefes das subseções da árvore da seção (e o próprio chefe), ativos. */
   const candidatos = async (secaoId) => {
@@ -56,28 +59,36 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
       where s.pai_id = ? and s.ativa = 1 and s.empresa_id = ? order by s.ordem, s.id`, r.secao_id, empresaAtual());
     const dono = new Map(); // seção da árvore -> seção subordinada que a apresenta
     for (const f of filhas) for (const id of await subarvore(db, f.id)) dono.set(id, f.id);
-    const ids = [...dono.keys()];
-    if (!ids.length) return [];
+    if (!dono.size) return [];
+    // Uma ação criada na seção do chefe e atribuída a alguém de uma seção subordinada é dessa seção: ela a apresenta.
+    const ids = await subarvore(db, r.secao_id);
+    const apresentadora = (x) => dono.get(x.secao_id) ?? dono.get(x.resp_secao_id);
     const inicio = (await q1('select max(data) as d from reunioes_equipe where secao_id = ? and empresa_id = ? and id != ? and data < ?', r.secao_id, empresaAtual(), r.id, r.data))?.d || addDays(r.data, -7);
-    const [abertas, feitas, imps] = await Promise.all([
-      q(`select a.id, a.titulo, a.prazo, a.status, a.secao_id, s.sigla as secao_sigla, u.nome as responsavel_nome, substr(coalesce(a.movimentada_em, a.criada_em), 1, 10) as movimento
+    const chefes = (await q(`select id from usuarios where perfil = 'chefe' and secao_id = ? and ativo = 1 and empresa_id = ?`, r.secao_id, empresaAtual())).map((x) => x.id);
+    const [abertas, feitas, imps, pedidos] = await Promise.all([
+      q(`select a.id, a.titulo, a.prazo, a.status, a.secao_id, u.secao_id as resp_secao_id, s.sigla as secao_sigla, u.nome as responsavel_nome, substr(coalesce(a.movimentada_em, a.criada_em), 1, 10) as movimento
         from acoes a join secoes s on s.id = a.secao_id left join usuarios u on u.id = a.responsavel_id
         where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
         order by a.prazo, a.id`, empresaAtual(), ...ids),
-      q(`select a.id, a.titulo, a.secao_id, a.concluida_em from acoes a
+      q(`select a.id, a.titulo, a.secao_id, u.secao_id as resp_secao_id, a.concluida_em from acoes a left join usuarios u on u.id = a.responsavel_id
         where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and a.status = 'concluida' and a.concluida_em is not null and substr(a.concluida_em, 1, 10) >= ?
         order by a.concluida_em, a.id`, empresaAtual(), ...ids, inicio),
-      q(`select i.id, i.descricao, i.critico, i.apoio, a.id as acao_id, a.titulo as acao_titulo, a.secao_id
-        from impedimentos i join acoes a on a.id = i.acao_id
+      q(`select i.id, i.descricao, i.critico, i.apoio, a.id as acao_id, a.titulo as acao_titulo, a.secao_id, u.secao_id as resp_secao_id
+        from impedimentos i join acoes a on a.id = i.acao_id left join usuarios u on u.id = a.responsavel_id
         where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and i.resolvido_em is null and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
         order by i.critico desc, i.id`, empresaAtual(), ...ids),
+      // Pedidos de novo prazo de ações que o próprio chefe criou: quem decide é ele, ao vivo na reunião.
+      chefes.length ? q(`select p.id, p.acao_id, p.prazo_atual, p.novo_prazo, p.justificativa, a.titulo as acao_titulo, a.secao_id, u.secao_id as resp_secao_id, ur.nome as usuario_nome
+        from pedidos_prazo p join acoes a on a.id = p.acao_id left join usuarios u on u.id = a.responsavel_id left join usuarios ur on ur.id = p.usuario_id
+        where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and a.criado_por in (${marks(chefes)})
+        order by p.criado_em`, empresaAtual(), ...ids, ...chefes) : [],
     ]);
     const marcar = (a) => ({
       id: a.id, titulo: a.titulo, prazo: a.prazo, status: a.status, secao_sigla: a.secao_sigla, responsavel_nome: a.responsavel_nome || null,
       situacao: a.prazo < dia ? 'atrasada' : a.prazo <= ate2 ? 'vence' : a.movimento < limiteParada ? 'parada' : 'normal',
     });
     const cartoes = filhas.map((f) => {
-      const minha = (x) => dono.get(x.secao_id) === f.id;
+      const minha = (x) => apresentadora(x) === f.id;
       const acoes = abertas.filter(minha).map(marcar).sort((x, y) => ORDEM_SITUACAO[x.situacao] - ORDEM_SITUACAO[y.situacao]);
       const impsDe = imps.filter(minha);
       const atrasadas = acoes.filter((a) => a.situacao === 'atrasada').length;
@@ -91,6 +102,7 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
         proximas: acoes.filter((a) => a.situacao !== 'atrasada' && a.prazo <= ate7).map(({ id, titulo, prazo }) => ({ id, titulo, prazo })),
         impedimentos: impsDe.map((i) => ({ id: i.id, acao_id: i.acao_id, acao_titulo: i.acao_titulo, descricao: i.descricao, critico: !!i.critico, apoio: i.apoio || null })),
         apoios: impsDe.filter((i) => i.apoio).map((i) => ({ acao_titulo: i.acao_titulo, apoio: i.apoio })),
+        pedidos: pedidos.filter(minha),
       };
     });
     // Em ordem de necessidade, como na reunião do Diretor: quem mais precisa de atenção vem primeiro.
@@ -106,10 +118,23 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
   const novasAcoesDe = (reuniaoId) => q(`select a.id, a.titulo, a.prazo, a.prioridade, u.nome as responsavel_nome from reuniao_equipe_acoes x
     join acoes a on a.id = x.acao_id left join usuarios u on u.id = a.responsavel_id where x.reuniao_id = ? and a.empresa_id = ? order by a.id`, reuniaoId, empresaAtual());
 
+  // Agenda, combinados e revisão da ata da seção (registrados antes das rotas `/:id`).
+  const ex = extrasReuniaoEquipe(app, { db, q, q1, run, agoraISO, hoje, cfg, reuniaoDe, comReuniao, travar });
+
+  /** O cabeçalho próprio da ata da seção, ou null (a tela usa então o da instituição). */
+  const cabecalhoDe = async (secaoId) => {
+    const c = await q1('select ata_cabecalho, ata_brasao, ata_brasao_esq from secao_cabecalho_ata where secao_id = ? and empresa_id = ?', secaoId, empresaAtual());
+    return c ? { ata_cabecalho: c.ata_cabecalho, ata_brasao: c.ata_brasao, ata_brasao_esq: c.ata_brasao_esq } : null;
+  };
+
+  const pedidosDecididos = (reuniaoId) => q(`select p.id, p.novo_prazo, p.prazo_atual, p.status, a.titulo as acao_titulo, s.sigla as secao_sigla from pedidos_prazo p
+    join acoes a on a.id = p.acao_id join secoes s on s.id = a.secao_id where p.reuniao_equipe_id = ? and a.empresa_id = ? order by p.decidido_em`, reuniaoId, empresaAtual());
+
   /** A reunião e tudo o que foi registrado nela (para a condução, a ata e o histórico). */
-  const completa = async (r, participantes) => ({
-    ...fmt(r), pode_conduzir: true, participantes: participantes.map((p) => ({ ...p, presente: !!p.presente })),
+  const completa = async (r, participantes, user) => ({
+    ...fmt(r), cabecalho: await cabecalhoDe(r.secao_id), pode_conduzir: true, participantes: participantes.map((p) => ({ ...p, presente: !!p.presente })),
     decisoes: await decisoesDe(r.id), informacoes: await informacoesDe(r.id), novas_acoes: await novasAcoesDe(r.id),
+    pedidos_decididos: await pedidosDecididos(r.id), ...(await ex.revisaoDe(user, r)),
   });
 
   // ---------- Lista ----------
@@ -135,32 +160,66 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
     const secaoId = req.user.secao_id;
     if (!secaoId) throw falha(409, 'Você ainda não está vinculado a uma seção. Peça {topo:ao} para atribuí-lo a uma seção.');
     const aberta = await q1(`select id from reunioes_equipe where secao_id = ? and status = 'em_andamento' and empresa_id = ?`, secaoId, empresaAtual());
-    if (aberta) return { reuniao: fmt(await reuniaoDe(aberta.id)), retomada: true };
+    if (aberta) return { reuniao: fmt(await reuniaoDe(aberta.id)), retomada: true, mostrar_combinados: false };
     const equipe = await candidatos(secaoId);
     if (equipe.filter((c) => c.id !== req.user.id).length === 0) throw falha(409, 'A sua seção ainda não tem equipe. Cadastre as pessoas em "Minha equipe" antes de fazer a reunião.');
-    const id = (await run('insert into reunioes_equipe (empresa_id, secao_id, data, iniciada_em, status, criada_por) values (?,?,?,?,?,?)',
-      empresaAtual(), secaoId, hoje(), agoraISO(), 'em_andamento', req.user.id)).lastInsertRowid;
+    // Como na reunião do Diretor: a referência é a data da reunião da agenda da seção (uma reunião iniciada no próprio dia vale o dia inteiro) e os combinados vigentes ficam guardados.
+    const agenda = await ex.agendaDe(secaoId);
+    const mostrar = await ex.mostrarCombinados(secaoId);
+    const snapshot = await ex.snapshotCombinados(secaoId);
+    const id = (await run('insert into reunioes_equipe (empresa_id, secao_id, data, semana, iniciada_em, status, combinados_snapshot, criada_por) values (?,?,?,?,?,?,?,?)',
+      empresaAtual(), secaoId, hoje(), agenda.referencia(24), agoraISO(), 'em_andamento', JSON.stringify(snapshot), req.user.id)).lastInsertRowid;
     let ordem = 0;
     for (const c of equipe) {
       await run('insert into reuniao_equipe_participantes (reuniao_id, usuario_id, nome, presente, ordem) values (?,?,?,?,?)', id, c.id, c.nome, c.id === req.user.id ? 1 : 0, ordem++);
     }
     res.status(201);
-    return { reuniao: fmt(await reuniaoDe(id)), retomada: false };
+    return { reuniao: fmt(await reuniaoDe(id)), retomada: false, mostrar_combinados: mostrar };
   })));
+
+  // ---------- Cabeçalho da ata da seção ----------
+  // Cada seção pode ter o seu cabeçalho (texto e brasões), definido pelo chefe (titular ou suplente). Sem um, vale o da instituição.
+  // Estas rotas vêm antes de `/:id` para que "cabecalho" não seja lido como número de reunião.
+  app.get('/api/reunioes-equipe/cabecalho', soChefe, h(async (req) => {
+    if (!req.user.secao_id) throw falha(409, 'Você ainda não está vinculado a uma seção. Peça {topo:ao} para atribuí-lo a uma seção.');
+    const propria = await cabecalhoDe(req.user.secao_id);
+    if (propria) return { propria: true, ...propria };
+    // Ponto de partida: o cabeçalho da instituição (o brasão antigo, que é um caminho e não uma imagem, não é copiado).
+    const c = await cfg();
+    return { propria: false, ata_cabecalho: c.ata_cabecalho || '', ata_brasao: c.ata_brasao || '', ata_brasao_esq: String(c.ata_brasao_esq || '').startsWith('data:') ? c.ata_brasao_esq : '' };
+  }));
+  app.put('/api/reunioes-equipe/cabecalho', soChefe, h(async (req) => {
+    if (!req.user.secao_id) throw falha(409, 'Você ainda não está vinculado a uma seção. Peça {topo:ao} para atribuí-lo a uma seção.');
+    const v = validarCabecalho(req.body);
+    const esq = v.ata_brasao_esq ?? '';
+    await db.transaction(async () => {
+      await run(`insert into secao_cabecalho_ata (secao_id, empresa_id, ata_cabecalho, ata_brasao, ata_brasao_esq, alterado_em, alterado_por) values (?,?,?,?,?,?,?)
+        on conflict (secao_id) do update set ata_cabecalho = excluded.ata_cabecalho, ata_brasao = excluded.ata_brasao, ata_brasao_esq = excluded.ata_brasao_esq,
+          alterado_em = excluded.alterado_em, alterado_por = excluded.alterado_por`,
+      req.user.secao_id, empresaAtual(), v.ata_cabecalho.trim(), v.ata_brasao, esq, agoraISO(), req.user.id);
+    });
+    return { propria: true, ...(await cabecalhoDe(req.user.secao_id)) };
+  }));
+  app.delete('/api/reunioes-equipe/cabecalho', soChefe, h(async (req) => {
+    if (!req.user.secao_id) throw falha(409, 'Você ainda não está vinculado a uma seção. Peça {topo:ao} para atribuí-lo a uma seção.');
+    await run('delete from secao_cabecalho_ata where secao_id = ? and empresa_id = ?', req.user.secao_id, empresaAtual());
+    return { ok: true };
+  }));
 
   // ---------- Leitura ----------
   app.get('/api/reunioes-equipe/:id', permit('chefe', 'membro', 'administrador'), h(async (req) => {
     const r = await reuniaoDe(req.params.id);
     const participantes = await participantesDe(r.id);
     if (conduz(req.user, r)) {
-      return { ...(await completa(r, participantes)), ...(r.status === 'em_andamento' ? { cartoes: await pauta(r) } : {}) };
+      return { ...(await completa(r, participantes, req.user)), ...(r.status === 'em_andamento' ? { cartoes: await pauta(r) } : {}) };
     }
     const presente = participantes.some((p) => p.usuario_id === req.user.id && p.presente);
     const acima = req.user.perfil === 'chefe' && req.user.secao_id ? (await subarvore(db, req.user.secao_id)).includes(r.secao_id) : false;
     if (r.status !== 'enviada' || !(presente || acima || req.user.perfil === 'administrador')) throw falha(404, 'Reunião da equipe não encontrada.');
     return {
-      ...fmt(r), pode_conduzir: false, participantes: participantes.filter((p) => p.presente).map((p) => ({ usuario_id: p.usuario_id, nome: p.nome, presente: true })),
+      ...fmt(r), cabecalho: await cabecalhoDe(r.secao_id), pode_conduzir: false, participantes: participantes.filter((p) => p.presente).map((p) => ({ usuario_id: p.usuario_id, nome: p.nome, presente: true })),
       decisoes: await decisoesDe(r.id), informacoes: await informacoesDe(r.id), novas_acoes: await novasAcoesDe(r.id),
+      pedidos_decididos: await pedidosDecididos(r.id), ...(await ex.revisaoDe(req.user, r)),
     };
   }));
 
@@ -182,6 +241,8 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
     const d = b.proxima_em === '' ? null : b.proxima_em;
     if (d !== null && (!ehISO(d) || d < r.data)) throw falha(400, 'A próxima reunião não pode ser anterior a esta.');
     await run('update reunioes_equipe set proxima_em = ? where id = ? and empresa_id = ?', d, r.id, empresaAtual());
+    // A data marcada passa a ser a da próxima reunião da agenda da seção (o trilho do Início acompanha).
+    if (d) await run('insert into secao_config (secao_id, empresa_id, chave, valor) values (?,?,?,?) on conflict (secao_id, chave) do update set valor = excluded.valor', r.secao_id, empresaAtual(), 'reuniao_proxima', d);
     return fmt(await reuniaoDe(r.id));
   })));
 
@@ -301,7 +362,15 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
       cartoes.forEach((c) => c.impedimentos.filter((i) => i.critico).forEach((i) => linhas.push(`- [${c.sigla || c.nome}] "${i.acao_titulo}": ${i.descricao}${i.apoio ? ` (apoio solicitado: ${i.apoio})` : ''}`)));
       linhas.push('');
     }
-    if (r.proxima_em) linhas.push(`Próxima reunião: ${DIAS[parseISO(r.proxima_em).getUTCDay()]}, ${br(r.proxima_em)}.`);
+    const pedidosAta = await pedidosDecididos(r.id);
+    if (pedidosAta.length) {
+      linhas.push('Pedidos de novo prazo decididos:');
+      pedidosAta.forEach((p) => linhas.push(`- [${p.secao_sigla}] "${p.acao_titulo}": novo prazo ${br(p.novo_prazo)} ${p.status === 'aprovado' ? 'aprovado' : 'recusado'}.`));
+      linhas.push('');
+    }
+    const agenda = await ex.agendaDe(r.secao_id);
+    const proxima = r.proxima_em || reuniaoSeguinte(r.semana || r.data, { dia: agenda.dia, intervalo: agenda.intervalo });
+    linhas.push(`Próxima reunião: ${DIAS[parseISO(proxima).getUTCDay()]}, ${br(proxima)}, às ${agenda.hora}.`);
     return linhas.join('\n').trimEnd();
   }
 
@@ -322,16 +391,19 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje }) {
     const t = texto(req.body?.ata_texto, 20000);
     if (!t) throw falha(400, 'A ata não pode ficar vazia.');
     if (req.body?.ata_base !== undefined && req.body.ata_base !== r.ata_texto) throw falha(409, 'A ata foi alterada por outra pessoa. Recarregue antes de salvar.');
+    await ex.guardarVersoes(r, req.user, t);
     await run('update reunioes_equipe set ata_texto = ? where id = ? and empresa_id = ?', t, r.id, empresaAtual());
     return fmt(await reuniaoDe(r.id));
   })));
   app.post('/api/reunioes-equipe/:id/enviar-ata', soChefe, h(async (req) => comReuniao(req.params.id, req.user, async (r) => {
     if (r.status !== 'rascunho') throw falha(409, 'A ata precisa estar em rascunho para ser enviada.');
+    await ex.registrarVersao(r, req.user, r.ata_texto);
     await run(`update reunioes_equipe set status = 'enviada', enviada_em = ? where id = ? and empresa_id = ?`, agoraISO(), r.id, empresaAtual());
     return fmt(await reuniaoDe(r.id));
   })));
   app.delete('/api/reunioes-equipe/:id', soChefe, h(async (req) => comReuniao(req.params.id, req.user, async (r) => {
-    for (const tabela of ['reuniao_equipe_decisoes', 'reuniao_equipe_informacoes', 'reuniao_equipe_acoes', 'reuniao_equipe_participantes']) await run(`delete from ${tabela} where reuniao_id = ?`, r.id);
+    await run('update pedidos_prazo set reuniao_equipe_id = null where reuniao_equipe_id = ?', r.id);
+    for (const tabela of ['reuniao_equipe_decisoes', 'reuniao_equipe_informacoes', 'reuniao_equipe_acoes', 'reuniao_equipe_sugestoes', 'reuniao_equipe_revisoes', 'reuniao_equipe_participantes']) await run(`delete from ${tabela} where reuniao_id = ?`, r.id);
     await run('delete from reunioes_equipe where id = ? and empresa_id = ?', r.id, empresaAtual());
     return { ok: true, id: r.id };
   })));

@@ -6,7 +6,9 @@ import { abrirForm, br, esc, toast } from './ui.js';
 
 const NOMES_DIA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 
-export function abrirAlterarReuniao(boot, aoSalvar) {
+/** `opcoes.salvar(corpo)` grava a agenda (por padrão, a da instituição em `/config`); para a seção, em `/reunioes-equipe/agenda`. */
+export function abrirAlterarReuniao(boot, aoSalvar, opcoes = {}) {
+  const salvar = opcoes.salvar || (async (corpo) => { await put('/config', corpo); atualizarSessao(await get('/bootstrap')); });
   const intervalo = boot.reuniao_intervalo === 14 ? 14 : 7;
   const marcada = !!boot.reuniao_proxima;
   abrirForm({
@@ -21,8 +23,7 @@ export function abrirAlterarReuniao(boot, aoSalvar) {
       if (d.voltar) corpo.reuniao_proxima = null;
       else if (d.data === boot.semana) { toast('A data não foi alterada.'); return; }
       else corpo.reuniao_proxima = d.data;
-      await put('/config', corpo);
-      atualizarSessao(await get('/bootstrap'));
+      await salvar(corpo);
       toast('Data da reunião atualizada.');
       await aoSalvar?.();
     },

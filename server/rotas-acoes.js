@@ -1008,10 +1008,16 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
               where a.empresa_id = ? and (${req.user.perfil === 'administrador' ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'}) ${st ? `and p.status = '${st}' and a.arquivada = 0 and a.encerrada = 0` : ''}
               order by p.criado_em desc`, empresaAtual());
   }));
-  app.post('/api/pedidos-prazo/:id/decidir', permit('diretor', 'apoio', 'administrador'), h(async (req) => {
+  app.post('/api/pedidos-prazo/:id/decidir', permit('chefe', 'diretor', 'apoio', 'administrador'), h(async (req) => {
     const id = Number(req.params.id);
     const todas = req.user.perfil === 'administrador'; // vê também as ações internas das subseções
-    const filtro = todas ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1';
+    // O chefe decide só os pedidos das ações que ele criou (autor), na própria árvore; os demais seguem com {topo:o}.
+    if (req.user.perfil === 'chefe') {
+      const pedido = await q1('select p.acao_id, p.usuario_id from pedidos_prazo p join acoes a on a.id = p.acao_id where p.id = ? and a.empresa_id = ?', id, empresaAtual());
+      if (!pedido) throw falha(404, 'Pedido não encontrado.');
+      if (!ehAutor(req.user, await acaoVisivel(req.user, pedido.acao_id)) || pedido.usuario_id === req.user.id) throw falha(403, 'Você decide os pedidos de prazo das ações que você criou. Os demais são decididos {topo:pelo}.');
+    }
+    const filtro = todas || req.user.perfil === 'chefe' ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1';
     const visivel = await q1(`select p.acao_id from pedidos_prazo p join acoes a on a.id = p.acao_id
       where p.id = ? and a.empresa_id = ? and (${filtro})`, id, empresaAtual());
     if (!visivel) throw falha(404, 'Pedido não encontrado.');
@@ -1029,15 +1035,21 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
         if (!r) throw falha(409, 'A reunião informada não está em andamento.');
         reuniaoId = r.id;
       }
+      let reuniaoEquipeId = null;
+      if (req.user.perfil === 'chefe' && req.body?.reuniao_equipe_id) {
+        const re = await q1(`select id from reunioes_equipe where id = ? and secao_id = ? and status = 'em_andamento' and empresa_id = ?`, Number(req.body.reuniao_equipe_id), req.user.secao_id, empresaAtual());
+        if (!re) throw falha(409, 'A reunião informada não está em andamento.');
+        reuniaoEquipeId = re.id;
+      }
       if (req.user.perfil === 'apoio' && !reuniaoId) {
         throw falha(403, 'Somente {topo:o} decide pedidos de prazo; o Apoio pode registrar a decisão durante a reunião.');
       }
       const aprovar = req.body?.aprovar;
       if (typeof aprovar !== 'boolean') throw falha(400, 'Informe se o pedido deve ser aprovado ou recusado.');
       if (aprovar && p.prazo !== p.prazo_atual) throw falha(409, 'O prazo da ação mudou. Recuse este pedido e solicite um novo.');
-      const alterado = await run(`update pedidos_prazo set status = ?, decidido_em = ?, decidido_por = ?, reuniao_id = ?
+      const alterado = await run(`update pedidos_prazo set status = ?, decidido_em = ?, decidido_por = ?, reuniao_id = ?, reuniao_equipe_id = ?
         where id = ? and status = 'pendente'`,
-        aprovar ? 'aprovado' : 'recusado', agoraISO(), req.user.id, reuniaoId, p.id);
+        aprovar ? 'aprovado' : 'recusado', agoraISO(), req.user.id, reuniaoId, reuniaoEquipeId, p.id);
       if (!alterado.changes) throw falha(409, 'Este pedido já foi decidido. Atualize a tela.');
       await movimentou(p.acao_id, req.user.empresa_id);
       if (aprovar) {

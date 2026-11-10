@@ -92,6 +92,7 @@ export async function excluirCadastro(db, tabela, id) {
         await db.prepare('delete from auth_sessoes where identidade_id in (select id from auth_identidades where usuario_id=?)').run(id);
         await db.prepare('delete from auth_identidades where usuario_id=?').run(id);
       }
+      if(tabela==='secoes') await db.prepare('delete from secao_cabecalho_ata where secao_id=?').run(id); // o cabeçalho da ata não é histórico
       await db.prepare(`delete from ${tabela} where id=? and empresa_id=?`).run(id, empresaAtual());
       return {ok:true};
     });

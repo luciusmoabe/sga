@@ -37,11 +37,15 @@ async function imagemPng(arquivo) {
   return png;
 }
 
-export function ligarConfiguracaoAta(raiz, config) {
+/** O editor do cabeçalho (texto e brasões) serve à instituição e a cada seção. `opcoes.salvar(dados)` grava e devolve o cabeçalho salvo;
+ *  `opcoes.titulo` e `opcoes.descricao` explicam de quem é o cabeçalho. Sem opções, é o da instituição (Configuração › Ata). */
+export function ligarConfiguracaoAta(raiz, config, opcoes = {}) {
+  const { titulo = 'Cabeçalho da Ata de Reunião', salvar = (dados) => put('/config/ata', dados),
+    descricao = 'Um brasão fica à esquerda (o da instituição) e outro à direita (o da unidade); cada um é opcional. O cabeçalho aparece na ata e no PDF.' } = opcoes;
   const area = raiz.querySelector('#config-ata');
   let brasao = config.ata_brasao || '';
   let brasaoEsq = brasaoEsquerdo(config);
-  area.innerHTML = `<h2>Cabeçalho da Ata de Reunião</h2><p class="suave">Um brasão fica à esquerda (o da instituição) e outro à direita (o da unidade); cada um é opcional. O cabeçalho aparece na ata e no PDF.</p><form id="form-cabecalho-ata"><div class="campo"><label for="ata-cabecalho-texto">Texto do cabeçalho</label><textarea id="ata-cabecalho-texto" maxlength="1500" rows="6" placeholder="Instituição&#10;Unidade&#10;Ata de Reunião">${esc(config.ata_cabecalho || '')}</textarea></div><div class="campo"><label for="ata-brasao-esq-arquivo">Brasão do lado esquerdo</label><input id="ata-brasao-esq-arquivo" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPEG ou WebP, até 5 MB.</small></div><div class="linha"><button type="button" class="btn btn-sec" data-remover-brasao-esq>Remover brasão da esquerda</button></div><div class="campo"><label for="ata-brasao-arquivo">Brasão do lado direito</label><input id="ata-brasao-arquivo" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPEG ou WebP, até 5 MB.</small></div><div class="linha"><button type="button" class="btn btn-sec" data-remover-brasao>Remover brasão da direita</button><button type="submit" class="btn btn-primario">Salvar cabeçalho</button></div><p class="erro-form oculto" role="alert"></p></form><h3>Pré-visualização</h3><div data-previa-cabecalho></div>`;
+  area.innerHTML = `<h2>${esc(titulo)}</h2><p class="suave">${esc(descricao)}</p><form id="form-cabecalho-ata"><div class="campo"><label for="ata-cabecalho-texto">Texto do cabeçalho</label><textarea id="ata-cabecalho-texto" maxlength="1500" rows="6" placeholder="Instituição&#10;Unidade&#10;Ata de Reunião">${esc(config.ata_cabecalho || '')}</textarea></div><div class="campo"><label for="ata-brasao-esq-arquivo">Brasão do lado esquerdo</label><input id="ata-brasao-esq-arquivo" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPEG ou WebP, até 5 MB.</small></div><div class="linha"><button type="button" class="btn btn-sec" data-remover-brasao-esq>Remover brasão da esquerda</button></div><div class="campo"><label for="ata-brasao-arquivo">Brasão do lado direito</label><input id="ata-brasao-arquivo" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPEG ou WebP, até 5 MB.</small></div><div class="linha"><button type="button" class="btn btn-sec" data-remover-brasao>Remover brasão da direita</button><button type="submit" class="btn btn-primario">Salvar cabeçalho</button></div><p class="erro-form oculto" role="alert"></p></form><h3>Pré-visualização</h3><div data-previa-cabecalho></div>`;
   const form = area.querySelector('form'), texto = area.querySelector('textarea'), arquivo = area.querySelector('#ata-brasao-arquivo'), arquivoEsq = area.querySelector('#ata-brasao-esq-arquivo');
   const erro = area.querySelector('[role=alert]');
   const mostrarErro = e => { erro.textContent = e.message; erro.classList.remove('oculto'); };
@@ -55,7 +59,7 @@ export function ligarConfiguracaoAta(raiz, config) {
     try {
       const novo = arquivo.files[0] ? await imagemPng(arquivo.files[0]) : brasao;
       const novoEsq = arquivoEsq.files[0] ? await imagemPng(arquivoEsq.files[0]) : brasaoEsq;
-      const salva = await put('/config/ata', { ata_cabecalho: texto.value, ata_brasao: novo, ata_brasao_esq: novoEsq });
+      const salva = await salvar({ ata_cabecalho: texto.value, ata_brasao: novo, ata_brasao_esq: novoEsq });
       Object.assign(config, salva); brasao = salva.ata_brasao; brasaoEsq = brasaoEsquerdo(config); arquivo.value = ''; arquivoEsq.value = ''; previa(); toast('Cabeçalho da ata salvo.');
     } catch (e) { mostrarErro(e); } finally { btn.disabled = false; }
   });

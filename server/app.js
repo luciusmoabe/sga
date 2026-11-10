@@ -100,6 +100,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth, em
   const ROTAS_MEMBRO = [
     ['GET', /^\/(bootstrap|secoes|tarefas|avisos\/atual)$/],
     ['GET', /^\/reunioes-equipe(\/\d+)?$/], // as atas das reuniões da equipe de que participou
+    ['POST', /^\/reunioes-equipe\/\d+\/sugestoes$/], // e a sugestão de revisão dessas atas
     ['GET', /^\/acoes(\/\d+(\/(responsaveis|executores))?)?$/],
     ['POST', /^\/acoes$/],
     ['PATCH', /^\/acoes\/\d+$/],

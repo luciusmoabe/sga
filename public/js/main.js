@@ -12,7 +12,7 @@ import { estrutura } from './estrutura.js';
 import { configuracaoAta } from './ata-cabecalho.js';
 import { atas, reuniaoDetalhe, reunioes } from './atas.js';
 import { inicioReuniao, viewReuniao } from './reuniao.js';
-import { reunioesEquipe, viewReuniaoEquipe } from './reuniao-equipe.js';
+import { agendaEquipe, cabecalhoEquipe, combinadosEquipe, reunioesEquipe, viewReuniaoEquipe } from './reuniao-equipe.js';
 import { avisos } from './avisos.js';
 import { empresas } from './plataforma.js';
 import { produtividade } from './produtividade.js';
@@ -41,6 +41,9 @@ const ROTAS = {
   avisos: { f: avisos, perfis: ['diretor', 'administrador'], titulo: 'Avisos' },
   combinados: { f: combinados, perfis: TODOS, titulo: 'Combinados' },
   'reunioes-equipe': { f: reunioesEquipe, perfis: ['chefe', 'membro'], titulo: 'Reunião da equipe' },
+  'agenda-equipe': { f: agendaEquipe, perfis: ['chefe'], titulo: 'Agenda da reunião da equipe' },
+  'combinados-equipe': { f: combinadosEquipe, perfis: ['chefe'], titulo: 'Combinados da equipe' },
+  'cabecalho-equipe': { f: cabecalhoEquipe, perfis: ['chefe'], titulo: 'Cabeçalho da ata' },
   'reuniao-equipe': { f: viewReuniaoEquipe, perfis: ['chefe'], tv: (p) => !!p.id, titulo: 'Modo Reunião da equipe' },
   reunioes: { f: (r, p) => (p.id ? reuniaoDetalhe(r, p) : reunioes(r, p)), perfis: LEITURA, titulo: 'Reuniões e atas' },
   // Sem id: tela comum de início (nada é criado ao abrir a rota). Com id: Modo Reunião em tela cheia.
@@ -428,7 +431,7 @@ async function renderizar() {
     const chaveCasca = `${est.user.perfil}:${lePorTodosOsCentros() ? 1 : 0}`;
     if (!$('.app') || $('.app')?.dataset.perfil !== chaveCasca) { casca(); $('.app').dataset.perfil = chaveCasca; }
     for (const a of document.querySelectorAll('.menu a, .abas-movel a, .folha-menu a')) {
-      const ativa = a.dataset.rota === rota || (rota === 'centro' && a.dataset.rota === 'painel') || (rota === 'pauta' && a.dataset.rota === 'painel') || (rota === 'reuniao-equipe' && a.dataset.rota === 'reunioes-equipe');
+      const ativa = a.dataset.rota === rota || (rota === 'centro' && a.dataset.rota === 'painel') || (rota === 'pauta' && a.dataset.rota === 'painel') || (['reuniao-equipe', 'cabecalho-equipe', 'agenda-equipe', 'combinados-equipe'].includes(rota) && a.dataset.rota === 'reunioes-equipe');
       if (ativa) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     }
     // No celular, a aba "Mais" fica marcada quando a tela atual não tem aba própria.

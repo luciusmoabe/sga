@@ -47,14 +47,14 @@ const itemHTML = (data, i, { dia, hora, alterada }) => {
   </li>`;
 };
 
-export function painelReuniao(config, boot) {
+export function painelReuniao(config, boot, { visivel = false, titulo = 'Reunião', descricao = 'Defina a periodicidade, o dia e o horário de acompanhamento.' } = {}) {
   const dia = config.reuniao_dia != null ? Number(config.reuniao_dia) : 2;
   const intervalo = Number(config.reuniao_intervalo) === 14 ? 14 : 7;
   const hora = config.reuniao_hora || '10:00';
   const opcoesDia = [[1, 'Segunda-feira'], [2, 'Terça-feira'], [3, 'Quarta-feira'], [4, 'Quinta-feira'], [5, 'Sexta-feira']]
     .map(([v, n]) => `<option value="${v}" ${dia === v ? 'selected' : ''}>${n}</option>`).join('');
-  return `<section id="estrutura-reuniao" class="estrutura-painel" aria-labelledby="titulo-reuniao" hidden>
-    <div class="estrutura-barra"><div><h2 id="titulo-reuniao">Reunião</h2><p class="suave">Defina a periodicidade, o dia e o horário de acompanhamento.</p></div></div>
+  return `<section id="estrutura-reuniao" class="estrutura-painel" aria-labelledby="titulo-reuniao" ${visivel ? '' : 'hidden'}>
+    <div class="estrutura-barra"><div><h2 id="titulo-reuniao">${esc(titulo)}</h2><p class="suave">${esc(descricao)}</p></div></div>
     ${resumoHTML(boot)}
     <div class="reuniao-layout">
       <form id="form-reuniao" class="reuniao-cartao" novalidate aria-labelledby="titulo-rotina">
@@ -89,10 +89,14 @@ export function painelReuniao(config, boot) {
 }
 
 /** Liga o formulário: prévia ao vivo, salvar e "voltar ao dia da semana". */
-export function ligarReuniao(raiz, config, refresh) {
+/** `opcoes.boot`: de onde vêm hoje, a próxima reunião e a data marcada (por padrão, a organização). `opcoes.salvar(corpo)`: grava a agenda
+ *  (por padrão, a da instituição em `/config`) e `opcoes.aoSalvar()` renova o que a tela mostra. */
+export function ligarReuniao(raiz, config, refresh, opcoes = {}) {
   const form = raiz.querySelector('#form-reuniao');
   if (!form) return;
-  const boot = est.boot;
+  const boot = opcoes.boot || est.boot;
+  const salvarAgenda = opcoes.salvar || ((corpo) => put('/config', corpo));
+  const aoSalvar = opcoes.aoSalvar || (async () => { atualizarSessao(await get('/bootstrap')); });
   const lista = raiz.querySelector('#previa-lista');
   const aviso = raiz.querySelector('#aviso-previa');
   const diaSalvo = config.reuniao_dia != null ? Number(config.reuniao_dia) : 2;
@@ -129,13 +133,13 @@ export function ligarReuniao(raiz, config, refresh) {
     btn.disabled = true;
     try {
       const v = valores();
-      await put('/config', {
+      await salvarAgenda({
         combinados_frequencia: config.combinados_frequencia || 'sempre',
         reuniao_dia: v.dia, reuniao_hora: v.hora, reuniao_intervalo: v.intervalo,
         // Só envia a data se foi mudada; sem mudança, vale a que o servidor já guarda (ou o dia da semana).
         ...(v.data && v.data !== boot.semana ? { reuniao_proxima: v.data } : {}),
       });
-      atualizarSessao(await get('/bootstrap'));
+      await aoSalvar();
       toast('Configuração da reunião salva.');
       refresh();
     } catch (ex) {
@@ -147,8 +151,8 @@ export function ligarReuniao(raiz, config, refresh) {
 
   raiz.querySelector('#r-voltar')?.addEventListener('click', async () => {
     try {
-      await put('/config', { combinados_frequencia: config.combinados_frequencia || 'sempre', reuniao_proxima: null });
-      atualizarSessao(await get('/bootstrap'));
+      await salvarAgenda({ combinados_frequencia: config.combinados_frequencia || 'sempre', reuniao_proxima: null });
+      await aoSalvar();
       toast('A reunião voltou ao dia da semana configurado.');
       refresh();
     } catch (ex) { toast(ex.message, 'erro'); }

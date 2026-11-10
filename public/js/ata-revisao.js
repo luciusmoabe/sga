@@ -6,7 +6,8 @@ import { abrirForm, dataHora, esc, on, toast } from './ui.js';
 const TIPOS = { correcao: 'Correção', inclusao: 'Inclusão', supressao: 'Supressão' };
 const STATUS = { pendente: 'Pendente', acolhida: 'Acolhida', nao_acolhida: 'Não acolhida' };
 
-export function ligarRevisaoAta(raiz, r, { lerTextoAta } = {}) {
+/** `opcoes.base`: onde ficam a reunião e as sugestões (`/reunioes` na organização; `/reunioes-equipe` na seção). `opcoes.responde`: quem responde (a gestão; na seção, o chefe). */
+export function ligarRevisaoAta(raiz, r, { lerTextoAta, base = '/reunioes', responde = podeOperar(), quem = 'a gestão' } = {}) {
   if (r.status !== 'enviada') return;
   const painel = document.createElement('div');
   painel.className = 'cartao nao-imprimir';
@@ -15,15 +16,15 @@ export function ligarRevisaoAta(raiz, r, { lerTextoAta } = {}) {
   raiz.append(painel);
   const desenhar = () => {
     painel.innerHTML = `<h2>Sugestões de revisão da ata</h2>
-      <p class="suave pequeno">Pedidos de correção, inclusão ou supressão ficam registrados com a resposta da gestão. A ata só muda após revisão pela gestão, e as versões publicadas são preservadas.</p>
-      ${r.pode_sugerir ? '<button type="button" class="btn btn-sec" data-sugerir-ata>Sugerir revisão</button>' : !podeOperar() ? `<p class="info">Sua presença não está registrada nesta reunião. Peça ${aoTopo()} ou ao Apoio para registrar sua presença na tela da reunião. Nas atas antigas, a presença não é presumida.</p>` : ''}
+      <p class="suave pequeno">Pedidos de correção, inclusão ou supressão ficam registrados com a resposta de ${quem}. A ata só muda após a revisão de ${quem}, e as versões publicadas são preservadas.</p>
+      ${r.pode_sugerir ? '<button type="button" class="btn btn-sec" data-sugerir-ata>Sugerir revisão</button>' : !responde ? `<p class="info">Sua presença não está registrada nesta reunião. Peça ${aoTopo()} ou ao Apoio para registrar sua presença na tela da reunião. Nas atas antigas, a presença não é presumida.</p>` : ''}
       ${r.sugestoes.length ? r.sugestoes.map((s) => `<article class="item" style="display:block;margin-top:12px"><div class="linha entre"><b>${TIPOS[s.tipo]} · ${esc(s.usuario_nome)}</b><span class="pilula">${STATUS[s.status]}</span></div>
         <p style="white-space:pre-wrap">${esc(s.texto)}</p><small class="suave">${dataHora(s.criada_em)}</small>
-        ${s.resposta ? `<p style="white-space:pre-wrap"><b>Resposta:</b> ${esc(s.resposta)}</p><small class="suave">${esc(s.respondida_por_nome || '')} · ${dataHora(s.respondida_em)}</small>` : podeOperar() ? `<button type="button" class="btn btn-sec btn-mini" data-responder-ata="${s.id}">Revisar e responder</button>` : ''}</article>`).join('') : '<p class="suave pequeno">Nenhuma sugestão registrada.</p>'}
+        ${s.resposta ? `<p style="white-space:pre-wrap"><b>Resposta:</b> ${esc(s.resposta)}</p><small class="suave">${esc(s.respondida_por_nome || '')} · ${dataHora(s.respondida_em)}</small>` : responde ? `<button type="button" class="btn btn-sec btn-mini" data-responder-ata="${s.id}">Revisar e responder</button>` : ''}</article>`).join('') : '<p class="suave pequeno">Nenhuma sugestão registrada.</p>'}
       ${r.revisoes.length ? `<details style="margin-top:16px"><summary>Histórico de versões publicadas (${r.revisoes.length})</summary>${r.revisoes.map((v, i) => `<details style="margin:10px 0"><summary>Versão ${r.revisoes.length - i} · ${dataHora(v.criada_em)}${v.criado_por_nome ? ` · ${esc(v.criado_por_nome)}` : ''}</summary><pre style="white-space:pre-wrap;font:inherit">${esc(v.ata_texto)}</pre></details>`).join('')}</details>` : ''}`;
   };
   const recarregar = async () => {
-    const nova = await get(`/reunioes/${r.id}`);
+    const nova = await get(`${base}/${r.id}`);
     r.sugestoes = nova.sugestoes; r.revisoes = nova.revisoes; r.pode_sugerir = nova.pode_sugerir;
     desenhar();
   };
@@ -31,7 +32,7 @@ export function ligarRevisaoAta(raiz, r, { lerTextoAta } = {}) {
     titulo: 'Sugerir revisão da ata',
     corpo: `<div class="campo"><label for="sa-tipo">Tipo de revisão</label><select id="sa-tipo" name="tipo">${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div><div class="campo"><label for="sa-texto">Trecho e alteração sugerida</label><textarea id="sa-texto" name="texto" maxlength="2000" required placeholder="Indique o trecho da ata e explique o que precisa mudar."></textarea></div>`,
     rotulo: 'Enviar sugestão',
-    aoEnviar: async (d) => { await post(`/reunioes/${r.id}/sugestoes`, d); await recarregar(); toast('Sugestão enviada para revisão.'); },
+    aoEnviar: async (d) => { await post(`${base}/${r.id}/sugestoes`, d); await recarregar(); toast('Sugestão enviada para revisão.'); },
   });
   on(painel, 'click', '[data-sugerir-ata]', abrirSugestao);
   raiz.querySelector('[data-sugerir-ata-topo]')?.addEventListener('click', abrirSugestao);
@@ -44,7 +45,7 @@ export function ligarRevisaoAta(raiz, r, { lerTextoAta } = {}) {
       aoEnviar: async (d) => {
         const area = raiz.querySelector('#ata');
         const dados = { ...d, ...(d.status === 'acolhida' && area ? { ata_texto: lerTextoAta ? lerTextoAta() : area.value, ata_base: r.ata_texto } : {}) };
-        await post(`/reunioes/${r.id}/sugestoes/${s.id}/responder`, dados);
+        await post(`${base}/${r.id}/sugestoes/${s.id}/responder`, dados);
         if (dados.ata_texto !== undefined) r.ata_texto = dados.ata_texto.trim().slice(0, 20000);
         await recarregar(); toast('Resposta registrada.');
       },

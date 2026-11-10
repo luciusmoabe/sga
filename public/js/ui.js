@@ -172,9 +172,9 @@ export function trilho(boot, { compacto = false } = {}) {
   else if (agoraMs < fim) estado = `Prazo regular encerrado; correções disponíveis · reunião em ${falta(fim - agoraMs)}`;
   else estado = 'Hoje é dia de reunião';
   const p = pos(agoraMs) * 100;
-  const gere = ['diretor', 'apoio', 'administrador'].includes(boot.user?.perfil);
+  const gere = ['diretor', 'apoio', 'administrador'].includes(boot.user?.perfil) || !!boot.alteravel; // `alteravel`: o trilho da reunião da seção, do próprio chefe
   return `<section class="trilho${compacto ? ' compacto' : ''}" aria-label="Trilho da reunião">
-    <div class="trilho-topo"><b>Reunião${intervalo === 14 ? ' quinzenal' : ''} de ${nomeDia}, ${br(semana)}, às ${horaReuniao}${alterada ? ' (data alterada)' : ''}</b><span class="suave">${estado}${gere && !compacto ? ' · <button type="button" class="btn btn-fantasma btn-mini" data-alterar-reuniao>Alterar a data</button>' : ''}</span></div>
+    <div class="trilho-topo"><b>${esc(boot.rotulo_trilho || 'Reunião')}${intervalo === 14 ? ' quinzenal' : ''} de ${nomeDia}, ${br(semana)}, às ${horaReuniao}${alterada ? ' (data alterada)' : ''}</b><span class="suave">${estado}${gere && !compacto ? ` · <button type="button" class="btn btn-fantasma btn-mini" data-alterar-reuniao="${boot.alteravel ? 'equipe' : ''}">Alterar a data</button>` : ''}</span></div>
     <div class="trilho-pista" role="img" aria-label="Posição de hoje entre uma reunião e a seguinte">
       <div class="trilho-feito" style="width:${p}%"></div>
       ${marcos.map((m) => `<span class="trilho-ponto ${m.marco ? 'marco' : ''} ${m.t <= agoraMs ? 'passou' : ''}" style="left:${pos(m.t) * 100}%"></span>

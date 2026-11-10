@@ -1,9 +1,11 @@
 // Telas do chefe de seção: início, atualização semanal, ações e histórico.
 import { aoTopo, doTopo, oTopo, peloTopo } from './vocab.js';
-import { del, get, patch, post } from './api.js';
+import { del, get, patch, post, put } from './api.js';
+import { abrirAlterarReuniao } from './reuniao-data.js';
+import { agendaComoBoot } from './reuniao-equipe.js';
 import { agora, est } from './estado.js';
 import {
-  $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, seloNova, STATUS, tempoRestante, toast, vazio,
+  $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, seloNova, STATUS, tempoRestante, toast, trilho, vazio,
 } from './ui.js';
 import { abrirAcao, abrirEditarAcao, abrirNovoImpedimento, aceitaImpedimento, devolverAcao, lerOrigem, ligarOrigem, origemCamposHTML, validarAcao } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
@@ -178,9 +180,11 @@ export async function inicio(raiz, { refresh }) {
   if (!est.user.secao_id) return semSecao(raiz);
   const semana = est.boot.semana;
   // Só a seção do usuário (e as subordinadas): para o Administrador da Diretoria Adjunta, restringe à própria seção.
-  const [up, abertas, { aviso }, concluidas] = await Promise.all([
+  const [up, abertas, { aviso }, concluidas, agendaEquipe] = await Promise.all([
     get(`/atualizacao?semana=${semana}&resumo=1`), get(`/acoes?situacao=abertas&secao=${est.user.secao_id}`), get('/avisos/atual'),
     est.boot.acoes_a_validar ? get(`/acoes?situacao=concluidas&secao=${est.user.secao_id}`) : [],
+    // A reunião da equipe tem agenda própria, com o mesmo trilho da reunião da instituição (só para o chefe da seção).
+    est.user.perfil === 'chefe' ? get('/reunioes-equipe/agenda').catch(() => null) : null,
   ]);
   const aValidar = concluidas.filter((a) => a.aguardando_validacao === 'chefe');
   const atrasadas = abertas.filter((a) => a.atrasada).length;
@@ -188,6 +192,7 @@ export async function inicio(raiz, { refresh }) {
   const pedidos = abertas.filter((a) => a.pedido_pendente).length;
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>${esc(est.boot.secao?.nome || 'Minha seção')}</h1><div class="sub">Olá, ${esc(est.user.nome)}. Aqui está o que precisa da sua atenção.</div></div></div>
+    ${agendaEquipe ? trilho(agendaComoBoot(agendaEquipe)) : ''}
     ${aviso ? `<div class="aviso-banner"><p class="aviso-banner-tag">Aviso</p><p class="aviso-banner-texto">${esc(aviso.texto)}</p></div>` : ''}
     ${quadroNovasHTML(abertas)}
     ${quadroValidarHTML(aValidar)}
@@ -208,6 +213,9 @@ export async function inicio(raiz, { refresh }) {
         : vazio('Nenhuma ação em aberto', `Quando ${oTopo()} direcionar algo, aparecerá aqui.`)}</div>
     </div>${quadroAtencaoHTML(abertas, semana)}</div>`;
   ligarAtencao(raiz, abertas, refresh);
+  if (agendaEquipe) {
+    on(raiz, 'click', '[data-alterar-reuniao]', () => abrirAlterarReuniao(agendaComoBoot(agendaEquipe), () => refresh(), { salvar: (corpo) => put('/reunioes-equipe/agenda', corpo) }));
+  }
   const abrir = (el) => abrirAcao(el.dataset.acao, refresh).catch((e) => toast(e.message, 'erro'));
   on(raiz, 'click', 'tr[data-acao], .novas-item[data-acao]', abrir);
   const itemDe = (el) => aValidar.find((a) => a.id === Number(el.closest('[data-validar-item]').dataset.validarItem));

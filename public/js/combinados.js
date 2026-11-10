@@ -11,13 +11,16 @@ const FREQ = {
   quando_mudarem: 'Só quando os combinados mudarem',
 };
 
-export async function combinados(raiz, { refresh }) {
-  const gere = ehGestao(); // Diretor, Apoio e Administrador veem também os inativos e arquivados
-  const edita = podeOperar(); // só Diretor e Apoio alteram
-  const [c, cfg] = await Promise.all([get(`/combinados${gere ? `?todos=1${verArquivados ? '&arquivados=1' : ''}` : ''}`), get('/config')]);
+/** `o`: a instância. Sem opções, são os combinados da organização (Diretor e Apoio editam, os chefes leem); para uma seção, `base` aponta
+ *  às rotas dela e o chefe da seção edita. */
+export async function combinados(raiz, { refresh }, o = {}) {
+  const base = o.base || '/combinados';
+  const gere = o.gere ?? ehGestao(); // Diretor, Apoio e Administrador veem também os inativos e arquivados
+  const edita = o.edita ?? podeOperar(); // só Diretor e Apoio alteram
+  const [c, cfg] = await Promise.all([get(`${base}${gere ? `?todos=1${verArquivados ? '&arquivados=1' : ''}` : ''}`), o.carregarConfig ? o.carregarConfig() : get('/config')]);
   let n = 0;
   raiz.innerHTML = `
-    <div class="cabeca"><div><h1>Combinados da reunião</h1>
+    <div class="cabeca"><div><h1>${esc(o.titulo || 'Combinados da reunião')}</h1>
       <div class="sub">${edita ? 'Aparecem em uma tela curta quando a reunião começa. Mudanças valem a partir da próxima reunião.' : gere ? `Aparecem em uma tela curta quando a reunião começa. Você consulta; quem altera é ${oTopo()} ou o Apoio.` : 'Como conduzimos a reunião semanal.'}</div></div></div>
     ${gere && c.aviso ? `<div class="aviso">${esc(c.aviso)}</div>` : ''}
     <div class="cartao">
@@ -56,15 +59,15 @@ export async function combinados(raiz, { refresh }) {
     const item = c.itens.find((i) => i.id === Number(id));
     const a = el.dataset.acao;
     try {
-      if (a === 'cima' || a === 'baixo') await patch(`/combinados/${id}`, { mover: a });
-      else if (a === 'alternar') await patch(`/combinados/${id}`, { ativo: !item.ativo });
-      else if (a === 'arquivar') await patch(`/combinados/${id}`, { arquivado: true });
-      else if (a === 'restaurar') await patch(`/combinados/${id}`, { arquivado: false, ativo: true });
+      if (a === 'cima' || a === 'baixo') await patch(`${base}/${id}`, { mover: a });
+      else if (a === 'alternar') await patch(`${base}/${id}`, { ativo: !item.ativo });
+      else if (a === 'arquivar') await patch(`${base}/${id}`, { arquivado: true });
+      else if (a === 'restaurar') await patch(`${base}/${id}`, { arquivado: false, ativo: true });
       else if (a === 'editar') {
         abrirForm({
           titulo: 'Editar combinado',
           corpo: `<div class="campo"><label for="e-texto">Texto</label><textarea id="e-texto" name="texto">${esc(item.texto)}</textarea></div>`,
-          aoEnviar: async (d) => { await patch(`/combinados/${id}`, { texto: d.texto }); toast('Combinado atualizado.'); refresh(); },
+          aoEnviar: async (d) => { await patch(`${base}/${id}`, { texto: d.texto }); toast('Combinado atualizado.'); refresh(); },
         });
         return;
       }
@@ -74,11 +77,11 @@ export async function combinados(raiz, { refresh }) {
   raiz.querySelector('#form-novo').addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = e.target;
-    try { await post('/combinados', { texto: f.texto.value }); toast('Combinado adicionado.'); refresh(); }
+    try { await post(base, { texto: f.texto.value }); toast('Combinado adicionado.'); refresh(); }
     catch (ex) { const b = f.querySelector('.erro-form'); b.textContent = ex.message; b.classList.remove('oculto'); }
   });
   raiz.querySelector('#freq').addEventListener('change', async (e) => {
-    try { await put('/config', { combinados_frequencia: e.target.value }); toast('Preferência salva.'); } catch (ex) { erro(ex); }
+    try { await (o.salvarFrequencia ? o.salvarFrequencia(e.target.value) : put('/config', { combinados_frequencia: e.target.value })); toast('Preferência salva.'); } catch (ex) { erro(ex); }
   });
   raiz.querySelector('#arq').addEventListener('change', (e) => { verArquivados = e.target.checked; refresh(); });
 }
