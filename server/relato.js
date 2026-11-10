@@ -4,19 +4,19 @@
 import { subarvore } from './db.js';
 import { dataNoFuso, instante } from '../public/js/datas.js';
 import { addDays, hojeISO } from './logic.js';
-import { marks } from './helpers.js';
+import { intervaloReuniao, marks } from './helpers.js';
 import { empresaAtual } from './empresa.js';
 
 /** Janelas do relato para a reunião de `semana` (data ISO do dia da reunião), vistas em `hoje`.
- *  Concluídas: de 7 dias antes até a véspera da reunião.
- *  Programadas: do dia da reunião até 7 dias depois.
+ *  Concluídas: do intervalo da reunião (7 ou 14 dias) antes até a véspera da reunião.
+ *  Programadas: do dia da reunião até um intervalo depois.
  *  Atrasadas: prazo anterior a hoje (a mesma regra do semáforo), ainda não concluídas.
  *  Vencem antes da reunião: em aberto, com prazo de hoje até a véspera da reunião (só na tela do chefe;
  *  se não forem concluídas, chegam atrasadas). Sem isso, essas ações não teriam bloco nenhum. */
-export function janelasDoRelato(semana, hoje = hojeISO()) {
+export function janelasDoRelato(semana, hoje = hojeISO(), intervalo = 7) {
   return {
-    concluidas: { de: addDays(semana, -7), ate: addDays(semana, -1) },
-    programadas: { de: hoje > semana ? hoje : semana, ate: addDays(semana, 7) },
+    concluidas: { de: addDays(semana, -intervalo), ate: addDays(semana, -1) },
+    programadas: { de: hoje > semana ? hoje : semana, ate: addDays(semana, intervalo) },
     atrasadas: { antes: hoje },
     vencemAntes: { de: hoje, ate: addDays(semana, -1) },
   };
@@ -34,7 +34,7 @@ const acaoOut = (a) => ({
 
 /** Relato ao vivo de uma seção: quatro blocos e as janelas usadas. Inclui ações internas (marcadas). */
 export async function montarRelato(db, secaoId, semana, hoje = hojeISO()) {
-  const janelas = janelasDoRelato(semana, hoje);
+  const janelas = janelasDoRelato(semana, hoje, await intervaloReuniao(db));
   const ids = await subarvore(db, secaoId);
   const lugares = marks(ids);
   const emp = empresaAtual();

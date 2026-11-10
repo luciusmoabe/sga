@@ -34,6 +34,45 @@ export function refDiaReuniao(now = agora(), diaSemana = DIA_PADRAO, horaCorte =
   return addDays(data, diff);
 }
 
+/** Periodicidade da reunião, em dias: semanal (padrão) ou quinzenal. */
+export const INTERVALOS_REUNIAO = [7, 14];
+export const INTERVALO_PADRAO = 7;
+
+/** Lê a periodicidade e a data da próxima reunião (alterada pelo Diretor) da config salva. */
+export function cicloDe(c = {}) {
+  const intervalo = Number(c.reuniao_intervalo) === 14 ? 14 : INTERVALO_PADRAO;
+  const proxima = ehISO(c.reuniao_proxima) ? c.reuniao_proxima : null;
+  return { intervalo, proxima };
+}
+
+/** O dia da reunião (0-6) mais próximo de `data`, a até 3 dias de distância. Mantém o ritmo depois de uma reunião adiantada ou adiada. */
+const diaMaisProximo = (data, dia) => {
+  let diff = (((dia - parseISO(data).getUTCDay()) % 7) + 7) % 7;
+  if (diff > 3) diff -= 7;
+  return addDays(data, diff);
+};
+
+/**
+ * Data da reunião à qual as atualizações de agora se referem, considerando a periodicidade e a data da próxima reunião.
+ * - Sem `proxima`, vale o dia da semana configurado (comportamento semanal de sempre).
+ * - Com `proxima`, ela é a próxima reunião; depois que passa, as seguintes vêm a cada `intervalo` dias, no dia da semana configurado.
+ * - `horaCorte`: até esta hora, na própria data da reunião, ainda vale a reunião do dia (24 = o dia inteiro).
+ */
+export function refReuniao(now = agora(), { dia = DIA_PADRAO, intervalo = INTERVALO_PADRAO, proxima = null, horaCorte = HORA_CORTE_PADRAO } = {}) {
+  if (!proxima) return refDiaReuniao(now, dia, horaCorte);
+  const hoje = dataNoFuso(now);
+  const hora = Number(partesNoFuso(now).hour);
+  let m = proxima;
+  for (let i = 0; i < 400 && (hoje > m || (hoje === m && hora >= horaCorte)); i++) m = diaMaisProximo(addDays(m, intervalo), dia);
+  return m;
+}
+
+/** Reunião anterior à de `semana` (início do trilho e das janelas do relato). */
+export const reuniaoAnterior = (semana, { dia = DIA_PADRAO, intervalo = INTERVALO_PADRAO } = {}) => diaMaisProximo(addDays(semana, -intervalo), dia);
+
+/** Reunião seguinte à de `semana`. */
+export const reuniaoSeguinte = (semana, { dia = DIA_PADRAO, intervalo = INTERVALO_PADRAO } = {}) => diaMaisProximo(addDays(semana, intervalo), dia);
+
 /**
  * Verifica se a string ISO corresponde ao dia configurado para a reunião.
  */

@@ -105,11 +105,11 @@ test('desempenho: o bootstrap traz a contagem do selo e as telas pesadas usam po
     assert.equal(boot.pedidos_pendentes, pedidos.length, `selo de ${uid}`);
   }
   assert.equal((await call(CPE, 'GET', '/bootstrap')).data.pedidos_pendentes, 0, 'chefe não usa o selo');
-  // Com o banco distante, cada consulta em série custa uma ida pela rede: as telas pesadas têm teto. O detalhe da ação inclui o histórico de prazos, em paralelo com as demais consultas.
+  // Com o banco distante, cada consulta em série custa uma ida pela rede: as telas pesadas têm teto. O detalhe da ação inclui o histórico de prazos, em paralelo com as demais consultas. Painel, pauta e detalhe da seção leem a periodicidade da reunião (uma consulta a mais, em paralelo).
   let n = 0;
   const prepare = db.prepare.bind(db);
   db.prepare = (sql) => { n++; return prepare(sql); };
-  for (const [caminho, teto] of [['/painel', 9], ['/pauta', 13], ['/secoes/1/detalhe', 14], ['/bootstrap', 5], ['/acoes/1', 8]]) {
+  for (const [caminho, teto] of [['/painel', 10], ['/pauta', 14], ['/secoes/1/detalhe', 15], ['/bootstrap', 5], ['/acoes/1', 8]]) {
     n = 0;
     assert.equal((await call(DIRETOR, 'GET', caminho)).status, 200);
     assert.ok(n <= teto, `${caminho} usou ${n} consultas (teto ${teto})`);

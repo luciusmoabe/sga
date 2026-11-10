@@ -2,7 +2,7 @@
 import { dosPlural, nomePlural, nomeTipo, oTipo, oTopo, PERFIL_DA_EMPRESA, rotuloPerfilDe, TIPO_DA_EMPRESA, todasAs, usaTipo, vocab } from './vocab.js';
 import { NIVEIS_MAX, NIVEIS_MIN, VOCABULARIO_PADRAO } from './vocabulario.js';
 import { get, patch, post, put, del } from './api.js';
-import { atualizarSessao, ehAdmin } from './estado.js';
+import { atualizarSessao, ehAdmin, est } from './estado.js';
 import { abrirForm, confirmar, esc, on, toast } from './ui.js';
 import { DIRETORIA_ADJUNTA, HORA_FECHAMENTO, TAM_SENHA } from './regras.js';
 import { ligarConfiguracaoAta } from './ata-cabecalho.js';
@@ -76,6 +76,7 @@ export async function estrutura(raiz, { refresh, painel }) {
   const [secoes, usuarios, config] = await Promise.all([get('/secoes'), get('/usuarios'), get('/config')]);
   const diaAtual = config.reuniao_dia != null ? Number(config.reuniao_dia) : 2;
   const horaAtual = config.reuniao_hora || '10:00';
+  const intervaloAtual = Number(config.reuniao_intervalo) === 14 ? 14 : 7;
   const filhos = (pai) => secoes.filter((s) => (s.pai_id ?? null) === pai).sort((a, b) => a.ordem - b.ordem || a.id - b.id);
   const chefes = usuarios.filter((u) => u.perfil === 'chefe' && u.ativo);
   const opcoesChefe = (atual) => `<option value="">Sem chefe atribuído</option>${chefes.map((u) =>
@@ -118,7 +119,7 @@ export async function estrutura(raiz, { refresh, painel }) {
     <nav class="estrutura-abas" aria-label="Áreas da estrutura">
       <button data-painel="secoes" aria-controls="estrutura-secoes">Seções</button>
       <button data-painel="usuarios" aria-controls="estrutura-usuarios">Usuários e acessos</button>
-      <button data-painel="reuniao" aria-controls="estrutura-reuniao">Reunião semanal</button>
+      <button data-painel="reuniao" aria-controls="estrutura-reuniao">Reunião</button>
       <button data-painel="ata" aria-controls="estrutura-ata">Configuração da ata</button>
       <button data-painel="nomes" aria-controls="estrutura-nomes">Nomes das unidades</button>
     </nav>
@@ -134,7 +135,7 @@ export async function estrutura(raiz, { refresh, painel }) {
       <div class="tabela-rolagem"><table class="estrutura-tabela"><thead><tr><th scope="col">Usuário</th><th scope="col">Perfil</th><th scope="col">Seção</th><th scope="col">Acesso</th><th scope="col">Ações</th></tr></thead><tbody id="lista-usuarios"></tbody></table></div>
     </section>
     <section id="estrutura-reuniao" class="estrutura-painel" aria-labelledby="titulo-reuniao" hidden>
-      <div class="estrutura-barra"><div><h2 id="titulo-reuniao">Reunião semanal</h2><p class="suave">Defina o dia e o horário de acompanhamento.</p></div></div>
+      <div class="estrutura-barra"><div><h2 id="titulo-reuniao">Reunião</h2><p class="suave">Defina a periodicidade, o dia e o horário de acompanhamento.</p></div></div>
       <div class="estrutura-aviso">O prazo para os relatos encerra no dia anterior à reunião, às ${HORA_FECHAMENTO}h.</div>
       <form id="form-reuniao" novalidate>
         <div class="dois" style="align-items:flex-end;gap:12px">
@@ -149,12 +150,24 @@ export async function estrutura(raiz, { refresh, painel }) {
             </select>
           </div>
           <div class="campo">
+            <label for="r-intervalo">Periodicidade</label>
+            <select id="r-intervalo" name="reuniao_intervalo">
+              <option value="7" ${intervaloAtual === 7 ? 'selected' : ''}>Semanal</option>
+              <option value="14" ${intervaloAtual === 14 ? 'selected' : ''}>Quinzenal (a cada 15 dias)</option>
+            </select>
+          </div>
+          <div class="campo">
             <label for="r-hora">Horário de início</label>
             <input id="r-hora" type="time" name="reuniao_hora" value="${esc(horaAtual)}" required>
           </div>
           <div>
             <button class="btn btn-primario" type="submit" id="btn-salvar-reuniao">Salvar</button>
           </div>
+        </div>
+        <div class="campo" style="max-width:260px">
+          <label for="r-proxima">Data da próxima reunião</label>
+          <input id="r-proxima" type="date" name="reuniao_proxima" min="${esc(est.boot.hoje)}" value="${esc(est.boot.semana)}">
+          <div class="dica">Mude para adiantar ou adiar só a próxima. As seguintes continuam a cada ${intervaloAtual === 14 ? '15' : '7'} dias a partir dela, e a linha do tempo do Início acompanha.${est.boot.reuniao_proxima ? ' <button type="button" class="btn btn-fantasma btn-mini" id="r-voltar">Voltar ao dia da semana</button>' : ''}</div>
         </div>
         <div class="erro-form oculto" role="alert" id="erro-reuniao"></div>
       </form>
@@ -236,6 +249,9 @@ export async function estrutura(raiz, { refresh, painel }) {
         combinados_frequencia: config.combinados_frequencia || 'sempre',
         reuniao_dia: Number(formReuniao.reuniao_dia.value),
         reuniao_hora: formReuniao.reuniao_hora.value,
+        reuniao_intervalo: Number(formReuniao.reuniao_intervalo.value),
+        // Só envia a data se foi mudada; sem mudança, vale a que o servidor já guarda (ou o dia da semana).
+        ...(formReuniao.reuniao_proxima.value && formReuniao.reuniao_proxima.value !== est.boot.semana ? { reuniao_proxima: formReuniao.reuniao_proxima.value } : {}),
       });
       atualizarSessao(await get('/bootstrap'));
       toast('Configuração da reunião salva.');
@@ -245,6 +261,15 @@ export async function estrutura(raiz, { refresh, painel }) {
       erroEl.classList.remove('oculto');
       btn.disabled = false;
     }
+  });
+
+  raiz.querySelector('#r-voltar')?.addEventListener('click', async () => {
+    try {
+      await put('/config', { combinados_frequencia: config.combinados_frequencia || 'sempre', reuniao_proxima: null });
+      atualizarSessao(await get('/bootstrap'));
+      toast('A reunião voltou ao dia da semana configurado.');
+      refresh();
+    } catch (ex) { toast(ex.message, 'erro'); }
   });
 
   on(raiz, 'click', '[data-editar-u]', el => {

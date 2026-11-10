@@ -1,4 +1,4 @@
-import { FREQUENCIAS, HORA_PADRAO, LIMITE_COMBINADOS, addDays, agora, br, ehDiaReuniao, parseISO, refDiaReuniao } from './logic.js';
+import { FREQUENCIAS, HORA_PADRAO, INTERVALOS_REUNIAO, LIMITE_COMBINADOS, addDays, agora, br, cicloDe, ehDiaReuniao, ehISO, parseISO, refReuniao, reuniaoSeguinte } from './logic.js';
 import { arvoresDosCentros, cartoesReuniao, falha, h, json, permit, texto } from './helpers.js';
 import { registrosReuniao } from './reuniao-registros.js';
 import { empresaAtual } from './empresa.js';
@@ -19,9 +19,12 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
   /** Lê dia e hora da reunião a partir da config salva, com fallback para os padrões. */
   const cfgAoVivo = async () => {
     const c = await cfg();
+    const { intervalo, proxima } = cicloDe(c);
     return {
       dia: c.reuniao_dia != null ? Number(c.reuniao_dia) : 2,
       hora: c.reuniao_hora || HORA_PADRAO,
+      intervalo,
+      proxima,
     };
   };
 
@@ -107,8 +110,30 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) throw falha(400, 'O horário da reunião deve estar no formato HH:MM (ex.: 10:00).');
       valores.push(['reuniao_hora', hora]);
     }
+    if (req.body?.reuniao_intervalo != null) {
+      const intervalo = Number(req.body.reuniao_intervalo);
+      if (!INTERVALOS_REUNIAO.includes(intervalo)) throw falha(400, 'A reunião é semanal (7 dias) ou quinzenal (14 dias).');
+      valores.push(['reuniao_intervalo', String(intervalo)]);
+    }
+    // Data da próxima reunião: a série passa a contar dela (as seguintes vêm a cada 7 ou 14 dias, no dia da semana configurado).
+    // `null` ou texto vazio desfaz a alteração e volta ao dia da semana configurado.
+    const apagarProxima = req.body && 'reuniao_proxima' in req.body && (req.body.reuniao_proxima === null || req.body.reuniao_proxima === '');
+    if (req.body?.reuniao_proxima) {
+      const d = req.body.reuniao_proxima;
+      if (!ehISO(d)) throw falha(400, 'Informe a data da próxima reunião (AAAA-MM-DD).');
+      if (d < hoje()) throw falha(400, 'A data da próxima reunião não pode ser anterior a hoje.');
+      const aberta = await q1(`select 1 as ok from reunioes where status = 'em_andamento' and empresa_id = ?`, empresaAtual());
+      if (aberta) throw falha(409, 'Há uma reunião em andamento. Encerre-a antes de mudar a data da próxima.');
+      valores.push(['reuniao_proxima', d]);
+    }
+    // Quinzenal precisa saber de que data contar: sem uma data marcada, a série começa na próxima reunião prevista.
+    if (valores.some(([k, v]) => k === 'reuniao_intervalo' && v === '14') && !valores.some(([k]) => k === 'reuniao_proxima') && !apagarProxima) {
+      const atual = await cfgAoVivo();
+      if (!atual.proxima) valores.push(['reuniao_proxima', refReuniao(agora(), { dia: valores.find(([k]) => k === 'reuniao_dia') ? Number(valores.find(([k]) => k === 'reuniao_dia')[1]) : atual.dia, horaCorte: 12 })]);
+    }
     return db.transaction(async () => {
       // Ordem fixa das chaves para serializar mudanças concorrentes no PostgreSQL.
+      if (apagarProxima) await run(`delete from config where chave = 'reuniao_proxima' and empresa_id = ?`, empresaAtual());
       for (const [chave, valor] of valores) {
         await run('insert into config (chave, valor, empresa_id) values (?, ?, ?) on conflict(empresa_id, chave) do update set valor = excluded.valor', chave, valor, empresaAtual());
       }
@@ -155,10 +180,11 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       if (aberta) return { reuniao: fmt(aberta), retomada: true, mostrar_combinados: false };
       const mostrar = await mostrarCombinados();
       const snapshot = await q('select id, texto, ordem from combinados where ativo = 1 and arquivado = 0 and empresa_id = ? order by ordem, id', empresaAtual());
-      const { dia } = await cfgAoVivo();
+      const { dia, intervalo, proxima } = await cfgAoVivo();
       // Iniciada no próprio dia da reunião, ela trata das atualizações de hoje, mesmo depois do corte do meio-dia
       // (que só serve para o painel virar para a semana seguinte). Em outro dia, vale a próxima reunião.
-      const semana = ehDiaReuniao(hoje(), dia) ? hoje() : refDiaReuniao(agora(), dia);
+      // Numa semana sem reunião (quinzenal), "hoje" não é dia de reunião: vale a próxima da série.
+      const semana = refReuniao(agora(), { dia, intervalo, proxima, horaCorte: 24 });
       const id = (await run(
         `insert into reunioes (data, semana, iniciada_em, status, combinados_snapshot, criada_por, empresa_id) values (?,?,?,?,?,?,?)`,
         hoje(), semana, agoraISO(), 'em_andamento', JSON.stringify(snapshot), req.user.id, empresaAtual(),
@@ -305,7 +331,9 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       criticos.forEach((c) => linhas.push(`- [${c.sigla}] "${c.titulo}": ${c.descricao}${c.apoio ? ` (apoio solicitado: ${c.apoio})` : ''}`));
       linhas.push('');
     }
-    const proximaData = addDays(r.semana, 7);
+    const { dia: diaAta, intervalo: intAta, proxima: proxAta } = await cfgAoVivo();
+    // Se a data da próxima reunião já foi marcada (depois desta), ela vale; senão, segue a periodicidade.
+    const proximaData = proxAta && proxAta > r.semana ? proxAta : reuniaoSeguinte(r.semana, { dia: diaAta, intervalo: intAta });
     linhas.push(`Próxima reunião: ${DIAS[dia]}, ${br(proximaData)}, às ${hora}.`);
     return linhas.join('\n');
   }

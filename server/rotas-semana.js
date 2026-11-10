@@ -1,6 +1,6 @@
 // Sessão inicial, atualização semanal do chefe e painel, pauta e detalhe do Diretor.
 import { subarvore } from './db.js';
-import { FUSO_NEGOCIO, HORA_CORTE_PADRAO, agora, ehDiaReuniao, fechamentoDe, refDiaReuniao } from './logic.js';
+import { FUSO_NEGOCIO, ehDiaReuniao, fechamentoDe, reuniaoAnterior } from './logic.js';
 import { assinatura, camposLegados, ehCorpoLegado, montarRelato, paraSnapshot } from './relato.js';
 import { empresaAtual } from './empresa.js';
 import { completarVocabulario } from '../public/js/vocabulario.js';
@@ -13,7 +13,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     // pedidos de prazo pendentes, para a gestão; ações recebidas ainda não abertas, para quem as recebe.
     const recebe = req.user.secao_id && ['chefe', 'administrador'].includes(req.user.perfil);
     const arvore = recebe ? subarvore(db, req.user.secao_id) : null;
-    const [{ dia, hora, config }, empresa, secao, pedidos, novas, aValidar] = await Promise.all([
+    const [{ dia, hora, intervalo, proxima, referencia, config }, empresa, secao, pedidos, novas, aValidar] = await Promise.all([
       cfgReuniao(),
       q1('select nome, sigla, slug from empresas where id = ?', empresaAtual()),
       req.user.secao_id ? q1('select id, nome, sigla, tipo from secoes where id = ? and empresa_id = ?', req.user.secao_id, empresaAtual()) : null,
@@ -37,7 +37,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
          where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and a.status = 'concluida' and a.encerrada = 0 and a.arquivada = 0
            and a.atribuido_por is not null and a.atribuido_por != a.responsavel_id and a.validada_chefe_em is null`, empresaAtual(), ...ids)) : null,
     ]);
-    const semana = refDiaReuniao(agora(), dia, HORA_CORTE_PADRAO);
+    const semana = referencia();
     // Quem envia a atualização da seção (chefe e Administrador vinculado): a unidade já enviou nesta semana? Alimenta a faixa de aviso.
     const enviou = recebe ? !!(await q1('select 1 as ok from atualizacoes where secao_id = ? and semana = ? and empresa_id = ? limit 1', req.user.secao_id, semana, empresaAtual())) : null;
     return {
@@ -58,6 +58,9 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
       fuso: FUSO_NEGOCIO,
       reuniao_dia: dia,
       reuniao_hora: hora,
+      reuniao_intervalo: intervalo,
+      reuniao_proxima: proxima,
+      reuniao_anterior: reuniaoAnterior(semana, { dia, intervalo }),
     };
   }));
 
@@ -115,9 +118,10 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
   app.put('/api/atualizacao', permit('chefe', 'administrador'), h(async (req) => {
     const secaoId = await secaoDaAtualizacao(req);
     const b = req.body || {};
-    const { dia } = await cfgReuniao();
-    const semana = b.semana || refDiaReuniao(agora(), dia, HORA_CORTE_PADRAO);
-    if (!ehDiaReuniao(semana, dia)) throw falha(400, 'Semana inválida.');
+    const { dia, referencia } = await cfgReuniao();
+    const atual = referencia();
+    const semana = b.semana || atual;
+    if (semana !== atual && !ehDiaReuniao(semana, dia)) throw falha(400, 'Semana inválida.');
     if (!ehCorpoLegado(b)) return enviarRelato(req, secaoId, semana, b);
     // Formato antigo (listas em texto livre): mantido para telas e clientes que ainda o usam.
     const lista = (v) => (Array.isArray(v) ? v.map((x) => texto(x, 400)).filter(Boolean).slice(0, 30) : []);

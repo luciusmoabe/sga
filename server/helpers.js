@@ -1,4 +1,4 @@
-import { DIAS_SEM_MOVIMENTO, addDays, agora, atualizacaoPendente, semaforo } from './logic.js';
+import { DIAS_SEM_MOVIMENTO, addDays, agora, atualizacaoPendente, cicloDe, semaforo } from './logic.js';
 import { porNecessidade as compararNecessidade } from '../public/js/regras.js';
 import { dataNoFuso, diasEntre, instante } from '../public/js/datas.js';
 import { empresaAtual } from './empresa.js';
@@ -81,7 +81,14 @@ export async function arvoresDosCentros(db, { reuniao = false } = {}) {
  *  Poucas consultas e todas independentes rodam em paralelo: com o banco distante, o tempo da tela
  *  é o número de idas em série (não de consultas). `arvoresPre` evita repetir a árvore quando o chamador já a tem;
  *  as seções do primeiro nível fora dela (fora da reunião, por exemplo) não entram. */
-export async function painelSemana(db, semana, hoje, arvoresPre = null) {
+/** Periodicidade da reunião da empresa em curso, em dias (7 ou 14): define a janela do que foi feito desde a reunião anterior. */
+export async function intervaloReuniao(db) {
+  const r = await db.prepare(`select valor from config where chave = 'reuniao_intervalo' and empresa_id = ?`).get(empresaAtual());
+  return cicloDe({ reuniao_intervalo: r?.valor }).intervalo;
+}
+
+export async function painelSemana(db, semana, hoje, arvoresPre = null, intervaloPre = null) {
+  const intervalo = intervaloPre ?? await intervaloReuniao(db);
   const [todosCentros, arvores] = await Promise.all([
     db.prepare(
       `select s.*, u.nome as chefe_nome from secoes s left join usuarios u on u.id = s.chefe_id
@@ -108,7 +115,7 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null) {
       idParaCentro.set(id, c.id);
     }
   }
-  const semanaInicio = addDays(semana, -7);
+  const semanaInicio = addDays(semana, -intervalo);
   const semanaFim = addDays(semana, -1);
 
   const [statsRows, atualizacaoRows, tempoRows, pedidosRows, criticosRows] = await Promise.all([
@@ -236,8 +243,9 @@ export const porNecessidade = (lista) => [...lista].sort(compararNecessidade);
 /** Cartões do Modo Reunião: painel + relato da semana + ações visíveis ao Diretor + pedidos de prazo.
  *  Consultas agrupadas para todos os Centros de uma vez (antes eram três por Centro). */
 export async function cartoesReuniao(db, semana, hoje) {
+  const intervalo = await intervaloReuniao(db);
   const arvores = await arvoresDosCentros(db, { reuniao: true });
-  const painel = await painelSemana(db, semana, hoje, arvores);
+  const painel = await painelSemana(db, semana, hoje, arvores, intervalo);
   const itens = porNecessidade(painel);
   const todosIds = itens.flatMap((p) => arvores.get(p.secao.id) ?? [p.secao.id]);
   const centroDe = new Map(itens.flatMap((p) => (arvores.get(p.secao.id) ?? [p.secao.id]).map((id) => [id, p.secao.id])));
@@ -252,7 +260,7 @@ export async function cartoesReuniao(db, semana, hoje) {
          and ((a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0)
            or (a.status = 'concluida' and substr(a.concluida_em, 1, 10) >= ? and substr(a.concluida_em, 1, 10) <= ?))
        order by case a.status when 'concluida' then 1 else 0 end, a.prazo`,
-    ).all(empresaAtual(), ...todosIds, addDays(semana, -8), semana),
+    ).all(empresaAtual(), ...todosIds, addDays(semana, -intervalo - 1), semana),
     db.prepare(
       `select p.id, p.acao_id, a.secao_id, p.novo_prazo, p.prazo_atual, p.justificativa, a.titulo acao_titulo
        from pedidos_prazo p join acoes a on a.id = p.acao_id
@@ -286,7 +294,7 @@ export async function cartoesReuniao(db, semana, hoje) {
     if (a.status !== 'concluida') return true;
     if (!a.concluida_em) return false;
     const dia = dataNoFuso(instante(a.concluida_em));
-    return dia >= addDays(semana, -7) && dia <= addDays(semana, -1);
+    return dia >= addDays(semana, -intervalo) && dia <= addDays(semana, -1);
   }));
   const pedidosPor = porCentro(pedidosRaw);
   const impedimentosPor = porCentro(impedimentosRaw);

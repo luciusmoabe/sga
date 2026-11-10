@@ -140,13 +140,18 @@ export function faixaPendente(boot, rota) {
 /** `compacto`: uma linha só (sem a pista), para as telas em que o trilho completo só repete o que já se sabe. */
 export function trilho(boot, { compacto = false } = {}) {
   const semana = boot.semana;
-  const diaSemana = boot.reuniao_dia ?? 2;   // dia da semana da reunião (0 = dom … 6 = sáb)
+  const diaConfig = boot.reuniao_dia ?? 2;   // dia da semana configurado (0 = dom … 6 = sáb)
+  const intervalo = boot.reuniao_intervalo === 14 ? 14 : 7;
   const horaReuniao = boot.reuniao_hora || '10:00'; // horário da reunião (HH:MM)
   const NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
   const NOMES_DIA_COMPLETO = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+  const diaDe = (data) => parseData(data).getUTCDay(); // dia da semana da data real (a reunião pode ter sido adiantada ou adiada)
+  const diaSemana = diaDe(semana);
   const nomeDia = NOMES_DIA[diaSemana];
+  const alterada = diaSemana !== diaConfig;
   const ts = (dia, hora) => instante(`${dia}T${hora}:00`).getTime();
-  const ini = ts(addDias(semana, -7), horaReuniao);
+  const anterior = boot.reuniao_anterior || addDias(semana, -intervalo);
+  const ini = ts(anterior, horaReuniao);
   const fim = ts(semana, horaReuniao);
   const pos = (t) => Math.min(1, Math.max(0, (t - ini) / (fim - ini)));
   const agoraMs = agora().getTime();
@@ -155,20 +160,21 @@ export function trilho(boot, { compacto = false } = {}) {
   const fechamento = ts(diaAntes, `${String(HORA_FECHAMENTO).padStart(2, '0')}:00`);
   // Lembrete = 4 dias antes da reunião (ex.: se reunião é terça, lembrete é na sexta anterior)
   const marcos = [
-    { t: ini, rot: 'Reunião anterior', sub: `${nomeDia} ${horaReuniao}`, marco: true },
-    { t: ts(addDias(semana, -4), '15:00'), rot: 'Lembrete', sub: `${NOMES_DIA[(diaSemana + 3) % 7]} 15h` },
+    { t: ini, rot: 'Reunião anterior', sub: `${NOMES_DIA[diaDe(anterior)]} ${br(anterior).slice(0, 5)}`, marco: true },
+    { t: ts(addDias(semana, -4), '15:00'), rot: 'Lembrete', sub: `${NOMES_DIA[diaDe(addDias(semana, -4))]} 15h` },
     { t: ts(diaAntes, '09:00'), rot: '', sub: '' },
-    { t: fechamento, rot: 'Fechamento', sub: `${NOMES_DIA[(diaSemana + 6) % 7]} ${HORA_FECHAMENTO}h`, marco: true },
-    { t: fim, rot: 'Reunião', sub: `${nomeDia} ${horaReuniao}`, marco: true },
+    { t: fechamento, rot: 'Fechamento', sub: `${NOMES_DIA[diaDe(diaAntes)]} ${HORA_FECHAMENTO}h`, marco: true },
+    { t: fim, rot: 'Reunião', sub: `${nomeDia} ${br(semana).slice(0, 5)} ${horaReuniao}`, marco: true },
   ];
   const falta = tempoRestante;
   let estado;
-  if (agoraMs < fechamento) estado = `Atualizações abertas até ${NOMES_DIA_COMPLETO[(diaSemana + 6) % 7]}, ${br(diaAntes)}, às ${HORA_FECHAMENTO}h · faltam ${falta(fechamento - agoraMs)}`;
+  if (agoraMs < fechamento) estado = `Atualizações abertas até ${NOMES_DIA_COMPLETO[diaDe(diaAntes)]}, ${br(diaAntes)}, às ${HORA_FECHAMENTO}h · faltam ${falta(fechamento - agoraMs)}`;
   else if (agoraMs < fim) estado = `Prazo regular encerrado; correções disponíveis · reunião em ${falta(fim - agoraMs)}`;
   else estado = 'Hoje é dia de reunião';
   const p = pos(agoraMs) * 100;
-  return `<section class="trilho${compacto ? ' compacto' : ''}" aria-label="Trilho da semana">
-    <div class="trilho-topo"><b>Reunião de ${nomeDia}, ${br(semana)}, às ${horaReuniao}</b><span class="suave">${estado}</span></div>
+  const gere = ['diretor', 'apoio', 'administrador'].includes(boot.user?.perfil);
+  return `<section class="trilho${compacto ? ' compacto' : ''}" aria-label="Trilho da reunião">
+    <div class="trilho-topo"><b>Reunião${intervalo === 14 ? ' quinzenal' : ''} de ${nomeDia}, ${br(semana)}, às ${horaReuniao}${alterada ? ' (data alterada)' : ''}</b><span class="suave">${estado}${gere && !compacto ? ' · <button type="button" class="btn btn-fantasma btn-mini" data-alterar-reuniao>Alterar a data</button>' : ''}</span></div>
     <div class="trilho-pista" role="img" aria-label="Posição de hoje entre uma reunião e a seguinte">
       <div class="trilho-feito" style="width:${p}%"></div>
       ${marcos.map((m) => `<span class="trilho-ponto ${m.marco ? 'marco' : ''} ${m.t <= agoraMs ? 'passou' : ''}" style="left:${pos(m.t) * 100}%"></span>

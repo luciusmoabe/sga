@@ -18,6 +18,7 @@ import { produtividade } from './produtividade.js';
 import { equipe } from './equipe.js';
 import { acoesDosCentros, lePorTodosOsCentros } from './consulta.js';
 import { DIRETORIA_ADJUNTA } from './regras.js';
+import { abrirAlterarReuniao } from './reuniao-data.js';
 import { abrirTrocaSenha, telaTrocaSenha } from './senha.js';
 import { abrirAcao, acaoEstaAberta, tirarAcaoDaUrl } from './acao-comum.js';
 import { abrirAvisosNoCelular, esquecerAvisosAoSair, recebeAvisos, restaurarAvisos } from './push.js';
@@ -429,6 +430,10 @@ async function renderizar() {
     $('[data-aba-mais]')?.classList.toggle('ativa', !document.querySelector('.abas-movel a[aria-current]'));
     // O trilho completo (com a pista) só no Início e no Painel; nas demais telas, uma linha.
     $('#trilho').innerHTML = def.trilho ? trilho(est.boot, { compacto: rota !== 'painel' && rota !== 'inicio' }) + faixaPendente(est.boot, rota) : '';
+    if (!$('#trilho').dataset.ligado) {
+      $('#trilho').dataset.ligado = '1';
+      on($('#trilho'), 'click', '[data-alterar-reuniao]', () => abrirAlterarReuniao(est.boot, () => refresh()));
+    }
     const conteudo = $('#conteudo');
     const novo = document.createElement('div');
     novo.id = 'conteudo';

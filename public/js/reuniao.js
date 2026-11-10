@@ -37,7 +37,7 @@ export async function inicioReuniao(raiz) {
         <li>${plural(p.resumo.pedidos, 'pedido de novo prazo aguarda', 'pedidos de novo prazo aguardam')} decisão.</li>
         <li>${plural(comb.ativos, 'combinado ativo abre', 'combinados ativos abrem')} a reunião.</li>
       </ul>
-      ${hoje() < semana ? `<div class="info">Esta reunião será antecipada para ${br(hoje())}. A referência semanal permanece ${br(semana)}: os relatos dessa semana serão usados e a próxima reunião continua prevista para ${br(addDias(semana, 7))}.</div>` : ''}
+      ${hoje() < semana ? `<div class="info">Esta reunião será antecipada para ${br(hoje())}. A referência semanal permanece ${br(semana)}: os relatos dessa semana serão usados e a próxima reunião continua prevista para ${br(addDias(semana, est.boot.reuniao_intervalo === 14 ? 14 : 7))}.</div>` : ''}
       <p class="suave pequeno">Ligue o notebook à TV antes de iniciar. Ao começar, a tela passa para o modo de apresentação; use as setas do teclado para avançar.</p>
       <button class="btn btn-primario" id="iniciar-reuniao">Iniciar reunião</button></div>`;
   const botao = $('#iniciar-reuniao', raiz);

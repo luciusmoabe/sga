@@ -8,7 +8,7 @@
 //
 // Canal de entrega (SGC_LEMBRETES_CANAL): `push` envia aviso ao celular de quem ativou (ver server/push.js); vazio ou `ensaio`
 // só calcula e devolve o que enviaria, sem gravar nada. O envio por e-mail foi adiado por decisão do proprietário.
-import { addDays, agora, DIA_PADRAO, fechamentoDe, HORA_CORTE_PADRAO, HORA_PADRAO, hojeISO, br, refDiaReuniao } from './logic.js';
+import { addDays, agora, cicloDe, DIA_PADRAO, fechamentoDe, HORA_CORTE_PADRAO, HORA_PADRAO, hojeISO, br, refReuniao } from './logic.js';
 import { instante } from '../public/js/datas.js';
 import { comEmpresa, empresaAtual } from './empresa.js';
 import { painelSemana } from './helpers.js';
@@ -97,7 +97,7 @@ async function processarEmpresa(db, { transporte, ensaio, origem, agoraInstante 
   const cfg = Object.fromEntries((await db.prepare('select chave, valor from config where empresa_id = ?').all(empresaAtual())).map((r) => [r.chave, r.valor]));
   const dia = cfg.reuniao_dia != null ? Number(cfg.reuniao_dia) : DIA_PADRAO;
   const hora = cfg.reuniao_hora || HORA_PADRAO;
-  const semana = refDiaReuniao(agoraInstante, dia, HORA_CORTE_PADRAO);
+  const semana = refReuniao(agoraInstante, { dia, ...cicloDe(cfg), horaCorte: HORA_CORTE_PADRAO });
   const tipo = tipoDevido(semana, hora, agoraInstante);
   const resultado = { semana, tipo, destinatarios: [], enviados: 0, jaEnviados: 0, semAparelho: 0, falhas: 0 };
   if (!tipo) return resultado;

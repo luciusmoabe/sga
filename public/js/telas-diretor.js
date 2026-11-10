@@ -37,9 +37,10 @@ export function relatoHTML(at, { permitirExcluir = false } = {}) {
 }
 
 function navSemana(rota, semana) {
-  return `<a class="btn btn-sec" href="#/${rota}?semana=${addDias(semana, -7)}" aria-label="Semana anterior">←</a>
+  const passo = est.boot.reuniao_intervalo === 14 ? 14 : 7;
+  return `<a class="btn btn-sec" href="#/${rota}?semana=${addDias(semana, -passo)}" aria-label="Semana anterior">←</a>
     <a class="btn btn-sec" href="#/${rota}?semana=${est.boot.semana}">Semana atual</a>
-    <a class="btn btn-sec" href="#/${rota}?semana=${addDias(semana, 7)}" aria-label="Próxima semana">→</a>`;
+    <a class="btn btn-sec" href="#/${rota}?semana=${addDias(semana, passo)}" aria-label="Próxima semana">→</a>`;
 }
 
 /** A razão mais importante da cor da unidade, em uma linha. A ordem é a da gravidade: impedimento crítico, atraso, atualização pendente, prazo chegando. */
