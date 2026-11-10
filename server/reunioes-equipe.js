@@ -9,8 +9,9 @@ import { subarvore } from './db.js';
 import { empresaAtual } from './empresa.js';
 import { falha, h, json, marks, permit, texto } from './helpers.js';
 import { extrasReuniaoEquipe } from './reunioes-equipe-extras.js';
+import { relatoReuniaoEquipe } from './reunioes-equipe-relato.js';
 import { validarCabecalho } from './ata-cabecalho.js';
-import { DIAS_SEM_MOVIMENTO, addDays, br, ehISO, parseISO, reuniaoSeguinte } from './logic.js';
+import { DIAS_SEM_MOVIMENTO, addDays, atualizacaoPendente, br, ehISO, parseISO, reuniaoSeguinte } from './logic.js';
 
 const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 const ORDEM_SITUACAO = { atrasada: 0, vence: 1, parada: 2, normal: 3 };
@@ -87,8 +88,14 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje, cfg }
       id: a.id, titulo: a.titulo, prazo: a.prazo, status: a.status, secao_sigla: a.secao_sigla, responsavel_nome: a.responsavel_nome || null,
       situacao: a.prazo < dia ? 'atrasada' : a.prazo <= ate2 ? 'vence' : a.movimento < limiteParada ? 'parada' : 'normal',
     });
+    // Como o Diretor vê os Centros: o relato enviado por cada seção para esta reunião e, passado o fechamento, quem não enviou.
+    const semanaRef = r.semana || r.data;
+    const enviados = new Map();
+    for (const f of filhas) enviados.set(f.id, await relato.ultima(f.id, semanaRef));
     const cartoes = filhas.map((f) => {
       const minha = (x) => apresentadora(x) === f.id;
+      const atualizacao = enviados.get(f.id) || null;
+      const pendente = !atualizacao && atualizacaoPendente(false, semanaRef);
       const acoes = abertas.filter(minha).map(marcar).sort((x, y) => ORDEM_SITUACAO[x.situacao] - ORDEM_SITUACAO[y.situacao]);
       const impsDe = imps.filter(minha);
       const atrasadas = acoes.filter((a) => a.situacao === 'atrasada').length;
@@ -97,7 +104,8 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje, cfg }
       return {
         secao_id: f.id, nome: f.nome, sigla: f.sigla || null, chefe_id: f.chefe_id || null, chefe_nome: f.chefe_nome || null,
         abertas: acoes.length, atrasadas, vencem, paradas, acoes,
-        cor: atrasadas || impsDe.some((i) => i.critico) ? 'vermelho' : vencem || paradas || impsDe.length ? 'amarelo' : 'verde',
+        atualizacao, atualizacao_pendente: pendente,
+        cor: atrasadas || impsDe.some((i) => i.critico) ? 'vermelho' : vencem || paradas || impsDe.length || pendente ? 'amarelo' : 'verde',
         feitas: feitas.filter(minha).map((a) => ({ id: a.id, titulo: a.titulo, concluida_em: a.concluida_em })),
         proximas: acoes.filter((a) => a.situacao !== 'atrasada' && a.prazo <= ate7).map(({ id, titulo, prazo }) => ({ id, titulo, prazo })),
         impedimentos: impsDe.map((i) => ({ id: i.id, acao_id: i.acao_id, acao_titulo: i.acao_titulo, descricao: i.descricao, critico: !!i.critico, apoio: i.apoio || null })),
@@ -120,6 +128,8 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje, cfg }
 
   // Agenda, combinados e revisão da ata da seção (registrados antes das rotas `/:id`).
   const ex = extrasReuniaoEquipe(app, { db, q, q1, run, agoraISO, hoje, cfg, reuniaoDe, comReuniao, travar });
+  // Atualização semanal das seções subordinadas (o relato que antecede a reunião).
+  const relato = relatoReuniaoEquipe(app, { db, q, q1, run, agoraISO, hoje, agendaDe: ex.agendaDe });
 
   /** O cabeçalho próprio da ata da seção, ou null (a tela usa então o da instituição). */
   const cabecalhoDe = async (secaoId) => {

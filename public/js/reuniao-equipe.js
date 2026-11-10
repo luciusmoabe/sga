@@ -14,6 +14,7 @@ import { ligarRevisaoAta } from './ata-revisao.js';
 import { combinados } from './combinados.js';
 import { ligarReuniao, painelReuniao } from './config-reuniao.js';
 import { nomePlural, nomeTipo } from './vocab.js';
+import { itensDoRelato, resumoInternas } from './relato-vista.js';
 import { abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, on, plural, sem, STATUS, toast, vazio } from './ui.js';
 import { DIAS_SEM_MOVIMENTO } from './regras.js';
 
@@ -204,6 +205,7 @@ export async function viewReuniaoEquipe(raiz, { id: idRota, q }) {
   const lista = (arr, vazioTxt) => (arr.length ? `<ul>${arr.join('')}</ul>` : `<p class="nada">${vazioTxt}</p>`);
   const resumo = (c) => {
     const f = [];
+    if (c.atualizacao_pendente) f.push('Atualização pendente');
     if (c.impedimentos.some((i) => i.critico)) f.push('Impedimento crítico');
     if (c.atrasadas) f.push(plural(c.atrasadas, 'ação atrasada', 'ações atrasadas'));
     if (c.vencem) f.push(`${plural(c.vencem, 'vence', 'vencem')} em até 2 dias`);
@@ -232,15 +234,21 @@ export async function viewReuniaoEquipe(raiz, { id: idRota, q }) {
     const c = S.cartoes[S.idx];
     if (!c) return '<div class="tv-palco"><p class="nada">Nenhuma seção subordinada.</p></div>';
     const decs = S.reuniao.decisoes.filter((d) => d.secao_id === c.secao_id);
+    const rel = itensDoRelato(c.atualizacao, c.impedimentos); // feito e próximo como foram reportados; impedimentos e apoio como estão agora
     return `<div class="tv-palco"><div class="tv-cabeca"><h2>${esc(c.nome)}</h2>${sem(c.cor)}
         <span class="suave">${esc(c.chefe_nome || 'sem chefe')} · ${S.idx + 1} de ${S.cartoes.length}</span></div>
       <div class="tv-blocos">
         <div class="tv-relato">
-          <div class="tv-cartao tv-caixa"><h3>Feito</h3>${lista(c.feitas.map((a) => li(`${a.titulo} · concluída em ${dataHora(a.concluida_em)}`)), 'Nada concluído desde a reunião anterior.')}</div>
-          <div class="tv-cartao tv-caixa"><h3>Próximo</h3>${lista(c.proximas.map((a) => li(`${a.titulo} · prazo ${br(a.prazo)}`)), 'Nada com prazo nos próximos 7 dias.')}</div>
+          <div class="tv-cartao tv-caixa"><h3>Feito</h3>${rel ? lista(rel.feitos.map((x) => li(x.detalhe ? `${x.texto} · ${x.detalhe}` : x.texto)), 'Nada informado.')
+            : lista(c.feitas.map((a) => li(`${a.titulo} · concluída em ${dataHora(a.concluida_em)}`)), 'Nada concluído desde a reunião anterior.')}
+            ${rel ? '' : `<p class="nada" style="font-size:.85rem">${c.atualizacao_pendente ? 'Atualização não enviada no prazo; o que está acima vem das ações.' : 'Atualização ainda não enviada; o que está acima vem das ações.'}</p>`}
+            ${rel && resumoInternas(rel.internas) ? `<p class="nada" style="font-size:.85rem">${esc(resumoInternas(rel.internas))}</p>` : ''}</div>
+          <div class="tv-cartao tv-caixa"><h3>Próximo</h3>${rel ? lista(rel.proximo.map((x) => li(x.detalhe ? `${x.texto} · ${x.detalhe}` : x.texto)), 'Nada informado.')
+            : lista(c.proximas.map((a) => li(`${a.titulo} · prazo ${br(a.prazo)}`)), 'Nada com prazo nos próximos 7 dias.')}</div>
           <div class="tv-cartao tv-caixa ${c.impedimentos.some((i) => i.critico) ? 'critico' : ''}"><h3>Impedimentos${c.impedimentos.some((i) => i.critico) ? ' · crítico' : ''}</h3>
             ${lista(c.impedimentos.map((i) => li(`${i.critico ? 'CRÍTICO · ' : ''}${i.acao_titulo}: ${i.descricao}`, i.critico ? 'pend' : '')), 'Nenhum impedimento.')}</div>
-          <div class="tv-cartao tv-caixa"><h3>Apoio necessário</h3>${c.apoios.length ? c.apoios.map((a) => `<p style="margin:0 0 6px;font-size:1.1rem">${esc(a.acao_titulo)}: ${esc(a.apoio)}</p>`).join('') : '<p class="nada">Nada informado.</p>'}</div>
+          <div class="tv-cartao tv-caixa"><h3>Apoio necessário</h3>${c.apoios.length ? c.apoios.map((a) => `<p style="margin:0 0 6px;font-size:1.1rem">${esc(a.acao_titulo)}: ${esc(a.apoio)}</p>`).join('') : '<p class="nada">Nada informado.</p>'}
+            ${rel?.observacoes ? `<p class="nada" style="margin-top:8px">Observações: ${esc(rel.observacoes)}</p>` : ''}</div>
         </div>
         <div class="tv-acoes">
           ${c.pedidos.map((p) => `<div class="tv-pedido"><b>Pedido de novo prazo</b><span>${esc(p.acao_titulo)}${p.usuario_nome ? ` · ${esc(p.usuario_nome)}` : ''}</span><span class="num">${br(p.prazo_atual)} → <b>${br(p.novo_prazo)}</b></span>

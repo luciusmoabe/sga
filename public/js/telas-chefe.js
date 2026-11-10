@@ -176,15 +176,29 @@ function suaSemanaHTML({ up, semana, abertas, aValidar, atrasadas }) {
 }
 
 // ---------- Início ----------
+/** Lembrete da atualização para a reunião do chefe da seção acima: enviada (e quando) ou pendente, com o prazo. */
+function relatoEquipeHTML(d) {
+  const enviada = !!d.atual;
+  const prazo = `${br(addDias(d.semana, -1))}, às ${HORA_FECHAMENTO}h`;
+  const vencido = !enviada && agora().getTime() > instante(d.fechamento).getTime();
+  return `<section class="cartao" aria-label="Atualização para a reunião da equipe"><div class="linha entre" style="align-items:center;gap:12px;flex-wrap:wrap">
+    <div><b>Atualização para a reunião da equipe${d.pai?.sigla ? ` (${esc(d.pai.sigla)})` : ''}</b><div class="suave pequeno">${enviada
+      ? `Enviada em ${dataHora(d.atual.enviada_em)}.` : vencido ? `O prazo regular terminou (${prazo}); você ainda pode enviar até a reunião.` : `Prazo: ${prazo}.`}</div></div>
+    <a class="btn ${enviada ? 'btn-sec' : 'btn-primario'}" href="#/atualizacao-equipe">${enviada ? 'Rever ou corrigir' : 'Enviar atualização'}</a></div></section>
+  <div class="espaco"></div>`;
+}
+
 export async function inicio(raiz, { refresh }) {
   if (!est.user.secao_id) return semSecao(raiz);
   const semana = est.boot.semana;
   // Só a seção do usuário (e as subordinadas): para o Administrador da Diretoria Adjunta, restringe à própria seção.
-  const [up, abertas, { aviso }, concluidas, agendaEquipe] = await Promise.all([
+  const [up, abertas, { aviso }, concluidas, agendaEquipe, relatoEquipe] = await Promise.all([
     get(`/atualizacao?semana=${semana}&resumo=1`), get(`/acoes?situacao=abertas&secao=${est.user.secao_id}`), get('/avisos/atual'),
     est.boot.acoes_a_validar ? get(`/acoes?situacao=concluidas&secao=${est.user.secao_id}`) : [],
     // A reunião da equipe tem agenda própria, com o mesmo trilho da reunião da instituição (só para o chefe da seção).
     est.user.perfil === 'chefe' ? get('/reunioes-equipe/agenda').catch(() => null) : null,
+    // A seção que tem chefe acima relata também para a reunião dele (resumo: só o que já foi enviado).
+    est.user.perfil === 'chefe' && est.boot.secao?.tipo === 'subsecao' ? get('/reunioes-equipe/atualizacao?resumo=1').catch(() => null) : null,
   ]);
   const aValidar = concluidas.filter((a) => a.aguardando_validacao === 'chefe');
   const atrasadas = abertas.filter((a) => a.atrasada).length;
@@ -193,6 +207,7 @@ export async function inicio(raiz, { refresh }) {
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>${esc(est.boot.secao?.nome || 'Minha seção')}</h1><div class="sub">Olá, ${esc(est.user.nome)}. Aqui está o que precisa da sua atenção.</div></div></div>
     ${agendaEquipe ? trilho(agendaComoBoot(agendaEquipe)) : ''}
+    ${relatoEquipe?.aplicavel ? relatoEquipeHTML(relatoEquipe) : ''}
     ${aviso ? `<div class="aviso-banner"><p class="aviso-banner-tag">Aviso</p><p class="aviso-banner-texto">${esc(aviso.texto)}</p></div>` : ''}
     ${quadroNovasHTML(abertas)}
     ${quadroValidarHTML(aValidar)}

@@ -41,6 +41,7 @@ const ROTAS = {
   avisos: { f: avisos, perfis: ['diretor', 'administrador'], titulo: 'Avisos' },
   combinados: { f: combinados, perfis: TODOS, titulo: 'Combinados' },
   'reunioes-equipe': { f: reunioesEquipe, perfis: ['chefe', 'membro'], titulo: 'Reunião da equipe' },
+  'atualizacao-equipe': { f: (raiz, p) => atualizacao(raiz, p, { base: '/reunioes-equipe/atualizacao', titulo: 'Atualização para a reunião da equipe', destino: 'Para a reunião da equipe' }), perfis: ['chefe'], titulo: 'Atualização para a reunião da equipe' },
   'agenda-equipe': { f: agendaEquipe, perfis: ['chefe'], titulo: 'Agenda da reunião da equipe' },
   'combinados-equipe': { f: combinadosEquipe, perfis: ['chefe'], titulo: 'Combinados da equipe' },
   'cabecalho-equipe': { f: cabecalhoEquipe, perfis: ['chefe'], titulo: 'Cabeçalho da ata' },
@@ -294,7 +295,9 @@ function casca() {
   // Quem é da Diretoria Adjunta (Administrador vinculado a ela) cria e acompanha as ações da seção e envia o relato semanal.
   const daDiretoriaAdjunta = u.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA;
   // O chefe com a permissão do Diretor ganha "Ações dos Centros", logo abaixo das próprias ações.
-  const chefe = lePorTodosOsCentros() ? MENU_CHEFE.flatMap((m) => (m[0] === 'minhas-acoes' ? [m, ['acoes-centros', `Ações ${dosPlural('centro')}`]] : [m])) : MENU_CHEFE;
+  // A subseção também relata, para a reunião do chefe da seção acima ("Atualização à equipe").
+  const comRelatoEquipe = est.boot?.secao?.tipo === 'subsecao' ? MENU_CHEFE.flatMap((m) => (m[0] === 'atualizacao' ? [m, ['atualizacao-equipe', 'Atualização à equipe']] : [m])) : MENU_CHEFE;
+  const chefe = lePorTodosOsCentros() ? comRelatoEquipe.flatMap((m) => (m[0] === 'minhas-acoes' ? [m, ['acoes-centros', `Ações ${dosPlural('centro')}`]] : [m])) : comRelatoEquipe;
   const base = u.perfil === 'chefe' ? (u.acesso_configuracao ? [...chefe, ['#Administração'], ['estrutura', 'Configuração']] : chefe) : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? menuConsulta() : u.perfil === 'membro' ? MENU_MEMBRO : u.perfil === 'plataforma' ? MENU_PLATAFORMA : MENU_GESTAO;
   const menu = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['equipe', 'Minha equipe'], ['atualizacao', 'Minha atualização']] : []), ...base]
     .filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));

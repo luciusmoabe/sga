@@ -33,8 +33,9 @@ const acaoOut = (a) => ({
 });
 
 /** Relato ao vivo de uma seção: quatro blocos e as janelas usadas. Inclui ações internas (marcadas). */
-export async function montarRelato(db, secaoId, semana, hoje = hojeISO()) {
-  const janelas = janelasDoRelato(semana, hoje, await intervaloReuniao(db));
+export async function montarRelato(db, secaoId, semana, hoje = hojeISO(), intervalo = null) {
+  // `intervalo`: a periodicidade da reunião de uma seção (7 ou 14); sem ele, vale a da organização.
+  const janelas = janelasDoRelato(semana, hoje, intervalo ?? await intervaloReuniao(db));
   const ids = await subarvore(db, secaoId);
   const lugares = marks(ids);
   const emp = empresaAtual();
@@ -73,8 +74,9 @@ export async function montarRelato(db, secaoId, semana, hoje = hojeISO()) {
 }
 
 /** Cópia congelada para o histórico e para o Diretor: só o que ele pode ver, mais a contagem do que é interno. */
-export function paraSnapshot(relato, observacoes = '') {
-  const publicos = (lista) => lista.filter(ehPublica);
+export function paraSnapshot(relato, observacoes = '', { todas = false } = {}) {
+  // `todas`: o relato da seção para o chefe dela leva também as ações internas (quem recebe já as enxerga); o do Diretor, não.
+  const publicos = (lista) => (todas ? lista : lista.filter(ehPublica));
   const internas = (lista) => lista.length - publicos(lista).length;
   return {
     formato: 2,

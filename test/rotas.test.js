@@ -29,6 +29,8 @@ const ESPERADAS = [
   'GET /api/bootstrap',
   'GET /api/combinados',
   'GET /api/equipe',
+  'GET /api/reunioes-equipe/atualizacao',
+  'PUT /api/reunioes-equipe/atualizacao',
   'GET /api/reunioes-equipe/agenda',
   'PUT /api/reunioes-equipe/agenda',
   'GET /api/reunioes-equipe/combinados',

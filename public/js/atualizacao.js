@@ -33,16 +33,23 @@ const bloco = (titulo, sub, linhas, semItens) => `<div class="cartao"><h2>${titu
   <div class="suave pequeno" style="margin:-4px 0 8px">${sub}</div>
   ${linhas.length ? `<div class="itens">${linhas.join('')}</div>` : `<p class="suave pequeno">${semItens}</p>`}</div>`;
 
-export async function atualizacao(raiz, { refresh }) {
+/** `o`: a instância. Sem opções, é a atualização para a reunião da organização; para a reunião da equipe, `base` aponta às rotas da seção
+ *  (a data da reunião vem do servidor, da agenda da seção acima). */
+export async function atualizacao(raiz, { refresh }, o = {}) {
   if (!est.user.secao_id) return semSecao(raiz);
-  const semana = est.boot.semana;
-  const d = await get(`/atualizacao?semana=${semana}`);
+  const base = o.base || '/atualizacao';
+  const d = await get(o.base ? base : `${base}?semana=${est.boot.semana}`);
+  if (d.aplicavel === false) {
+    raiz.innerHTML = `<div class="cabeca"><h1>${esc(o.titulo || 'Minha atualização')}</h1></div><div class="cartao">${vazio('Não há reunião da equipe para relatar', 'A sua seção não tem uma seção acima com chefe. A atualização para a reunião da instituição fica em "Minha atualização".')}</div>`;
+    return;
+  }
+  const semana = d.semana;
   const at = d.atual;
   const rel = d.relato;
   const j = rel.janelas;
 
   // Só as observações são digitadas: ficam num rascunho da aba, que sobrevive a recarga e a queda de sessão.
-  const chaveRascunho = `agilis-rascunho:${est.user.id}:${semana}`;
+  const chaveRascunho = `agilis-rascunho${o.base ? '-equipe' : ''}:${est.user.id}:${semana}`;
   let observacoes = at?.feito?.snapshot?.observacoes || '';
   try {
     const r = JSON.parse(sessionStorage.getItem(chaveRascunho));
@@ -50,7 +57,7 @@ export async function atualizacao(raiz, { refresh }) {
   } catch { /* sem rascunho ou armazenamento indisponível */ }
 
   raiz.innerHTML = `
-    <div class="cabeca"><div><h1>Minha atualização</h1><div class="sub">Para a reunião de ${diaSemana(semana)}, ${br(semana)} · prazo regular ${diaSemana(addDias(semana, -1))}, ${br(addDias(semana, -1))}, às ${HORA_FECHAMENTO}h</div></div></div>
+    <div class="cabeca"><div><h1>${esc(o.titulo || 'Minha atualização')}</h1><div class="sub">${esc(o.destino || 'Para a reunião')} de ${diaSemana(semana)}, ${br(semana)} · prazo regular ${diaSemana(addDias(semana, -1))}, ${br(addDias(semana, -1))}, às ${HORA_FECHAMENTO}h</div></div></div>
     ${d.desatualizada ? '<div class="info" role="status"><b>O relato mudou desde o último envio</b> (ação concluída, prazo novo ou impedimento). Envie de novo para a reunião ver a versão atual.</div>' : ''}
     ${at && !at.feito.snapshot ? '<div class="info">Esta atualização foi enviada no formato antigo (texto livre). Ao enviar de novo, ela passa a ser montada a partir das suas ações.</div>' : ''}
     ${at && at.feito.snapshot && !d.desatualizada ? `<div class="info">${at.usuario_nome && at.usuario_nome !== est.user.nome ? `${esc(at.usuario_nome)} já enviou` : 'Você já enviou'} esta atualização (versão ${at.versao}). Ao enviar de novo, a nova versão substitui a anterior e o histórico é mantido.</div>` : ''}
@@ -95,7 +102,7 @@ export async function atualizacao(raiz, { refresh }) {
     const caixa = $('.erro-form', raiz);
     caixa.classList.add('oculto');
     try {
-      await put('/atualizacao', { semana, observacoes: $('#obs', raiz).value });
+      await put(base, { semana, observacoes: $('#obs', raiz).value });
       try { sessionStorage.removeItem(chaveRascunho); } catch { /* ignora */ }
       toast('Atualização enviada. Obrigado!');
       location.hash = '#/inicio';

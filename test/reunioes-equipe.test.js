@@ -434,3 +434,53 @@ test('o chefe decide ao vivo os pedidos de prazo das ações que ele criou; os d
   assert.match(enc.data.ata_texto, /Pedidos de novo prazo decididos:\n- \[\w+\] "Criada pela chefe do Centro": novo prazo 20\/10\/2026 aprovado\./);
   assert.equal((await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.pedidos_decididos.length, 1);
 });
+
+test('atualização semanal das seções subordinadas ao chefe: relato montado pelo servidor, versionado e apresentado no cartão da seção', async (t) => {
+  const { db, call } = await demo(t);
+  const sub = (await db.prepare("select id from secoes where tipo = 'subsecao' and pai_id = ?").get(CPE)).id;
+  const chefeSub = (await db.prepare("select id from usuarios where perfil = 'chefe' and secao_id = ?").get(sub)).id;
+  await db.prepare(`insert into acoes (secao_id, titulo, prazo, prazo_original, status, prioridade, criada_em, criado_por, concluida_em)
+    values (?, 'Concluída pela subseção', '2026-09-15', '2026-09-15', 'concluida', 'media', '2026-09-01T10:00:00', ?, '2026-09-17T10:00:00')`).run(sub, ANA_CPE);
+
+  // A seção relata para a reunião da seção acima (a agenda dela). Centro, sem seção acima com chefe, não tem o que relatar.
+  assert.equal((await call(ANA_CPE, 'GET', '/reunioes-equipe/atualizacao')).data.aplicavel, false);
+  assert.equal((await call(ANA_CPE, 'PUT', '/reunioes-equipe/atualizacao', { observacoes: 'x' })).status, 409);
+  assert.equal((await call(DIRETOR, 'GET', '/reunioes-equipe/atualizacao')).status, 403);
+  const d = (await call(chefeSub, 'GET', '/reunioes-equipe/atualizacao')).data;
+  assert.equal(d.aplicavel, true);
+  assert.equal(d.semana, '2026-09-22', 'a data da reunião da seção acima');
+  assert.equal(d.fechamento, '2026-09-21T18:00:00');
+  assert.equal(d.atual, null);
+  assert.ok(d.relato.concluidas.some((a) => a.titulo === 'Concluída pela subseção'));
+
+  // Reunião ainda dentro do prazo: sem relato, o cartão não vira pendente; depois do fechamento, sim.
+  const id = (await call(ANA_CPE, 'POST', '/reunioes-equipe/iniciar')).data.reuniao.id;
+  const antes = (await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.cartoes.find((c) => c.secao_id === sub);
+  assert.equal(antes.atualizacao, null);
+  assert.equal(antes.atualizacao_pendente, false, 'o fechamento ainda não passou');
+  const noFechamento = process.env.SGC_NOW;
+  process.env.SGC_NOW = '2026-09-21T18:30:00';
+  try {
+    const pendente = (await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.cartoes.find((c) => c.secao_id === sub);
+    assert.equal(pendente.atualizacao_pendente, true);
+    assert.notEqual(pendente.cor, 'verde', 'a atualização pendente deixa a seção em atenção');
+  } finally { process.env.SGC_NOW = noFechamento; }
+
+  // Envio: só as observações são informadas; o servidor recalcula e congela a cópia. Cada envio é uma versão.
+  const env = await call(chefeSub, 'PUT', '/reunioes-equipe/atualizacao', { observacoes: 'Equipe reduzida esta semana.' });
+  assert.equal(env.status, 200);
+  assert.equal(env.data.versao, 1);
+  assert.equal(env.data.feito.snapshot.observacoes, 'Equipe reduzida esta semana.');
+  assert.equal((await call(chefeSub, 'PUT', '/reunioes-equipe/atualizacao', { observacoes: 'Corrigido.' })).data.versao, 2);
+  const depois = (await call(chefeSub, 'GET', '/reunioes-equipe/atualizacao')).data;
+  assert.equal(depois.atual.versao, 2);
+  assert.equal(depois.desatualizada, false);
+  // O relato enviado aparece no cartão, na reunião.
+  const cartao = (await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.cartoes.find((c) => c.secao_id === sub);
+  assert.equal(cartao.atualizacao.versao, 2);
+  assert.equal(cartao.atualizacao.feito.snapshot.concluidas[0].titulo, 'Concluída pela subseção');
+  assert.equal(cartao.atualizacao_pendente, false);
+  // A atualização da organização continua independente.
+  assert.equal((await db.prepare('select count(*) as n from atualizacoes').get()).n >= 0, true);
+  assert.equal(Number((await db.prepare('select count(*) as n from atualizacoes_equipe').get()).n), 2);
+});
