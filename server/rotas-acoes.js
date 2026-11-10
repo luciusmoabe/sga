@@ -524,6 +524,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
         await run('delete from acao_prazos where acao_id = ?', a.id);
         await run('delete from pedidos_prazo where acao_id = ?', a.id);
         await run('delete from acao_vistas where acao_id = ?', a.id);
+        await run('delete from reuniao_equipe_acoes where acao_id = ?', a.id);
         await run('delete from acoes where id = ? and empresa_id = ?', a.id, empresaAtual());
         return { ok: true, id: a.id };
       });

@@ -12,7 +12,7 @@ import { estrutura } from './estrutura.js';
 import { configuracaoAta } from './ata-cabecalho.js';
 import { atas, reuniaoDetalhe, reunioes } from './atas.js';
 import { inicioReuniao, viewReuniao } from './reuniao.js';
-import { reuniaoEquipe, reunioesEquipe } from './reuniao-equipe.js';
+import { reunioesEquipe, viewReuniaoEquipe } from './reuniao-equipe.js';
 import { avisos } from './avisos.js';
 import { empresas } from './plataforma.js';
 import { produtividade } from './produtividade.js';
@@ -41,7 +41,7 @@ const ROTAS = {
   avisos: { f: avisos, perfis: ['diretor', 'administrador'], titulo: 'Avisos' },
   combinados: { f: combinados, perfis: TODOS, titulo: 'Combinados' },
   'reunioes-equipe': { f: reunioesEquipe, perfis: ['chefe', 'membro'], titulo: 'Reunião da equipe' },
-  'reuniao-equipe': { f: reuniaoEquipe, perfis: ['chefe', 'membro'], titulo: 'Reunião da equipe' },
+  'reuniao-equipe': { f: viewReuniaoEquipe, perfis: ['chefe'], tv: (p) => !!p.id, titulo: 'Modo Reunião da equipe' },
   reunioes: { f: (r, p) => (p.id ? reuniaoDetalhe(r, p) : reunioes(r, p)), perfis: LEITURA, titulo: 'Reuniões e atas' },
   // Sem id: tela comum de início (nada é criado ao abrir a rota). Com id: Modo Reunião em tela cheia.
   reuniao: { f: (r, p) => (p.id ? viewReuniao(r, p) : inicioReuniao(r, p)), perfis: GESTAO, tv: (p) => !!p.id, titulo: 'Modo Reunião' },
@@ -118,7 +118,7 @@ const MENU_CHEFE = [
   ['#Reunião'],
   ['combinados', 'Combinados'],
   ['atas', 'Atas'],
-  ['reunioes-equipe', 'Reunião da equipe'],
+  ['reunioes-equipe', 'Reuniões da equipe'],
 ];
 // Membro da equipe: lê as ações da sua seção e executa as que o chefe atribuiu a ele (ou que ele criou).
 const MENU_MEMBRO = [['#Minha seção'], ['minhas-acoes', 'Minhas ações'], ['agenda', 'Agenda'], ['reunioes-equipe', 'Atas da equipe']];

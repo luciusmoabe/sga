@@ -12,6 +12,7 @@ import { aplicarLembretes } from './migration-lembretes.js';
 import { aplicarPush } from './migration-push.js';
 import { aplicarConfiguracao } from './migration-configuracao.js';
 import { aplicarReuniaoEquipe } from './migration-reuniao-equipe.js';
+import { aplicarReuniaoEquipeParidade } from './migration-reuniao-equipe-paridade.js';
 import { aplicarDiretoriaAdjunta } from './migration-diretoria-adjunta.js';
 import { aplicarPrazosEReuniao } from './migration-prazos-reuniao.js';
 import { aplicarMovimentacao } from './migration-movimentacao.js';
@@ -356,6 +357,13 @@ const MIGRACOES = [
     id: 29, nome: 'reunioes_equipe',
     async aplicar(db) {
       await aplicarReuniaoEquipe(db);
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
+  {
+    id: 30, nome: 'reunioes_equipe_paridade',
+    async aplicar(db) {
+      await aplicarReuniaoEquipeParidade(db);
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },

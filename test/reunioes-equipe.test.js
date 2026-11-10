@@ -153,3 +153,74 @@ test('chefe de subseção conduz a reunião da própria equipe; sem equipe, o se
   // A chefe do Centro não conduz a reunião da subseção.
   assert.equal((await call(ANA_CPE, 'PUT', `/reunioes-equipe/${ok.data.reuniao.id}/presenca`, { presentes: [] })).status, 403);
 });
+
+test('mesma estrutura da reunião do Diretor: cartões por pessoa, informações, ações da reunião, próxima reunião e ata completa', async (t) => {
+  const { db, call, marta } = await demo(t);
+  const ins = (titulo, prazo, resp) => db.prepare(`insert into acoes (secao_id, titulo, prazo, prazo_original, status, prioridade, criada_em, responsavel_id, criado_por)
+    values (?, ?, ?, ?, 'a_fazer', 'media', '2026-09-18T10:00:00', ?, ?)`).run(CPE, titulo, prazo, prazo, resp, ANA_CPE);
+  const atrasada = (await ins('Atrasada da Marta', '2026-09-10', marta)).lastInsertRowid;
+  await db.prepare(`insert into impedimentos (acao_id, descricao, critico, apoio, criado_por, criado_em) values (?, 'Sem acesso ao sistema', 1, 'TI', ?, '2026-09-18T10:00:00')`).run(atrasada, ANA_CPE);
+  await db.prepare(`insert into acoes (secao_id, titulo, prazo, prazo_original, status, prioridade, criada_em, responsavel_id, criado_por, concluida_em)
+    values (?, 'Feita pela Marta', '2026-09-15', '2026-09-15', 'concluida', 'media', '2026-09-01T10:00:00', ?, ?, '2026-09-17T10:00:00')`).run(CPE, marta, ANA_CPE);
+  const id = (await call(ANA_CPE, 'POST', '/reunioes-equipe/iniciar')).data.reuniao.id;
+  await call(ANA_CPE, 'PUT', `/reunioes-equipe/${id}/presenca`, { presentes: [ANA_CPE, marta] });
+
+  // Cartão da pessoa: cor, o que foi feito, impedimento crítico e apoio, como o cartão de cada seção na reunião do Diretor.
+  const cartoes = (await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.cartoes;
+  const c = cartoes.find((x) => x.usuario_id === marta);
+  assert.equal(c.cor, 'vermelho');
+  assert.equal(c.feitas[0].titulo, 'Feita pela Marta');
+  assert.equal(c.impedimentos[0].critico, true);
+  assert.deepEqual(c.apoios, [{ acao_titulo: 'Atrasada da Marta', apoio: 'TI' }]);
+  assert.equal(cartoes[0].cor, 'vermelho', 'em ordem de necessidade, quem está presente e precisa de atenção vem primeiro');
+
+  // Informações.
+  assert.equal((await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/informacoes`, { texto: '' })).status, 400);
+  assert.equal((await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/informacoes`, { texto: 'Sexta é ponto facultativo.' })).status, 201);
+  const info = (await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.informacoes[0];
+  assert.equal((await call(ANA_CPE, 'PATCH', `/reunioes-equipe/${id}/informacoes/${info.id}`, { texto: 'Sexta (13/11) é ponto facultativo.' })).status, 200);
+
+  // Ação criada na reunião: só a que o chefe criou na própria árvore entra.
+  const nova = (await db.prepare(`insert into acoes (secao_id, titulo, prazo, prazo_original, status, prioridade, criada_em, responsavel_id, criado_por)
+    values (?, 'Nova da reunião', '2026-10-10', '2026-10-10', 'a_fazer', 'alta', '2026-09-22T09:40:00', ?, ?)`).run(CPE, marta, ANA_CPE)).lastInsertRowid;
+  assert.equal((await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/acoes`, { acao_id: atrasada + 999 })).status, 404);
+  assert.equal((await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/acoes`, { acao_id: nova })).status, 201);
+  assert.equal((await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/acoes`, { acao_id: nova })).status, 201, 'repetir não duplica');
+  assert.equal((await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.novas_acoes.length, 1);
+
+  // Próxima reunião.
+  assert.equal((await call(ANA_CPE, 'PATCH', `/reunioes-equipe/${id}`, { proxima_em: '2026-09-01' })).status, 400, 'não pode ser anterior');
+  assert.equal((await call(ANA_CPE, 'PATCH', `/reunioes-equipe/${id}`, { proxima_em: '2026-10-06' })).data.proxima_em, '2026-10-06');
+
+  const enc = await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/encerrar`);
+  for (const trecho of [/Novas ações:\n- Nova da reunião \[Marta Lima\] — prazo 10\/10\/2026 — prioridade alta/, /Informações:\n- Sexta \(13\/11\) é ponto facultativo\./,
+    /Impedimentos críticos em aberto:\n- "Atrasada da Marta": Sem acesso ao sistema \(apoio solicitado: TI\)/, /Próxima reunião: terça-feira, 06\/10\/2026\./]) {
+    assert.match(enc.data.ata_texto, trecho);
+  }
+  assert.equal((await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/informacoes`, { texto: 'Tarde' })).status, 409, 'encerrada');
+  assert.equal((await call(ANA_CPE, 'PATCH', `/reunioes-equipe/${id}`, { proxima_em: '2026-10-13' })).status, 200, 'ainda dá para ajustar enquanto é rascunho');
+  assert.equal((await call(marta, 'PATCH', `/reunioes-equipe/${id}`, { proxima_em: '2026-10-20' })).status, 403);
+  assert.equal((await call(ANA_CPE, 'DELETE', `/reunioes-equipe/${id}`)).status, 200, 'exclui junto informações e ações ligadas');
+});
+
+test('o chefe lê as atas enviadas das subseções abaixo dele, e a lista traz o tipo da unidade para o agrupamento', async (t) => {
+  const { db, call } = await demo(t);
+  const sub = (await db.prepare('select secao_id from usuarios where id = ?').get(GABRIELA_IND)).secao_id;
+  await db.prepare("insert into usuarios (nome, email, perfil, secao_id) values ('Rui Lins', 'rui.lins@exemplo.invalid', 'membro', ?)").run(sub);
+  const id = (await call(GABRIELA_IND, 'POST', '/reunioes-equipe/iniciar')).data.reuniao.id;
+  await call(GABRIELA_IND, 'POST', `/reunioes-equipe/${id}/encerrar`);
+  // Rascunho: a chefe do Centro (acima) ainda não lê.
+  assert.equal((await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).status, 404);
+  await call(GABRIELA_IND, 'POST', `/reunioes-equipe/${id}/enviar-ata`);
+  const lida = await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`);
+  assert.equal(lida.status, 200);
+  assert.equal(lida.data.pode_conduzir, false);
+  const lista = (await call(ANA_CPE, 'GET', '/reunioes-equipe')).data;
+  assert.equal(lista.length, 1);
+  assert.equal(lista[0].secao_tipo, 'subsecao');
+  assert.equal(lista[0].conduzida, false);
+  // Outro Centro não lê, e a Diretoria continua sem acesso.
+  assert.equal((await call(BRUNO_COF, 'GET', `/reunioes-equipe/${id}`)).status, 404);
+  assert.equal((await call(BRUNO_COF, 'GET', '/reunioes-equipe')).data.length, 0);
+  assert.equal((await call(DIRETOR, 'GET', '/reunioes-equipe')).status, 403);
+});
