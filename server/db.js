@@ -265,10 +265,7 @@ export function createPgDb(pool) {
         run: async (...p) => {
           let s = toPgSql(sql);
           const isInsert = /^\s*insert\s+into/i.test(sql);
-          // Estas tabelas usam chave própria/composta e não possuem coluna id.
-          if (isInsert && !/returning/i.test(sql) && !/\binto\s+(?:config|reuniao_participantes)\b/i.test(sql)) {
-            s += ' RETURNING id';
-          }
+          if (isInsert && pedeRetornarId(sql)) s += ' RETURNING id';
           const res = await query(s, p);
           return {
             changes: res.rowCount,
@@ -319,6 +316,12 @@ export function openDb(target = process.env.SGC_DB || 'data/sgc.db', { databaseU
 const filtroEmpresa = (alias = '') => (temEmpresa()
   ? { sql: ` and ${alias}empresa_id = ?`, args: [empresaAtual()] }
   : { sql: '', args: [] });
+
+/** Tabelas de chave própria ou composta, sem coluna `id`: o INSERT nelas não pode pedir `RETURNING id` (dá erro no PostgreSQL). */
+const TABELAS_SEM_ID = ['config', 'reuniao_participantes', 'acao_vistas'];
+/** No PostgreSQL, todo INSERT devolve o `id` gerado (lastInsertRowid), salvo os que já têm RETURNING e os de tabelas sem `id`. */
+export const pedeRetornarId = (sql) => /^\s*insert\s+into/i.test(sql) && !/returning/i.test(sql)
+  && !new RegExp(`\\binto\\s+(?:${TABELAS_SEM_ID.join('|')})\\b`, 'i').test(sql);
 
 /** Ids da unidade e das subseções abaixo dela (a Subseção entra na soma da unidade acima; Centro, Coordenação e Diretoria
  *  Adjunta abaixo de outra unidade são unidades à parte, não descendentes para este fim). Consultado no banco. */
