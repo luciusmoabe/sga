@@ -188,6 +188,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     reuniao_semana: a.reuniao_semana,
   });
   const impedimentoOut = (i) => ({ ...i, critico: !!i.critico, aberto: !i.resolvido_em });
+  const SELECT_PONTO = `select p.*, uc.nome as criado_por_nome, us.nome as situacao_por_nome from pontos_atencao p
+    left join usuarios uc on uc.id = p.criado_por left join usuarios us on us.id = p.situacao_por`;
+  const pontoOut = (p) => ({ ...p, ativo: !!p.ativo });
   // Tarefa (acao_checklist): data de execução e responsável opcionais; atrasada quando a data passou e não foi feita.
   const checklistOut = (c) => ({ ...c, concluido: !!c.concluido, atrasada: !!c.data && !c.concluido && c.data < hoje() });
   const SELECT_TAREFA = `select c.*, u.nome as responsavel_nome from acao_checklist c left join usuarios u on u.id = c.responsavel_id`;
@@ -520,6 +523,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
         await run('delete from tempo where acao_id = ?', a.id);
         await run('delete from acao_comentarios where acao_id = ?', a.id);
         await run('delete from impedimentos where acao_id = ?', a.id);
+        await run('delete from pontos_atencao where acao_id = ?', a.id);
         await run('delete from acao_checklist where acao_id = ?', a.id);
         await run('delete from acao_prazos where acao_id = ?', a.id);
         await run('delete from pedidos_prazo where acao_id = ?', a.id);
@@ -562,7 +566,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const a = await acaoVisivel(req.user, Number(req.params.id), { leitura: true });
     // Consultas independentes: em série custariam uma ida ao banco cada (o maior custo desta tela
     // é a rede, não o SQL). As permissões não consultam nada (ver permissoes).
-    const [comentarios, lancamentos, pedidos, impedimentos, checklist, prazos, vistas, [{ nova }]] = await Promise.all([
+    const [comentarios, lancamentos, pedidos, impedimentos, checklist, prazos, vistas, [{ nova }], pontos] = await Promise.all([
       q(`select c.*, u.nome as usuario_nome from acao_comentarios c left join usuarios u on u.id = c.usuario_id where c.acao_id = ? order by c.id`, a.id),
       q(`select t.*, u.nome as usuario_nome from tempo t left join usuarios u on u.id = t.usuario_id where t.acao_id = ? order by t.data desc, t.id desc`, a.id),
       q('select * from pedidos_prazo where acao_id = ? order by id desc', a.id),
@@ -574,6 +578,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
         where h.acao_id = ? order by h.alterado_em, h.id`, a.id),
       vistasDa(a),
       marcarNovas(req.user, [a]),
+      q(`${SELECT_PONTO} where p.acao_id = ? order by p.id desc`, a.id),
     ]);
     const [acao] = await marcarLeitura(req.user, [{ ...acaoOut(a), ...permissoes(req.user, a) }]);
     return {
@@ -585,6 +590,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       lancamentos,
       pedidos,
       impedimentos: impedimentos.map(impedimentoOut),
+      pontos_atencao: pontos.map(pontoOut),
       checklist: checklist.map((c) => ({
         ...checklistOut(c),
         pode_marcar: !a.encerrada && (acao.pode_executar || (req.user.perfil === 'membro' && !acao.somente_leitura && c.responsavel_id === req.user.id)),
@@ -827,6 +833,42 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
         impedimento: impedimentoOut(await q1('select * from impedimentos where id = ?', imp.id)),
         acao: acaoOut(await q1(`${SELECT_ACAO} where a.id = ? and a.empresa_id = ?`, a.id, empresaAtual())),
       };
+    });
+  }));
+
+  // ---------- Pontos de atenção da ação ----------
+  // Registro livre (data e hora, descrição, autor) que fica ativo ou inativo; não muda status nem semáforo. Não é editado nem
+  // excluído: corrigir = inativar e registrar outro. Mesma regra de quem mexe dos impedimentos.
+  app.post('/api/acoes/:id/pontos-atencao', perfisImpedimento, h(async (req, res) => {
+    const id = Number(req.params.id);
+    const descricao = texto(req.body?.descricao, 600);
+    if (!descricao) throw falha(400, 'Descreva o ponto de atenção.');
+    const out = await db.transaction(async () => {
+      const a = await acaoVisivel(req.user, id);
+      await podeAgirNoImpedimento(req.user, a);
+      if (a.encerrada || a.arquivada) throw falha(409, 'Ação arquivada ou encerrada não recebe pontos de atenção.');
+      const pid = (await run('insert into pontos_atencao (acao_id, descricao, ativo, criado_em, criado_por) values (?,?,1,?,?)',
+        a.id, descricao, agoraISO(), req.user.id)).lastInsertRowid;
+      return { ponto: pontoOut(await q1(`${SELECT_PONTO} where p.id = ?`, pid)) };
+    });
+    res.status(201);
+    return out;
+  }));
+
+  app.patch('/api/acoes/:id/pontos-atencao/:pid', perfisImpedimento, h(async (req) => {
+    const id = Number(req.params.id);
+    const pid = Number(req.params.pid);
+    if (typeof req.body?.ativo !== 'boolean') throw falha(400, 'Informe se o ponto de atenção fica ativo ou inativo.');
+    const ativo = req.body.ativo ? 1 : 0;
+    return db.transaction(async () => {
+      const a = await acaoVisivel(req.user, id);
+      await podeAgirNoImpedimento(req.user, a);
+      if (a.encerrada || a.arquivada) throw falha(409, 'Ação arquivada ou encerrada não altera pontos de atenção.');
+      const p = await q1('select * from pontos_atencao where id = ? and acao_id = ?', pid, a.id);
+      if (!p) throw falha(404, 'Ponto de atenção não encontrado.');
+      if (p.ativo === ativo) throw falha(409, `Este ponto de atenção já está ${ativo ? 'ativo' : 'inativo'}. Atualize a tela.`);
+      await run('update pontos_atencao set ativo = ?, situacao_em = ?, situacao_por = ? where id = ?', ativo, agoraISO(), req.user.id, p.id);
+      return { ponto: pontoOut(await q1(`${SELECT_PONTO} where p.id = ?`, p.id)) };
     });
   }));
 

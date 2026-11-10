@@ -59,6 +59,32 @@ const impedimentoHTML = (i, podeResolver = true) => `<div class="impedimento ${i
   ${!i.aberto ? `<div class="suave pequeno">Resolvido em ${dataHora(i.resolvido_em)}${i.resolvido_por_nome ? ` por ${esc(i.resolvido_por_nome)}` : ''}${i.resolucao ? `: ${esc(i.resolucao)}` : ''}</div>` : ''}
 </div>`;
 
+// ---------- Pontos de atenção (registro livre, ativo ou inativo; não muda status nem semáforo) ----------
+export function abrirNovoPontoAtencao(a, aoConcluir) {
+  abrirForm({
+    titulo: 'Registrar ponto de atenção',
+    corpo: `<p class="suave pequeno">Ação: <b>${esc(a.titulo)}</b></p>
+      <div class="campo"><label for="np-desc">O que merece atenção?</label><textarea id="np-desc" name="descricao" required maxlength="600"></textarea></div>
+      <p class="suave pequeno">A data, a hora e o seu nome entram sozinhos. O ponto de atenção não muda a situação da ação.</p>`,
+    rotulo: 'Registrar ponto de atenção',
+    aoEnviar: async (d) => {
+      await post(`/acoes/${a.id}/pontos-atencao`, { descricao: d.descricao });
+      toast('Ponto de atenção registrado.');
+      await aoConcluir?.();
+    },
+  });
+}
+
+const pontoAtencaoHTML = (p, podeAlterar) => `<div class="impedimento ${p.ativo ? '' : 'resolvido'}">
+  <div class="linha" style="gap:6px;flex-wrap:wrap;align-items:center">
+    <span class="pilula ${p.ativo ? 'st-bloqueada' : 'st-concluida'}">${p.ativo ? 'Ativo' : 'Inativo'}</span>
+    <span class="suave pequeno">${dataHora(p.criado_em)} · ${esc(p.criado_por_nome || '')}</span>
+    ${podeAlterar ? `<button type="button" class="btn btn-fantasma btn-mini" data-alternar-ponto="${p.id}" data-ativo="${p.ativo ? '0' : '1'}" style="margin-left:auto">${p.ativo ? 'Inativar' : 'Reativar'}</button>` : ''}
+  </div>
+  <div>${esc(p.descricao)}</div>
+  ${p.situacao_em ? `<div class="suave pequeno">${p.ativo ? 'Reativado' : 'Inativado'} em ${dataHora(p.situacao_em)}${p.situacao_por_nome ? ` por ${esc(p.situacao_por_nome)}` : ''}</div>` : ''}
+</div>`;
+
 // ---------- Tarefas da ação (apoio ao chefe; quem registra tempo e muda status também mexe aqui) ----------
 /** Quem executa a ação (o chefe da seção, o Administrador e o membro a quem ela foi atribuída ou que a criou) cria, edita
  *  e exclui tarefas. Marcar como feita vale também para o membro dono da tarefa: o servidor diz em `pode_marcar`. */
@@ -387,6 +413,10 @@ export async function abrirAcao(id, aoMudar) {
       ${a.impedimentos.length ? a.impedimentos.map((i) => impedimentoHTML(i, podeImp)).join('') : '<p class="suave pequeno">Nenhum impedimento registrado.</p>'}
       ${aceitaImpedimento(a) && podeImp ? '<button type="button" class="btn btn-sec btn-mini" data-novo-imp>Registrar impedimento</button>' : ''}`,
       a.impedimentos.some((i) => i.aberto))}
+    ${secaoRecolhivel('Pontos de atenção', a.pontos_atencao.length, `
+      ${a.pontos_atencao.length ? a.pontos_atencao.map((p) => pontoAtencaoHTML(p, podeImp && !a.encerrada && !a.arquivada)).join('') : '<p class="suave pequeno">Nenhum ponto de atenção registrado.</p>'}
+      ${podeImp && !a.encerrada && !a.arquivada ? '<button type="button" class="btn btn-sec btn-mini" data-novo-ponto>Registrar ponto de atenção</button>' : ''}`,
+      a.pontos_atencao.some((p) => p.ativo))}
     ${secaoRecolhivel('Comentários', a.comentarios.length, `
       ${a.comentarios.length ? a.comentarios.map((c) => `<div class="comentario"><b>${esc(c.usuario_nome || '')}</b>
         <span class="suave pequeno"> · ${dataHora(c.criado_em)}</span><br>${esc(c.texto)}</div>`).join('') : '<p class="suave pequeno">Nenhum comentário ainda.</p>'}
@@ -525,6 +555,13 @@ export async function abrirAcao(id, aoMudar) {
       on(dlg, 'click', '[data-descrever]', () => abrirDescrever(a, recarregar));
       // Quem redireciona continua vendo a ação (o chefe só move dentro da própria árvore).
       on(dlg, 'click', '[data-redirecionar]', () => abrirRedirecionar(a, recarregar).catch((e) => toast(e.message, 'erro')));
+      on(dlg, 'click', '[data-novo-ponto]', () => abrirNovoPontoAtencao(a, recarregar));
+      on(dlg, 'click', '[data-alternar-ponto]', async (el) => {
+        try {
+          await patch(`/acoes/${a.id}/pontos-atencao/${el.dataset.alternarPonto}`, { ativo: el.dataset.ativo === '1' });
+          await recarregar();
+        } catch (e) { toast(e.message, 'erro'); }
+      });
       on(dlg, 'click', '[data-resolver-imp]', (el) => {
         const imp = a.impedimentos.find((i) => i.id === Number(el.dataset.resolverImp));
         if (imp) abrirResolverImpedimento(a, imp, recarregar);

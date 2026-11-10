@@ -105,8 +105,8 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth, em
     ['POST', /^\/acoes$/],
     ['PATCH', /^\/acoes\/\d+$/],
     ['DELETE', /^\/acoes\/\d+$/],
-    ['POST', /^\/acoes\/\d+\/(tempo|comentarios|vista|checklist|impedimentos|impedimentos\/\d+\/resolver)$/],
-    ['PATCH', /^\/acoes\/\d+\/checklist\/\d+$/],
+    ['POST', /^\/acoes\/\d+\/(tempo|comentarios|vista|checklist|impedimentos|impedimentos\/\d+\/resolver|pontos-atencao)$/],
+    ['PATCH', /^\/acoes\/\d+\/(checklist|pontos-atencao)\/\d+$/],
     ['DELETE', /^\/acoes\/\d+\/checklist\/\d+$/],
   ];
   app.use('/api', (req, res, next) => {

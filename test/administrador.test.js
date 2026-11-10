@@ -109,7 +109,7 @@ test('desempenho: o bootstrap traz a contagem do selo e as telas pesadas usam po
   let n = 0;
   const prepare = db.prepare.bind(db);
   db.prepare = (sql) => { n++; return prepare(sql); };
-  for (const [caminho, teto] of [['/painel', 10], ['/pauta', 14], ['/secoes/1/detalhe', 15], ['/bootstrap', 5], ['/acoes/1', 8]]) {
+  for (const [caminho, teto] of [['/painel', 10], ['/pauta', 14], ['/secoes/1/detalhe', 15], ['/bootstrap', 5], ['/acoes/1', 9]]) {
     n = 0;
     assert.equal((await call(DIRETOR, 'GET', caminho)).status, 200);
     assert.ok(n <= teto, `${caminho} usou ${n} consultas (teto ${teto})`);
@@ -118,7 +118,7 @@ test('desempenho: o bootstrap traz a contagem do selo e as telas pesadas usam po
   // para quem gerencia a ação, então chefeGere e permissoes não devem repeti-la.
   n = 0;
   assert.equal((await call(CPE, 'GET', '/acoes/1')).status, 200);
-  assert.ok(n <= 9, `/acoes/1 (chefe) usou ${n} consultas (teto 9)`);
+  assert.ok(n <= 10, `/acoes/1 (chefe) usou ${n} consultas (teto 10)`);
 });
 
 test('Administrador gerencia estrutura e perfis; Diretor não altera Diretor nem Administrador', async (t) => {
