@@ -9,9 +9,10 @@ import { abrirAcao, confirmarPrazoNasSecoes } from './acao-comum.js';
 import { itensDoRelato, resumoInternas } from './relato-vista.js';
 import { agruparPorDiretriz, partesDoResumo } from './agrupar-acoes.js';
 import { DIAS_SEM_MOVIMENTO, DIRETORIA_ADJUNTA, ehUnidadeDeAcompanhamento } from './regras.js';
+import { parseData } from './datas.js';
 
 const NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
-const nomeDiaReuniao = () => NOMES_DIA[est.boot?.reuniao_dia ?? 2];
+const nomeDiaReuniao = (data) => NOMES_DIA[data ? parseData(data).getUTCDay() : (est.boot?.reuniao_dia ?? 2)]; // a reunião pode ter sido adiada para outro dia
 const horaReuniao = () => est.boot?.reuniao_hora || '10:00';
 
 /** Relato de uma atualização semanal (feito, próximo, impedimentos, apoio).
@@ -63,7 +64,7 @@ export async function painel(raiz, { q }) {
   const pct = (n) => (itens.length ? (n / itens.length) * 100 : 0);
   raiz.innerHTML = `
     <div class="cabeca">
-      <div><h1>Painel da semana</h1><div class="sub">Reunião de ${nomeDiaReuniao()}, ${br(semana)} · ${plural(itens.length, 'seção', 'seções')} acompanhadas</div></div>
+      <div><h1>Painel da semana</h1><div class="sub">Reunião de ${nomeDiaReuniao(semana)}, ${br(semana)} · ${plural(itens.length, 'seção', 'seções')} acompanhadas</div></div>
       <div class="acoes-topo">${navSemana('painel', semana)}<a class="btn btn-sec" href="#/pauta?semana=${semana}">Versão para impressão</a></div>
     </div>
     <div class="cartao">
@@ -110,7 +111,7 @@ export async function centro(raiz, { id, q, refresh }) {
     <div class="cabeca">
       <div><a href="#/painel?semana=${semana}" class="pequeno">← Painel da semana</a>
         <h1>${esc(it.secao.nome)}</h1>
-        <div class="sub">${esc(it.secao.sigla || '')} · ${esc(it.secao.chefe_nome || 'sem chefe atribuído')} · reunião de ${nomeDiaReuniao()}, ${br(semana)}</div></div>
+        <div class="sub">${esc(it.secao.sigla || '')} · ${esc(it.secao.chefe_nome || 'sem chefe atribuído')} · reunião de ${nomeDiaReuniao(semana)}, ${br(semana)}</div></div>
       <div class="acoes-topo">${sem(it.cor)}</div>
     </div>
     <div class="cartao"><h2>Relato da semana</h2>${relatoHTML(atual, { permitirExcluir: ehAdmin() })}</div>

@@ -6,6 +6,7 @@ import { atualizarSessao, ehAdmin, est } from './estado.js';
 import { abrirForm, confirmar, esc, on, toast } from './ui.js';
 import { DIRETORIA_ADJUNTA, HORA_FECHAMENTO, TAM_SENHA } from './regras.js';
 import { ligarConfiguracaoAta } from './ata-cabecalho.js';
+import { ligarReuniao, painelReuniao } from './config-reuniao.js';
 
 const TIPO = TIPO_DA_EMPRESA;
 const tiposComNome = () => Object.fromEntries(['centro', 'coordenacao', 'subsecao', DIRETORIA_ADJUNTA].map((t) => [t, nomeTipo(t)]));
@@ -38,6 +39,7 @@ function formulario(opcoes) {
     vincular('#ca-perfil','#ca-secao',v=>['chefe','membro'].includes(v));
     vincular('#eu-perfil','#eu-secao',v=>['chefe','membro'].includes(v));
     vincular('#eu-perfil','#eu-ver',v=>v==='chefe');
+    vincular('#eu-perfil','#eu-config',v=>['apoio','chefe'].includes(v));
     vincular('#r-tipo','#r-pai',v=>v==='subsecao',true);
     vincular('#r-tipo','#r-pai-da',v=>v==='centro'||v==='coordenacao',true);
     opcoes.aoAbrir?.(dlg,form);
@@ -73,11 +75,8 @@ function painelNomes() {
 }
 
 export async function estrutura(raiz, { refresh, painel }) {
-  const [secoes, usuarios, config] = await Promise.all([get('/secoes'), get('/usuarios'), get('/config')]);
-  const diaAtual = config.reuniao_dia != null ? Number(config.reuniao_dia) : 2;
-  const horaAtual = config.reuniao_hora || '10:00';
-  const intervaloAtual = Number(config.reuniao_intervalo) === 14 ? 14 : 7;
-  const gereContas = est.user?.perfil !== 'apoio'; // o Apoio com acesso à Configuração não mexe em contas e perfis
+  const [secoes, usuarios, config] = await Promise.all([get('/secoes?todas=1'), get('/usuarios'), get('/config')]);
+  const gereContas = ['diretor', 'administrador'].includes(est.user?.perfil); // o Apoio e o Chefe com acesso à Configuração não mexem em contas e perfis
   const filhos = (pai) => secoes.filter((s) => (s.pai_id ?? null) === pai).sort((a, b) => a.ordem - b.ordem || a.id - b.id);
   const chefes = usuarios.filter((u) => u.perfil === 'chefe' && u.ativo);
   const opcoesChefe = (atual) => `<option value="">Sem chefe atribuído</option>${chefes.map((u) =>
@@ -106,7 +105,7 @@ export async function estrutura(raiz, { refresh, painel }) {
   };
   const linhaUsuario = u => `<tr>
     <td><strong>${esc(u.nome)}</strong><span class="estrutura-email">${esc(u.email || 'E-mail não informado')}</span></td>
-    <td>${PERFIL[u.perfil]}${u.suplente ? ' <span class="estrutura-selo" title="Chefe adicional da seção, para responder na ausência do titular">Suplente</span>' : ''}${u.perfil === 'apoio' && u.acesso_configuracao ? ' <span class="estrutura-selo" title="Pode abrir a Configuração (seções, reunião, ata e nomes das unidades)">Configuração</span>' : ''}${u.perfil === 'chefe' && u.ver_outros_centros ? ` <span class="estrutura-selo" title="Lê, sem alterar, as ações de ${todasAs('centro', true)}">Consulta ${todasAs('centro', true)}</span>` : ''}</td><td>${esc(u.secao_nome || 'Sem seção atribuída')}</td>
+    <td>${PERFIL[u.perfil]}${u.suplente ? ' <span class="estrutura-selo" title="Chefe adicional da seção, para responder na ausência do titular">Suplente</span>' : ''}${['apoio', 'chefe'].includes(u.perfil) && u.acesso_configuracao ? ' <span class="estrutura-selo" title="Pode abrir a Configuração (seções, reunião, ata e nomes das unidades)">Configuração</span>' : ''}${u.perfil === 'chefe' && u.ver_outros_centros ? ` <span class="estrutura-selo" title="Lê, sem alterar, as ações de ${todasAs('centro', true)}">Consulta ${todasAs('centro', true)}</span>` : ''}</td><td>${esc(u.secao_nome || 'Sem seção atribuída')}</td>
     <td><span class="estrutura-status ${u.ativo ? 'ativo' : ''}">${u.ativo ? 'Ativo' : 'Inativo'}</span><span class="estrutura-email">${u.tem_login ? 'Login vinculado' : 'Sem login'}</span></td>
     <td><div class="estrutura-acoes"><button class="btn btn-sec btn-mini" data-editar-u="${u.id}" aria-label="Editar ${esc(u.nome)}">Editar</button>
     ${opcoes(u.nome, `${u.tem_login && (ehAdmin() || !protegidoParaMim(u)) ? `<button data-login-u="${u.id}">Alterar e-mail ou senha</button>` : u.tem_login ? '' : '<span class="estrutura-menu-nota">Cadastro sem acesso ao app</span>'}${u.perfil === 'administrador' ? '<span class="estrutura-menu-nota">Administrador: só o servidor altera perfil e acesso</span>' : u.perfil === 'diretor' && !ehAdmin() ? '<span class="estrutura-menu-nota">Perfil Diretor protegido: peça ao Administrador</span>' : `<button data-u="${u.id}" data-ativo="${u.ativo ? 0 : 1}">${u.ativo ? 'Desativar' : 'Reativar'} usuário</button>${u.perfil === 'diretor' ? '' : `<button class="estrutura-perigo" data-excluir-u="${u.id}">Excluir usuário</button>`}`}`)}</div></td></tr>`;
@@ -135,51 +134,7 @@ export async function estrutura(raiz, { refresh, painel }) {
       <p id="contagem-usuarios" class="estrutura-contagem" role="status"></p>
       <div class="tabela-rolagem"><table class="estrutura-tabela"><thead><tr><th scope="col">Usuário</th><th scope="col">Perfil</th><th scope="col">Seção</th><th scope="col">Acesso</th><th scope="col">Ações</th></tr></thead><tbody id="lista-usuarios"></tbody></table></div>
     </section>
-    <section id="estrutura-reuniao" class="estrutura-painel" aria-labelledby="titulo-reuniao" hidden>
-      <div class="estrutura-barra"><div><h2 id="titulo-reuniao">Reunião</h2><p class="suave">Defina a periodicidade, o dia e o horário de acompanhamento.</p></div></div>
-      <div class="estrutura-aviso">O prazo para os relatos encerra no dia anterior à reunião, às ${HORA_FECHAMENTO}h.</div>
-      <form id="form-reuniao" class="form-reuniao" novalidate>
-        <fieldset class="form-grupo">
-          <legend>Ritmo das reuniões</legend>
-          <div class="form-grade">
-            <div class="campo">
-              <label for="r-intervalo">Periodicidade</label>
-              <select id="r-intervalo" name="reuniao_intervalo">
-                <option value="7" ${intervaloAtual === 7 ? 'selected' : ''}>Semanal</option>
-                <option value="14" ${intervaloAtual === 14 ? 'selected' : ''}>Quinzenal (a cada 15 dias)</option>
-              </select>
-            </div>
-            <div class="campo">
-              <label for="r-dia">Dia da semana</label>
-              <select id="r-dia" name="reuniao_dia">
-              <option value="1" ${diaAtual === 1 ? 'selected' : ''}>Segunda-feira</option>
-              <option value="2" ${diaAtual === 2 ? 'selected' : ''}>Terça-feira</option>
-              <option value="3" ${diaAtual === 3 ? 'selected' : ''}>Quarta-feira</option>
-              <option value="4" ${diaAtual === 4 ? 'selected' : ''}>Quinta-feira</option>
-              <option value="5" ${diaAtual === 5 ? 'selected' : ''}>Sexta-feira</option>
-              </select>
-            </div>
-            <div class="campo">
-              <label for="r-hora">Horário de início</label>
-              <input id="r-hora" type="time" name="reuniao_hora" value="${esc(horaAtual)}" required>
-            </div>
-          </div>
-        </fieldset>
-        <fieldset class="form-grupo">
-          <legend>Próxima reunião</legend>
-          <div class="form-grade">
-            <div class="campo">
-              <label for="r-proxima">Data</label>
-              <input id="r-proxima" type="date" name="reuniao_proxima" min="${esc(est.boot.hoje)}" value="${esc(est.boot.semana)}">
-            </div>
-            <p class="form-nota">Mude a data para adiantar ou adiar só a próxima reunião. As seguintes continuam a cada ${intervaloAtual === 14 ? '15' : '7'} dias a partir dela, e a linha do tempo do Início acompanha.${est.boot.reuniao_proxima ? ' <button type="button" class="btn btn-fantasma btn-mini" id="r-voltar">Voltar ao dia da semana</button>' : ''}</p>
-          </div>
-        </fieldset>
-        <div class="erro-form oculto" role="alert" id="erro-reuniao"></div>
-        <div class="form-rodape"><button class="btn btn-primario" type="submit" id="btn-salvar-reuniao">Salvar alterações</button></div>
-      </form>
-
-    </section>
+    ${painelReuniao(config, est.boot)}
     <section id="estrutura-ata" class="estrutura-painel" hidden><div id="config-ata"></div></section>
     <section id="estrutura-nomes" class="estrutura-painel" aria-labelledby="titulo-nomes" hidden>${painelNomes()}</section>
   </div>`;
@@ -243,41 +198,8 @@ export async function estrutura(raiz, { refresh, painel }) {
     } catch (ex) { toast(ex.message, 'erro'); }
   });
 
-  // ---------- Handler: formulário de reunião semanal ----------
-  const formReuniao = raiz.querySelector('#form-reuniao');
-  formReuniao?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const btn = raiz.querySelector('#btn-salvar-reuniao');
-    const erroEl = raiz.querySelector('#erro-reuniao');
-    erroEl.classList.add('oculto');
-    btn.disabled = true;
-    try {
-      await put('/config', {
-        combinados_frequencia: config.combinados_frequencia || 'sempre',
-        reuniao_dia: Number(formReuniao.reuniao_dia.value),
-        reuniao_hora: formReuniao.reuniao_hora.value,
-        reuniao_intervalo: Number(formReuniao.reuniao_intervalo.value),
-        // Só envia a data se foi mudada; sem mudança, vale a que o servidor já guarda (ou o dia da semana).
-        ...(formReuniao.reuniao_proxima.value && formReuniao.reuniao_proxima.value !== est.boot.semana ? { reuniao_proxima: formReuniao.reuniao_proxima.value } : {}),
-      });
-      atualizarSessao(await get('/bootstrap'));
-      toast('Configuração da reunião salva.');
-      refresh();
-    } catch (ex) {
-      erroEl.textContent = ex.message;
-      erroEl.classList.remove('oculto');
-      btn.disabled = false;
-    }
-  });
-
-  raiz.querySelector('#r-voltar')?.addEventListener('click', async () => {
-    try {
-      await put('/config', { combinados_frequencia: config.combinados_frequencia || 'sempre', reuniao_proxima: null });
-      atualizarSessao(await get('/bootstrap'));
-      toast('A reunião voltou ao dia da semana configurado.');
-      refresh();
-    } catch (ex) { toast(ex.message, 'erro'); }
-  });
+  // ---------- Reunião: periodicidade, dia, horário e data da próxima ----------
+  ligarReuniao(raiz, config, refresh);
 
   on(raiz, 'click', '[data-editar-u]', el => {
     const u=usuarios.find(x=>x.id===Number(el.dataset.editarU));
@@ -287,10 +209,10 @@ export async function estrutura(raiz, { refresh, painel }) {
       ${protegidoParaMim(u) ? `<p>Perfil e acesso protegidos: só o Administrador altera ${oTopo()}, e o Administrador só muda pelo servidor.</p>` : `<div class="campo"><label for="eu-perfil">Perfil</label><select id="eu-perfil" name="perfil">${ehAdmin() ? `<option value="diretor" ${u.perfil==='diretor'?'selected':''}>${rotuloPerfilDe('diretor')}</option>` : ''}<option value="chefe" ${u.perfil==='chefe'?'selected':''}>Chefe de seção</option><option value="apoio" ${u.perfil==='apoio'?'selected':''}>${rotuloPerfilDe('apoio')}</option><option value="membro" ${u.perfil==='membro'?'selected':''}>Membro da equipe (executa o que o chefe atribui)</option><option value="consulta" ${u.perfil==='consulta'?'selected':''}>Consulta (só lê as ações ${dosPlural('centro')})</option></select></div>
       <div class="campo"><label for="eu-secao">Seção (Chefe)</label><select id="eu-secao" name="secao_id"><option value="">Sem seção</option>${secoes.filter(s=>s.ativa && !ehDA(s) && (!s.chefe_id || s.chefe_id===u.id)).map(s=>`<option value="${s.id}" ${s.id===u.secao_id?'selected':''}>${esc(s.nome)}</option>`).join('')}</select></div>
       <div class="campo"><div class="escolha"><label><input type="checkbox" id="eu-ver" name="ver_outros_centros" value="1" ${u.ver_outros_centros ? 'checked' : ''}> Pode consultar as ações de ${todasAs('centro', true)} (só leitura, sem as ações internas)</label></div></div>
-      <div class="campo"><div class="escolha"><label><input type="checkbox" id="eu-config" name="acesso_configuracao" value="1" ${u.acesso_configuracao ? 'checked' : ''}> Apoio: pode abrir a Configuração (seções, reunião, ata e nomes das unidades; contas e perfis continuam só com ${doTopo()} e o Administrador)</label></div></div>`}`,
+      <div class="campo"><div class="escolha"><label><input type="checkbox" id="eu-config" name="acesso_configuracao" value="1" ${u.acesso_configuracao ? 'checked' : ''}> Pode abrir a Configuração (seções, reunião, ata e nomes das unidades; contas e perfis continuam só com ${oTopo()} e o Administrador)</label></div></div>`}`,
       aoEnviar:async d=>{
         // Com o perfil protegido o campo não aparece: a marcação só vai quando o formulário a mostra.
-        if(d.perfil) { d.ver_outros_centros = d.perfil==='chefe' && d.ver_outros_centros==='1'; d.acesso_configuracao = d.perfil==='apoio' && d.acesso_configuracao==='1'; }
+        if(d.perfil) { d.ver_outros_centros = d.perfil==='chefe' && d.ver_outros_centros==='1'; d.acesso_configuracao = ['apoio','chefe'].includes(d.perfil) && d.acesso_configuracao==='1'; }
         await patch(`/usuarios/${u.id}`,d);salvo('Usuário atualizado.');
       }
     });

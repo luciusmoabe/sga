@@ -3,7 +3,7 @@ import { subarvore, nivel } from './db.js';
 import { DIRETORIA_ADJUNTA, TAM_SENHA, TIPOS_SECAO } from './logic.js';
 
 const SEM_CHEFE = 'A Diretoria Adjunta não tem chefe: quem faz parte dela é Administrador, cadastrado pelo servidor.';
-import { falha, h, marks, permit, permitConfiguracao, texto } from './helpers.js';
+import { falha, h, marks, permit, permitConfiguracao, temAcessoConfiguracao, texto } from './helpers.js';
 import { empresaAtual } from './empresa.js';
 import { oTipo, usaTipo } from '../public/js/vocabulario.js';
 
@@ -13,9 +13,9 @@ import { administradorAuth, cadastrarChefe } from './cadastro-chefes.js';
 
 export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth, vocabularioAtual }) {
   // ---------- Seções (estrutura em árvore) ----------
-  const listaSecoes = async (user) => {
+  const listaSecoes = async (user, { todas = false } = {}) => {
     let rows = await q(`select s.*, u.nome as chefe_nome from secoes s left join usuarios u on u.id = s.chefe_id where s.empresa_id = ? order by s.ordem, s.id`, empresaAtual());
-    if (['chefe', 'membro'].includes(user.perfil)) {
+    if (['chefe', 'membro'].includes(user.perfil) && !todas) {
       const ids = new Set(user.secao_id ? await subarvore(db, user.secao_id) : []);
       rows = rows.filter((r) => ids.has(r.id));
     }
@@ -30,7 +30,8 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
       ...(r.tipo === DIRETORIA_ADJUNTA ? { membros: membros.filter((m) => m.secao_id === r.id).map(({ id, nome }) => ({ id, nome })) } : {}),
     }));
   };
-  app.get('/api/secoes', h(async (req) => await listaSecoes(req.user)));
+  // `?todas=1` (tela de Configuração) devolve a estrutura inteira a quem tem acesso a ela; os demais chefes veem só a própria árvore.
+  app.get('/api/secoes', h(async (req) => await listaSecoes(req.user, { todas: req.query.todas === '1' && temAcessoConfiguracao(req.user) })));
 
   const validarChefe = async (chefeId) => {
     if (chefeId == null || chefeId === '') return null;
@@ -82,7 +83,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     )).lastInsertRowid;
     if (chefe) await atribuirChefe(id, chefe);
     res.status(201);
-    return (await listaSecoes(req.user)).find((s) => s.id === id);
+    return (await listaSecoes(req.user, { todas: true })).find((s) => s.id === id);
   })));
 
   app.patch('/api/secoes/:id', permitConfiguracao, h(async (req) => db.transaction(async () => {
@@ -147,7 +148,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
         await run('update secoes set ativa = 0 where id = ? and empresa_id = ?', id, empresaAtual());
       }
     }
-    return (await listaSecoes(req.user)).find((x) => x.id === id);
+    return (await listaSecoes(req.user, { todas: true })).find((x) => x.id === id);
   })));
 
   // ---------- Usuários (cadastro mínimo) ----------
@@ -197,7 +198,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     });
     return {ok:true};
   }));
-  app.get('/api/usuarios', permit('diretor', 'apoio', 'administrador'), h(async () =>
+  app.get('/api/usuarios', (req, res, next) => (['diretor', 'apoio', 'administrador'].includes(req.user.perfil) || temAcessoConfiguracao(req.user) ? next() : next(falha(403, 'Seu perfil não tem acesso a esta ação.'))), h(async () =>
     (await q(`select u.*, s.nome as secao_nome, s.chefe_id as secao_chefe_id, (select count(*) from auth_contas c where c.usuario_id=u.id) as tem_login
        from usuarios u left join secoes s on s.id = u.secao_id where u.empresa_id = ? order by u.ativo desc, u.perfil, u.nome`, empresaAtual()))
       // Suplente: Chefe com seção atribuída que não é o titular (secoes.chefe_id) daquela seção.
@@ -226,10 +227,10 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     // Leitura das ações de todos os Centros: só faz sentido para o chefe (a gestão já vê tudo; a Consulta existe para isso).
     if ('ver_outros_centros' in b && typeof b.ver_outros_centros !== 'boolean') throw falha(400, 'Informe se a pessoa pode consultar as ações de todos os Centros.');
     if (b.ver_outros_centros === true && perfil !== 'chefe') throw falha(400, 'A consulta às ações de todos os Centros vale só para o perfil Chefe de seção.');
-    // Acesso do Apoio à Configuração: só o Diretor e o Administrador assinalam (esta rota é deles), e só vale para o Apoio.
-    if ('acesso_configuracao' in b && typeof b.acesso_configuracao !== 'boolean') throw falha(400, 'Informe se o Apoio terá acesso à Configuração.');
-    if (b.acesso_configuracao === true && perfil !== 'apoio') throw falha(400, 'O acesso à Configuração vale só para o perfil Apoio.');
-    const acessoConfig = perfil === 'apoio' ? ('acesso_configuracao' in b ? Number(b.acesso_configuracao) : Number(u.acesso_configuracao || 0)) : 0;
+    // Acesso à Configuração: só o Diretor e o Administrador assinalam (esta rota é deles), e só vale para o Apoio e o Chefe.
+    if ('acesso_configuracao' in b && typeof b.acesso_configuracao !== 'boolean') throw falha(400, 'Informe se a pessoa terá acesso à Configuração.');
+    if (b.acesso_configuracao === true && !['apoio', 'chefe'].includes(perfil)) throw falha(400, 'O acesso à Configuração vale só para os perfis Apoio e Chefe de seção.');
+    const acessoConfig = ['apoio', 'chefe'].includes(perfil) ? ('acesso_configuracao' in b ? Number(b.acesso_configuracao) : Number(u.acesso_configuracao || 0)) : 0;
     const verOutros = perfil === 'chefe' ? ('ver_outros_centros' in b ? Number(b.ver_outros_centros) : u.ver_outros_centros) : 0;
     if ('nome' in b) {
       const nome=texto(b.nome,120);
@@ -344,7 +345,7 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     }
     await db.transaction(async () => {
       if (perfilNovo && perfilNovo !== (alvo.papel === 'membro' ? 'membro' : 'suplente')) {
-        await run('update usuarios set perfil = ?, ver_outros_centros = 0 where id = ? and empresa_id = ?', perfilNovo === 'suplente' ? 'chefe' : 'membro', id, empresaAtual());
+        await run('update usuarios set perfil = ?, ver_outros_centros = 0, acesso_configuracao = case when ? = 1 then acesso_configuracao else 0 end where id = ? and empresa_id = ?', perfilNovo === 'suplente' ? 'chefe' : 'membro', perfilNovo === 'suplente' ? 1 : 0, id, empresaAtual());
       }
       if ('ativo' in b) await run('update usuarios set ativo = ? where id = ? and empresa_id = ?', b.ativo ? 1 : 0, id, empresaAtual());
       // O titular que deixa de ser chefe (vira membro ou é desativado) libera a chefia da subseção, como na Configuração.

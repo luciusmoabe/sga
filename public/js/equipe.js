@@ -32,7 +32,7 @@ export async function equipe(raiz, { refresh }) {
         <div class="sub">${plural(ativos, 'pessoa ativa', 'pessoas ativas')}${lista.length > ativos ? ` · ${plural(lista.length - ativos, 'inativo', 'inativos')}` : ''}. Os membros leem as ações da seção e executam as que você atribui a eles.</div></div>
       <button type="button" class="btn btn-primario" id="btn-novo-membro">+ Novo membro</button>
     </div>
-    ${lista.length ? `<div class="cartao"><div class="tabela-rolagem"><table class="tabela-lista">
+    ${lista.length ? `<div class="cartao"><div class="tabela-rolagem"><table class="tabela-lista tabela-equipe">
       <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Ações abertas</th><th>Situação</th><th></th></tr></thead><tbody>
       ${lista.map((m) => `<tr data-id="${m.id}">
         <td><b>${esc(m.nome)}</b>${m.secao_id !== est.user.secao_id ? ` <span class="pilula" title="Subseção">${esc(m.secao_sigla)}</span>` : ''}</td>

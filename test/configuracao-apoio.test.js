@@ -53,15 +53,29 @@ test('Apoio sem o acesso não mexe na estrutura; com o acesso assinalado, sim, m
   assert.equal((await call(APOIO, 'POST', '/secoes', nova)).status, 403);
 });
 
-test('o acesso à Configuração vale só para o Apoio: o chefe não recebe, e trocar o perfil o desliga', async (t) => {
+test('o acesso à Configuração vale para o Apoio e o Chefe; outros perfis não recebem, e trocar o perfil o desliga', async (t) => {
   const { call } = await demo(t);
-  assert.equal((await call(DIRETOR, 'PATCH', `/usuarios/${CHEFE}`, { acesso_configuracao: true })).status, 400);
+  assert.equal((await call(DIRETOR, 'PATCH', `/usuarios/${APOIO}`, { perfil: 'consulta', acesso_configuracao: true })).status, 400, 'só Apoio e Chefe');
   assert.equal((await call(DIRETOR, 'PATCH', `/usuarios/${APOIO}`, { acesso_configuracao: 'sim' })).status, 400);
-  assert.equal((await call(CHEFE, 'POST', '/secoes', { nome: 'Y', tipo: 'centro' })).status, 403);
-  await call(DIRETOR, 'PATCH', `/usuarios/${APOIO}`, { acesso_configuracao: true });
-  const mudou = await call(DIRETOR, 'PATCH', `/usuarios/${APOIO}`, { perfil: 'consulta' });
+  assert.equal((await call(CHEFE, 'POST', '/secoes', { nome: 'Y', tipo: 'centro' })).status, 403, 'sem o acesso');
+  assert.equal((await call(CHEFE, 'GET', '/usuarios')).status, 403);
+
+  // O Chefe assinalado abre a estrutura (e lê os usuários para escolher chefes), mas não mexe em contas.
+  const liberou = await call(DIRETOR, 'PATCH', `/usuarios/${CHEFE}`, { acesso_configuracao: true });
+  assert.equal(liberou.status, 200);
+  assert.equal(liberou.data.acesso_configuracao, 1);
+  assert.equal(liberou.data.perfil, 'chefe');
+  assert.equal((await call(CHEFE, 'GET', '/bootstrap')).data.user.acesso_configuracao, 1);
+  const criada = await call(CHEFE, 'POST', '/secoes', { nome: 'Centro Novo', tipo: 'centro' });
+  assert.equal(criada.status, 201);
+  assert.ok((await call(CHEFE, 'GET', '/secoes?todas=1')).data.some((x) => x.id === criada.data.id), 'a estrutura inteira');
+  assert.ok(!(await call(CHEFE, 'GET', '/secoes')).data.some((x) => x.id === criada.data.id), 'as demais telas seguem só com a árvore dele');
+  assert.equal((await call(CHEFE, 'GET', '/usuarios')).status, 200);
+  assert.equal((await call(CHEFE, 'PATCH', `/usuarios/${APOIO}`, { perfil: 'chefe' })).status, 403, 'contas continuam com o Diretor');
+  assert.equal((await call(CHEFE, 'PATCH', `/usuarios/${CHEFE}`, { acesso_configuracao: false })).status, 403);
+
+  // Trocar o perfil desliga; voltar não restaura sozinho.
+  const mudou = await call(DIRETOR, 'PATCH', `/usuarios/${CHEFE}`, { perfil: 'consulta', secao_id: null });
   assert.equal(mudou.status, 200);
   assert.equal(mudou.data.acesso_configuracao, 0);
-  const volta = await call(DIRETOR, 'PATCH', `/usuarios/${APOIO}`, { perfil: 'apoio' });
-  assert.equal(volta.data.acesso_configuracao, 0, 'voltar a Apoio não restaura o acesso sozinho');
 });

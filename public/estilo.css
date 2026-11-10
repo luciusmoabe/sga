@@ -984,17 +984,36 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
 .estrutura-vazio { text-align: center; padding: 48px 20px; }
 .estrutura-vazio strong { font-family: var(--head); font-size: 1.1rem; }
 .estrutura-vazio p { color: var(--muted); margin: 8px 0 0; }
-.form-reuniao { display: grid; gap: 24px; max-width: 880px; }
-.form-grupo { border: 0; margin: 0; padding: 0; min-width: 0; }
-.form-grupo legend { padding: 0; margin-bottom: 12px; font-family: var(--head); font-weight: 700; font-size: 1.02rem; color: var(--ink); }
-.form-grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
-.form-grade .campo { margin: 0; }
-.form-grade .form-nota { grid-column: span 2; margin: 0; padding-top: 26px; color: var(--muted); font-size: .88rem; line-height: 1.5; }
-.form-rodape { display: flex; justify-content: flex-end; padding-top: 16px; border-top: 1px solid var(--line); }
+/* Configuração › Reunião */
+.reuniao-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; }
+.reuniao-cartao { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 22px 24px; display: grid; gap: 20px; }
+.reuniao-cartao h3 { margin: 0; font-family: var(--head); font-size: 1.08rem; }
+.reuniao-cartao .campo { margin: 0; }
+.reuniao-cartao .rotulo { display: block; font-weight: 600; margin-bottom: 6px; }
+.reuniao-dupla { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.segmentado { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line-str); border-radius: 9px; overflow: hidden; background: var(--card); }
+.segmentado label { margin: 0; display: block; cursor: pointer; }
+.segmentado label + label { border-left: 1px solid var(--line-str); }
+.segmentado input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.segmentado span { display: block; text-align: center; padding: 11px 14px; font-weight: 600; color: var(--muted); transition: background .12s, color .12s; }
+.segmentado label:hover span { background: var(--pale); }
+.segmentado input:checked + span { background: var(--green-bg); color: var(--green); box-shadow: inset 0 -3px 0 var(--green); }
+.segmentado input:focus-visible + span { outline: 2px solid var(--green); outline-offset: -2px; }
+.reuniao-rodape { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 16px; border-top: 1px solid var(--line); }
+.reuniao-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.reuniao-item { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.reuniao-item:last-child { border-bottom: 0; }
+.reuniao-data { flex: 0 0 52px; text-align: center; border: 1px solid var(--line-str); border-radius: 10px; padding: 6px 0; background: var(--pale); color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; line-height: 1.2; }
+.reuniao-data b { display: block; font-family: var(--head); font-size: 1.3rem; color: var(--ink); letter-spacing: 0; }
+.reuniao-item.proxima .reuniao-data { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+.reuniao-texto { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.reuniao-texto .suave { font-size: .84rem; }
+@media (max-width: 960px) { .reuniao-layout { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
-  .form-grade { grid-template-columns: 1fr; }
-  .form-grade .form-nota { grid-column: auto; padding-top: 0; }
-  .form-rodape .btn { width: 100%; }
+  .reuniao-cartao { padding: 18px 16px; }
+  .reuniao-dupla { grid-template-columns: 1fr; }
+  .reuniao-rodape { flex-direction: column-reverse; align-items: stretch; }
+  .reuniao-rodape .btn { width: 100%; }
 }
 .estrutura-aviso { background: var(--pale); border-left: 3px solid var(--ink-2); padding: 16px; margin-bottom: 24px; line-height: 1.6; }
 #estrutura-reuniao form { max-width: 650px; }
@@ -1278,6 +1297,17 @@ button.cal-item:hover { border-color: var(--line-str); background: var(--pale); 
   /* Situação (selos, às vezes vários) em linha própria, depois de seção, prazo e tempo. */
   table.tabela-lista td[data-rotulo="Situação"] { grid-column: 1 / -1; order: 5; }
   table.tabela-lista td[data-rotulo="Situação"]::before { display: none; }
+  /* Minha equipe: nome, e-mail inteiro (quebra, sem invadir a coluna ao lado), perfil e ações abertas lado a lado, situação e botões em linhas próprias. */
+  table.tabela-equipe tr { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  table.tabela-equipe td[data-rotulo="E-mail"] { grid-column: 1 / -1; overflow-wrap: anywhere; }
+  table.tabela-equipe td[data-rotulo="Situação"] { order: 5; }
+  table.tabela-equipe td:last-child { grid-column: 1 / -1; order: 6; }
+  table.tabela-equipe td:last-child .linha { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+  table.tabela-equipe td:last-child .btn { width: 100%; min-height: 44px; border: 1px solid var(--line-str); background: var(--card); }
+  table.tabela-equipe td:last-child .btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  table.tabela-equipe td:last-child:empty { display: none; }
+  /* "Alterar a data" no trilho do Início: alvo de toque de 44 px. */
+  .trilho [data-alterar-reuniao] { min-height: 44px; display: inline-flex; align-items: center; }
 
   /* Ações: a busca à vista; seção, situação e status atrás do botão "Filtros". */
   .filtros-alternar { display: inline-flex; flex-shrink: 0; }

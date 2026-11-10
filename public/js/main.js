@@ -35,7 +35,7 @@ const ROTAS = {
   prazos: { f: prazos, perfis: LEITURA, titulo: 'Pedidos de prazo' },
   pauta: { f: pauta, perfis: LEITURA, titulo: 'Pauta' },
   // O Apoio só abre a Configuração completa se o Diretor ou o Administrador assinalou o acesso; sem isso, só a da ata.
-  estrutura: { f: (raiz, p) => (est.user.perfil === 'apoio' && !est.user.acesso_configuracao ? configuracaoAta(raiz) : estrutura(raiz, p)), perfis: ['diretor', 'apoio', 'administrador'], titulo: 'Configuração' },
+  estrutura: { f: (raiz, p) => (est.user.perfil === 'apoio' && !est.user.acesso_configuracao ? configuracaoAta(raiz) : estrutura(raiz, p)), perfis: ['diretor', 'apoio', 'chefe', 'administrador'], titulo: 'Configuração', exige: () => est.user.perfil !== 'chefe' || !!est.user.acesso_configuracao },
   configuracao: { f: (raiz, p) => (est.user.perfil === 'apoio' && !est.user.acesso_configuracao ? configuracaoAta(raiz) : estrutura(raiz, { ...p, painel: 'ata' })), perfis: GESTAO, titulo: 'Configuração' },
   avisos: { f: avisos, perfis: ['diretor', 'administrador'], titulo: 'Avisos' },
   combinados: { f: combinados, perfis: TODOS, titulo: 'Combinados' },
@@ -288,7 +288,7 @@ function casca() {
   const daDiretoriaAdjunta = u.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA;
   // O chefe com a permissão do Diretor ganha "Ações dos Centros", logo abaixo das próprias ações.
   const chefe = lePorTodosOsCentros() ? MENU_CHEFE.flatMap((m) => (m[0] === 'minhas-acoes' ? [m, ['acoes-centros', `Ações ${dosPlural('centro')}`]] : [m])) : MENU_CHEFE;
-  const base = u.perfil === 'chefe' ? chefe : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? menuConsulta() : u.perfil === 'membro' ? MENU_MEMBRO : u.perfil === 'plataforma' ? MENU_PLATAFORMA : MENU_GESTAO;
+  const base = u.perfil === 'chefe' ? (u.acesso_configuracao ? [...chefe, ['#Administração'], ['estrutura', 'Configuração']] : chefe) : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? menuConsulta() : u.perfil === 'membro' ? MENU_MEMBRO : u.perfil === 'plataforma' ? MENU_PLATAFORMA : MENU_GESTAO;
   const menu = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['equipe', 'Minha equipe'], ['atualizacao', 'Minha atualização']] : []), ...base]
     .filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
   app.innerHTML = `<div class="app"><aside class="lateral">
@@ -410,7 +410,7 @@ async function renderizar() {
     if (est.user.trocar_senha) return telaTrocaSenha(app, { aoConcluir: async () => { est.user = null; est.boot = null; location.hash = '#/'; await render(); }, aoSair: async () => { try { await sair(); } catch { /* segue */ } est.user = null; est.boot = null; location.hash = '#/'; render(); } });
     const { rota, id, q } = lerRota();
     const def = ROTAS[rota];
-    if (!def || !def.perfis.includes(est.user.perfil)) { location.hash = casaDe(); return; }
+    if (!def || !def.perfis.includes(est.user.perfil) || (def.exige && !def.exige())) { location.hash = casaDe(); return; }
     document.title = `${def.titulo} · Agilis`;
     const refresh = async () => { const y = window.scrollY; await render(); window.scrollTo(0, y); };
     if (def.tv?.({ id })) {

@@ -13,7 +13,7 @@ export function abrirAlterarReuniao(boot, aoSalvar) {
     titulo: 'Alterar a data da próxima reunião',
     corpo: `<p class="suave pequeno">Hoje a próxima reunião está prevista para <b>${br(boot.semana)}</b>. As seguintes continuam ${intervalo === 14 ? 'a cada 15 dias (quinzenal)' : 'toda semana'}, a partir da nova data, no dia da semana configurado (${NOMES_DIA[boot.reuniao_dia ?? 2]}).</p>
       <div class="campo"><label for="ar-data">Nova data</label><input id="ar-data" type="date" name="data" required min="${esc(boot.hoje)}" value="${esc(boot.semana)}"></div>
-      ${marcada ? '<div class="campo"><label><input type="checkbox" name="voltar"> Descartar a data marcada e voltar ao dia da semana configurado</label></div>' : ''}
+      ${marcada ? '<div class="campo"><div class="escolha"><label><input type="checkbox" name="voltar"> Descartar a data marcada e voltar ao dia da semana configurado</label></div></div>' : ''}
       <p class="suave pequeno">O prazo de fechamento dos relatos passa a ser o dia anterior à nova data, às 18h.</p>`,
     rotulo: 'Salvar data',
     aoEnviar: async (d) => {
