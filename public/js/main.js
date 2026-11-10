@@ -441,7 +441,7 @@ async function renderizar() {
     // No celular, a aba "Mais" fica marcada quando a tela atual não tem aba própria.
     $('[data-aba-mais]')?.classList.toggle('ativa', !document.querySelector('.abas-movel a[aria-current]'));
     // O trilho completo (com a pista) só no Início e no Painel; nas demais telas, uma linha.
-    $('#trilho').innerHTML = def.trilho ? trilho(est.boot, { compacto: rota !== 'painel' && rota !== 'inicio' }) + faixaPendente(est.boot, rota) : '';
+    $('#trilho').innerHTML = def.trilho ? trilho(est.user.perfil === 'chefe' ? { ...est.boot, rotulo_trilho: 'Reunião da organização' } : est.boot, { compacto: rota !== 'painel' && rota !== 'inicio' }) + faixaPendente(est.boot, rota) : '';
     if (!$('#trilho').dataset.ligado) {
       $('#trilho').dataset.ligado = '1';
       on($('#trilho'), 'click', '[data-alterar-reuniao]', () => abrirAlterarReuniao(est.boot, () => refresh()));
