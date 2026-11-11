@@ -5,8 +5,6 @@ import { get, patch, post, put, del } from './api.js';
 import { atualizarSessao, ehAdmin, est } from './estado.js';
 import { abrirForm, confirmar, esc, on, toast } from './ui.js';
 import { DIRETORIA_ADJUNTA, HORA_FECHAMENTO, TAM_SENHA } from './regras.js';
-import { ligarConfiguracaoAta } from './ata-cabecalho.js';
-import { ligarReuniao, painelReuniao } from './config-reuniao.js';
 
 const TIPO = TIPO_DA_EMPRESA;
 const tiposComNome = () => Object.fromEntries(['centro', 'coordenacao', 'subsecao', DIRETORIA_ADJUNTA].map((t) => [t, nomeTipo(t)]));
@@ -75,7 +73,7 @@ function painelNomes() {
 }
 
 export async function estrutura(raiz, { refresh, painel }) {
-  const [secoes, usuarios, config] = await Promise.all([get('/secoes?todas=1'), get('/usuarios'), get('/config')]);
+  const [secoes, usuarios] = await Promise.all([get('/secoes?todas=1'), get('/usuarios')]);
   const gereContas = ['diretor', 'administrador'].includes(est.user?.perfil); // o Apoio e o Chefe com acesso à Configuração não mexem em contas e perfis
   const filhos = (pai) => secoes.filter((s) => (s.pai_id ?? null) === pai).sort((a, b) => a.ordem - b.ordem || a.id - b.id);
   const chefes = usuarios.filter((u) => u.perfil === 'chefe' && u.ativo);
@@ -119,8 +117,7 @@ export async function estrutura(raiz, { refresh, painel }) {
     <nav class="estrutura-abas" aria-label="Áreas da estrutura">
       <button data-painel="secoes" aria-controls="estrutura-secoes">Seções</button>
       ${gereContas ? '<button data-painel="usuarios" aria-controls="estrutura-usuarios">Usuários e acessos</button>' : ''}
-      <button data-painel="reuniao" aria-controls="estrutura-reuniao">Reunião</button>
-      <button data-painel="ata" aria-controls="estrutura-ata">Configuração da ata</button>
+      <a class="estrutura-aba-link" href="#/reuniao-config?i=organizacao">Reunião e ata</a>
       <button data-painel="nomes" aria-controls="estrutura-nomes">Nomes das unidades</button>
     </nav>
     <section id="estrutura-secoes" class="estrutura-painel" aria-labelledby="titulo-secoes">
@@ -134,13 +131,8 @@ export async function estrutura(raiz, { refresh, painel }) {
       <p id="contagem-usuarios" class="estrutura-contagem" role="status"></p>
       <div class="tabela-rolagem"><table class="estrutura-tabela"><thead><tr><th scope="col">Usuário</th><th scope="col">Perfil</th><th scope="col">Seção</th><th scope="col">Acesso</th><th scope="col">Ações</th></tr></thead><tbody id="lista-usuarios"></tbody></table></div>
     </section>
-    ${painelReuniao(config, est.boot)}
-    <section id="estrutura-ata" class="estrutura-painel" hidden><div id="config-ata"></div></section>
     <section id="estrutura-nomes" class="estrutura-painel" aria-labelledby="titulo-nomes" hidden>${painelNomes()}</section>
   </div>`;
-  ligarConfiguracaoAta(raiz, config);
-  // Quem conduz reuniões da própria equipe (o chefe) tem o cabeçalho da ata da sua seção em outro lugar: aqui é o da instituição.
-  if (est.user?.perfil === 'chefe') raiz.querySelector('#config-ata')?.insertAdjacentHTML('afterbegin', '<div class="info">Este é o cabeçalho da <b>instituição</b>. O das atas das reuniões da <b>sua seção</b> fica em <a href="#/cabecalho-equipe">Reuniões da equipe › Cabeçalho da ata</a>.</div>');
   const renderSecoes = () => {
     const html = filhos(null).map(no).join('');
     raiz.querySelector('#lista-secoes').innerHTML = html ? `<ul class="estrutura-arvore">${html}</ul>` : `<div class="estrutura-vazio"><strong>${secoes.length ? 'Nenhuma seção encontrada' : 'Sua estrutura começa aqui'}</strong><p>${secoes.length ? 'Experimente outro termo ou altere o filtro de situação.' : 'Adicione a primeira seção para organizar as responsabilidades da equipe.'}</p></div>`;
@@ -153,7 +145,7 @@ export async function estrutura(raiz, { refresh, painel }) {
   const selecionarPainel = painel => {
     ui.painel=painel;
     raiz.querySelectorAll('[data-painel]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.painel===painel)));
-    for(const p of ['secoes','usuarios','reuniao','ata','nomes']) { const el=raiz.querySelector(`#estrutura-${p}`); if(el) el.hidden=p!==painel; }
+    for(const p of ['secoes','usuarios','nomes']) { const el=raiz.querySelector(`#estrutura-${p}`); if(el) el.hidden=p!==painel; }
   };
   on(raiz,'click','[data-painel]',el=>selecionarPainel(el.dataset.painel));
   on(raiz,'click','[data-expandir]',el=>{const id=Number(el.dataset.expandir);ui.recolhidas.has(id)?ui.recolhidas.delete(id):ui.recolhidas.add(id);renderSecoes();raiz.querySelector(`[data-expandir="${id}"]`)?.focus();});
@@ -199,9 +191,6 @@ export async function estrutura(raiz, { refresh, painel }) {
       refresh();
     } catch (ex) { toast(ex.message, 'erro'); }
   });
-
-  // ---------- Reunião: periodicidade, dia, horário e data da próxima ----------
-  ligarReuniao(raiz, config, refresh);
 
   on(raiz, 'click', '[data-editar-u]', el => {
     const u=usuarios.find(x=>x.id===Number(el.dataset.editarU));

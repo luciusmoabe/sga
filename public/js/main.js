@@ -5,14 +5,15 @@ import { atualizarSessao, est } from './estado.js';
 import { $, esc, faixaPendente, on, trilho, toast } from './ui.js';
 import { acoes, centro, direcionar, painel, pauta, prazos } from './telas-diretor.js';
 import { historico, inicio, minhasAcoes } from './telas-chefe.js';
-import { atualizacao } from './atualizacao.js';
 import { agenda } from './agenda.js';
 import { combinados } from './combinados.js';
 import { estrutura } from './estrutura.js';
 import { configuracaoAta } from './ata-cabecalho.js';
-import { atas, reuniaoDetalhe, reunioes } from './atas.js';
+import { reuniaoDetalhe, reunioes } from './atas.js';
 import { inicioReuniao, viewReuniao } from './reuniao.js';
-import { agendaEquipe, cabecalhoEquipe, combinadosEquipe, reunioesEquipe, viewReuniaoEquipe } from './reuniao-equipe.js';
+import { reunioesEquipe, viewReuniaoEquipe } from './reuniao-equipe.js';
+import { combinadosUnico, atasUnico, atualizacaoUnica } from './reunioes-instancia.js';
+import { configReuniao, configuraEquipe, configuraOrganizacao } from './reuniao-config.js';
 import { avisos } from './avisos.js';
 import { empresas } from './plataforma.js';
 import { produtividade } from './produtividade.js';
@@ -37,14 +38,14 @@ const ROTAS = {
   pauta: { f: pauta, perfis: LEITURA, titulo: 'Pauta' },
   // O Apoio só abre a Configuração completa se o Diretor ou o Administrador assinalou o acesso; sem isso, só a da ata.
   estrutura: { f: (raiz, p) => (est.user.perfil === 'apoio' && !est.user.acesso_configuracao ? configuracaoAta(raiz) : estrutura(raiz, p)), perfis: ['diretor', 'apoio', 'chefe', 'administrador'], titulo: 'Configuração', exige: () => est.user.perfil !== 'chefe' || !!est.user.acesso_configuracao },
-  configuracao: { f: (raiz, p) => (est.user.perfil === 'apoio' && !est.user.acesso_configuracao ? configuracaoAta(raiz) : estrutura(raiz, { ...p, painel: 'ata' })), perfis: GESTAO, titulo: 'Configuração' },
+  configuracao: { f: (raiz, p) => (est.user.perfil === 'apoio' && !est.user.acesso_configuracao ? configReuniao(raiz, p) : estrutura(raiz, p)), perfis: GESTAO, titulo: 'Configuração' },
   avisos: { f: avisos, perfis: ['diretor', 'administrador'], titulo: 'Avisos' },
-  combinados: { f: combinados, perfis: TODOS, titulo: 'Combinados' },
-  'reunioes-equipe': { f: reunioesEquipe, perfis: ['chefe', 'membro'], titulo: 'Reunião da equipe' },
-  'atualizacao-equipe': { f: (raiz, p) => atualizacao(raiz, p, { base: '/reunioes-equipe/atualizacao', titulo: 'Atualização para a reunião da equipe', destino: 'Para a reunião da equipe' }), perfis: ['chefe'], titulo: 'Atualização para a reunião da equipe' },
-  'agenda-equipe': { f: agendaEquipe, perfis: ['chefe'], titulo: 'Agenda da reunião da equipe' },
-  'combinados-equipe': { f: combinadosEquipe, perfis: ['chefe'], titulo: 'Combinados da equipe' },
-  'cabecalho-equipe': { f: cabecalhoEquipe, perfis: ['chefe'], titulo: 'Cabeçalho da ata' },
+  combinados: { f: combinadosUnico, perfis: TODOS, titulo: 'Combinados' },
+  // Reuniões e atas, configuração da reunião e atualização semanal: uma tela só para a organização e para a equipe da seção (`?i=equipe`).
+  atas: { f: atasUnico, perfis: ['chefe', 'membro'], titulo: 'Reuniões e atas' },
+  'reuniao-config': { f: configReuniao, perfis: ['diretor', 'apoio', 'administrador', 'chefe'], exige: () => configuraOrganizacao() || configuraEquipe(), titulo: 'Configuração da reunião' },
+  // A ata e o Modo Reunião da equipe (o detalhe de uma reunião da equipe); a lista é `#/atas?i=equipe`.
+  'reunioes-equipe': { f: (raiz, p) => (p.id ? reunioesEquipe(raiz, p) : location.replace('#/atas?i=equipe')), perfis: ['chefe', 'membro'], titulo: 'Reunião da equipe' },
   'reuniao-equipe': { f: viewReuniaoEquipe, perfis: ['chefe'], tv: (p) => !!p.id, titulo: 'Modo Reunião da equipe' },
   reunioes: { f: (r, p) => (p.id ? reuniaoDetalhe(r, p) : reunioes(r, p)), perfis: LEITURA, titulo: 'Reuniões e atas' },
   // Sem id: tela comum de início (nada é criado ao abrir a rota). Com id: Modo Reunião em tela cheia.
@@ -56,12 +57,11 @@ const ROTAS = {
   // Leitura das ações de todos os Centros: perfil Consulta e chefe com a permissão (a tela confere a permissão).
   'acoes-centros': { f: acoesDosCentros, perfis: ['consulta', 'chefe'], get titulo() { return `Ações ${dosPlural('centro')}`; } },
   // O Administrador da Diretoria Adjunta envia o relato da própria seção, como um chefe.
-  atualizacao: { f: atualizacao, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Minha atualização' },
+  atualizacao: { f: atualizacaoUnica, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Minha atualização' },
   'minhas-acoes': { f: minhasAcoes, perfis: ['chefe', 'administrador', 'membro'], trilho: true, titulo: 'Minhas ações' },
   // O chefe (e o Administrador vinculado a uma seção) cadastra e desativa os membros da equipe da própria seção.
   equipe: { f: equipe, perfis: ['chefe', 'administrador'], titulo: 'Minha equipe' },
   historico: { f: historico, perfis: ['chefe'], titulo: 'Histórico' },
-  atas: { f: atas, perfis: ['chefe'], titulo: 'Atas' },
   // Indicadores das unidades (o chefe vê a própria unidade; o Diretor e o Administrador, também as pessoas).
   produtividade: { f: produtividade, perfis: ['diretor', 'apoio', 'administrador', 'chefe'], titulo: 'Produtividade' },
   // Perfil Plataforma: cria e administra as empresas (não vê dados de negócio).
@@ -87,7 +87,7 @@ const ICONES = {
   'minhas-acoes': '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5,5 4,6.5 6.5,3.5"/><line x1="9" y1="5" x2="17.5" y2="5"/><polyline points="2.5,11 4,12.5 6.5,9.5"/><line x1="9" y1="11" x2="17.5" y2="11"/><line x1="2.5" y1="16" x2="17.5" y2="16"/></svg>',
   historico: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10a6.5 6.5 0 1 0 1.9-4.6"/><polyline points="2.5,3.5 3.5,6.5 6.5,5.5"/><polyline points="10,7 10,10.3 12.5,11.8"/></svg>',
   atas: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h7l3.5 3.5v11.5H5z"/><path d="M12 2.5v3.5h3.5"/><line x1="7.5" y1="10" x2="14" y2="10"/><line x1="7.5" y1="13.5" x2="14" y2="13.5"/></svg>',
-  'reunioes-equipe': '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="5" r="2"/><circle cx="4.5" cy="8.5" r="1.8"/><circle cx="15.5" cy="8.5" r="1.8"/><path d="M6.5 13c0-1.8 1.6-3 3.5-3s3.5 1.2 3.5 3"/><path d="M2 14.5h16"/><line x1="4" y1="14.5" x2="4" y2="17.5"/><line x1="16" y1="14.5" x2="16" y2="17.5"/></svg>',
+  'reuniao-config': '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="17" y2="6"/><line x1="3" y1="14" x2="17" y2="14"/><circle cx="7" cy="6" r="2" fill="var(--card, #fff)"/><circle cx="13" cy="14" r="2" fill="var(--card, #fff)"/></svg>',
   produtividade: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="17" x2="17" y2="17"/><rect x="4.5" y="10" width="3" height="7"/><rect x="8.5" y="6" width="3" height="11"/><rect x="12.5" y="3" width="3" height="14"/></svg>',
   empresas: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 17.5v-12l7-2v14"/><path d="M10.5 8.5h6v9"/><line x1="6" y1="7.5" x2="8" y2="7.5"/><line x1="6" y1="10.5" x2="8" y2="10.5"/><line x1="6" y1="13.5" x2="8" y2="13.5"/><line x1="2.5" y1="17.5" x2="17.5" y2="17.5"/></svg>',
   avisos: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3c-2.5 0-4 2-4 4.5V11l-1.5 2.5h11L14 11V7.5C14 5 12.5 3 10 3z"/><path d="M8 15.5a2 2 0 0 0 4 0"/></svg>',
@@ -122,11 +122,11 @@ const MENU_CHEFE = [
   ['produtividade', 'Produtividade'],
   ['#Reunião'],
   ['combinados', 'Combinados'],
-  ['atas', 'Atas'],
-  ['reunioes-equipe', 'Reuniões da equipe'],
+  ['atas', 'Reuniões e atas'],
+  ['reuniao-config', 'Configuração da reunião'],
 ];
 // Membro da equipe: lê as ações da sua seção e executa as que o chefe atribuiu a ele (ou que ele criou).
-const MENU_MEMBRO = [['#Minha seção'], ['minhas-acoes', 'Minhas ações'], ['agenda', 'Agenda'], ['reunioes-equipe', 'Atas da equipe']];
+const MENU_MEMBRO = [['#Minha seção'], ['minhas-acoes', 'Minhas ações'], ['agenda', 'Agenda'], ['atas', 'Atas']];
 // Consulta: só lê as ações dos Centros.
 // Plataforma: cria e administra as empresas.
 const MENU_PLATAFORMA = [['#Plataforma'], ['empresas', 'Empresas']];
@@ -296,9 +296,7 @@ function casca() {
   // Quem é da Diretoria Adjunta (Administrador vinculado a ela) cria e acompanha as ações da seção e envia o relato semanal.
   const daDiretoriaAdjunta = u.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA;
   // O chefe com a permissão do Diretor ganha "Ações dos Centros", logo abaixo das próprias ações.
-  // A subseção também relata, para a reunião do chefe da seção acima ("Atualização à equipe").
-  const comRelatoEquipe = est.boot?.secao?.tipo === 'subsecao' ? MENU_CHEFE.flatMap((m) => (m[0] === 'atualizacao' ? [m, ['atualizacao-equipe', 'Atualização à equipe']] : [m])) : MENU_CHEFE;
-  const chefe = lePorTodosOsCentros() ? comRelatoEquipe.flatMap((m) => (m[0] === 'minhas-acoes' ? [m, ['acoes-centros', `Ações ${dosPlural('centro')}`]] : [m])) : comRelatoEquipe;
+  const chefe = lePorTodosOsCentros() ? MENU_CHEFE.flatMap((m) => (m[0] === 'minhas-acoes' ? [m, ['acoes-centros', `Ações ${dosPlural('centro')}`]] : [m])) : MENU_CHEFE;
   const base = u.perfil === 'chefe' ? (u.acesso_configuracao ? [...chefe, ['#Administração'], ['estrutura', 'Configuração']] : chefe) : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? menuConsulta() : u.perfil === 'membro' ? MENU_MEMBRO : u.perfil === 'plataforma' ? MENU_PLATAFORMA : MENU_GESTAO;
   const menu = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['equipe', 'Minha equipe'], ['atualizacao', 'Minha atualização']] : []), ...base]
     .filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
@@ -435,7 +433,7 @@ async function renderizar() {
     const chaveCasca = `${est.user.perfil}:${lePorTodosOsCentros() ? 1 : 0}`;
     if (!$('.app') || $('.app')?.dataset.perfil !== chaveCasca) { casca(); $('.app').dataset.perfil = chaveCasca; }
     for (const a of document.querySelectorAll('.menu a, .abas-movel a, .folha-menu a')) {
-      const ativa = a.dataset.rota === rota || (rota === 'centro' && a.dataset.rota === 'painel') || (rota === 'pauta' && a.dataset.rota === 'painel') || (['reuniao-equipe', 'cabecalho-equipe', 'agenda-equipe', 'combinados-equipe'].includes(rota) && a.dataset.rota === 'reunioes-equipe');
+      const ativa = a.dataset.rota === rota || (rota === 'centro' && a.dataset.rota === 'painel') || (rota === 'pauta' && a.dataset.rota === 'painel') || (['reunioes-equipe', 'reuniao-equipe'].includes(rota) && a.dataset.rota === 'atas');
       if (ativa) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     }
     // No celular, a aba "Mais" fica marcada quando a tela atual não tem aba própria.

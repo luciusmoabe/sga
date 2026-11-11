@@ -2,7 +2,7 @@
 import { aoTopo, doTopo, oTopo, peloTopo } from './vocab.js';
 import { del, get, patch, post, put } from './api.js';
 import { abrirAlterarReuniao } from './reuniao-data.js';
-import { agendaComoBoot } from './reuniao-equipe.js';
+import { agendaComoBoot } from './agenda-equipe.js';
 import { agora, est } from './estado.js';
 import {
   $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, seloNova, STATUS, tempoRestante, toast, trilho, vazio,
@@ -184,7 +184,7 @@ function relatoEquipeHTML(d) {
   return `<section class="cartao" aria-label="Atualização para a reunião da equipe"><div class="linha entre" style="align-items:center;gap:12px;flex-wrap:wrap">
     <div><b>Atualização para a reunião da equipe${d.pai?.sigla ? ` (${esc(d.pai.sigla)})` : ''}</b><div class="suave pequeno">${enviada
       ? `Enviada em ${dataHora(d.atual.enviada_em)}.` : vencido ? `O prazo regular terminou (${prazo}); você ainda pode enviar até a reunião.` : `Prazo: ${prazo}.`}</div></div>
-    <a class="btn ${enviada ? 'btn-sec' : 'btn-primario'}" href="#/atualizacao-equipe">${enviada ? 'Rever ou corrigir' : 'Enviar atualização'}</a></div></section>
+    <a class="btn ${enviada ? 'btn-sec' : 'btn-primario'}" href="#/atualizacao?i=equipe">${enviada ? 'Rever ou corrigir' : 'Enviar atualização'}</a></div></section>
   <div class="espaco"></div>`;
 }
 

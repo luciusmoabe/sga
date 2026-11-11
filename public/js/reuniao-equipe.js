@@ -8,11 +8,10 @@ import { est } from './estado.js';
 import { abrirAcao } from './acao-comum.js';
 import { baixarPdfAta } from './pdf-ata.js';
 import { campoEditorAta, ligarEditorAta } from './ata-editor.js';
-import { carregarCabecalhoAta, htmlCabecalhoAta, ligarConfiguracaoAta } from './ata-cabecalho.js';
+import { carregarCabecalhoAta, htmlCabecalhoAta } from './ata-cabecalho.js';
 import { renderizarAta } from './atas.js';
 import { ligarRevisaoAta } from './ata-revisao.js';
 import { combinados } from './combinados.js';
-import { ligarReuniao, painelReuniao } from './config-reuniao.js';
 import { nomePlural, nomeTipo } from './vocab.js';
 import { itensDoRelato, resumoInternas } from './relato-vista.js';
 import { abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, on, plural, sem, STATUS, toast, vazio } from './ui.js';
@@ -38,9 +37,9 @@ export async function reunioesEquipe(raiz, { id, refresh }) {
       <td data-rotulo="Situação"><span class="pilula ${CLS[r.status]}">${ST[r.status]}</span></td>
       <td class="num" data-rotulo="Presentes">${r.presentes}</td><td class="num" data-rotulo="Decisões">${r.decisoes}</td></tr>`).join('')}</tbody></table>`;
   raiz.innerHTML = `
-    <div class="cabeca linha entre" style="align-items:flex-start"><div><h1>${chefe ? 'Reuniões e atas da equipe' : 'Atas da equipe'}</h1>
+    <div class="cabeca linha entre" style="align-items:flex-start"><div><h1>${chefe ? 'Reuniões e atas' : 'Atas'}</h1>
       <div class="sub">${chefe ? 'Reúna a equipe da sua seção no Modo Reunião e guarde a ata. Você também lê as atas das subseções abaixo da sua.' : 'As atas das reuniões de que você participou.'}</div></div>
-      ${chefe ? '<div class="acoes-topo"><a class="btn btn-sec" href="#/agenda-equipe">Agenda</a><a class="btn btn-sec" href="#/combinados-equipe">Combinados</a><a class="btn btn-sec" href="#/cabecalho-equipe">Cabeçalho da ata</a><button type="button" class="btn btn-primario" id="iniciar-reuniao-equipe">Iniciar ou retomar reunião</button></div>' : ''}</div>
+      ${chefe ? '<div class="acoes-topo"><button type="button" class="btn btn-primario" id="iniciar-reuniao-equipe">Iniciar ou retomar reunião</button></div>' : ''}</div>
     ${grupos.length ? grupos.map((g) => `<section class="cartao" aria-labelledby="grupo-${g.tipo}"><h2 id="grupo-${g.tipo}">${esc(tituloDe(g.tipo))} <span class="suave pequeno">· ${plural(g.itens.length, 'reunião', 'reuniões')}</span></h2>${tabela(g.itens)}</section>`).join('')
       : `<div class="cartao">${vazio('Nenhuma reunião ainda', chefe ? 'Use "Iniciar reunião" quando for reunir a equipe.' : 'Quando você participar de uma reunião e a ata for enviada, ela aparece aqui.')}</div>`}`;
   const abrir = (el) => {
@@ -57,48 +56,13 @@ export async function reunioesEquipe(raiz, { id, refresh }) {
   });
 }
 
-// ---------- Agenda da reunião da seção ----------
-const agendaComoConfig = (a) => ({ reuniao_dia: a.dia, reuniao_hora: a.hora, reuniao_intervalo: a.intervalo, combinados_frequencia: a.combinados_frequencia });
-const agendaComoBoot = (a) => ({ hoje: a.hoje, semana: a.semana, reuniao_proxima: a.proxima, reuniao_dia: a.dia, reuniao_hora: a.hora, reuniao_intervalo: a.intervalo,
-  reuniao_anterior: a.anterior, config: agendaComoConfig(a), user: est.user, alteravel: true, rotulo_trilho: 'Reunião da equipe' });
-
-/** O trilho da reunião da equipe (do Início do chefe): o mesmo da organização, na agenda da seção. */
-export { agendaComoBoot };
-
-export async function agendaEquipe(raiz, { refresh }) {
-  const a = await get('/reunioes-equipe/agenda');
-  raiz.innerHTML = `<div class="cabeca"><div><a href="#/reunioes-equipe" class="pequeno">← Reuniões e atas da equipe</a><h1>Agenda da reunião da equipe</h1>
-      <div class="sub">${a.propria ? 'A sua seção tem a própria agenda.' : 'A sua seção ainda segue a agenda da instituição. Ao salvar, passa a ter a sua.'}</div></div></div>
-    ${painelReuniao(agendaComoConfig(a), agendaComoBoot(a), { visivel: true, titulo: 'Reunião da equipe', descricao: 'Defina a periodicidade, o dia e o horário da reunião com a sua equipe. É independente da reunião da instituição.' })}`;
-  ligarReuniao(raiz, agendaComoConfig(a), refresh, { boot: agendaComoBoot(a), salvar: (corpo) => put('/reunioes-equipe/agenda', corpo), aoSalvar: async () => {} });
-}
-
-// ---------- Combinados da seção ----------
+// ---------- Combinados da seção (a tela é a mesma dos combinados da organização; só muda a instância) ----------
 export async function combinadosEquipe(raiz, p) {
   const a = await get('/reunioes-equipe/agenda');
-  raiz.dataset.equipe = '1';
   await combinados(raiz, p, {
-    base: '/reunioes-equipe/combinados', gere: true, edita: true, titulo: 'Combinados da equipe',
+    base: '/reunioes-equipe/combinados', gere: true, edita: true, titulo: 'Combinados da reunião',
     carregarConfig: async () => ({ combinados_frequencia: a.combinados_frequencia }),
     salvarFrequencia: (v) => put('/reunioes-equipe/agenda', { combinados_frequencia: v }),
-  });
-}
-
-// ---------- Cabeçalho da ata da seção ----------
-export async function cabecalhoEquipe(raiz) {
-  const c = await get('/reunioes-equipe/cabecalho');
-  raiz.innerHTML = `<div class="cabeca"><div><a href="#/reunioes-equipe" class="pequeno">← Reuniões e atas da equipe</a><h1>Cabeçalho da ata</h1>
-      <div class="sub">${c.propria ? 'A sua seção tem um cabeçalho próprio, usado nas atas das reuniões da equipe.' : 'A sua seção ainda usa o cabeçalho da instituição. Ao salvar, passa a ter o seu.'}</div></div></div>
-    <div class="cartao" id="config-ata"></div>
-    <div class="linha" style="margin-top:12px">${c.propria ? '<button type="button" class="btn btn-fantasma" id="usar-instituicao">Voltar a usar o cabeçalho da instituição</button>' : ''}</div>`;
-  ligarConfiguracaoAta(raiz, c, {
-    titulo: 'Cabeçalho da ata da sua seção',
-    descricao: 'Vale para as atas das reuniões da equipe da sua seção, na tela e no PDF. O brasão da esquerda costuma ser o da instituição e o da direita, o da sua seção; cada um é opcional.',
-    salvar: (dados) => put('/reunioes-equipe/cabecalho', dados),
-  });
-  raiz.querySelector('#usar-instituicao')?.addEventListener('click', async () => {
-    if (!(await confirmar({ titulo: 'Voltar ao cabeçalho da instituição', texto: 'O cabeçalho próprio da sua seção será apagado e as atas passam a usar o da instituição.', rotulo: 'Voltar ao da instituição' }))) return;
-    try { await del('/reunioes-equipe/cabecalho'); toast('A seção voltou a usar o cabeçalho da instituição.'); location.hash = '#/reunioes-equipe'; } catch (e) { erro(e); }
   });
 }
 
@@ -114,7 +78,7 @@ async function detalhe(raiz, { id, refresh }) {
     : r.status === 'em_andamento' ? '' : '<button type="button" class="btn btn-sec nao-imprimir" id="pdf-ata">Baixar PDF</button>';
   raiz.innerHTML = `
     <div class="cabeca linha entre" style="align-items:flex-start">
-      <div><a href="#/reunioes-equipe" class="pequeno nao-imprimir">← ${est.user.perfil === 'membro' ? 'Atas da equipe' : 'Reuniões e atas da equipe'}</a>
+      <div><a href="#/atas?i=equipe" class="pequeno nao-imprimir">← ${est.user.perfil === 'membro' ? 'Atas' : 'Reuniões e atas'}</a>
         <h1>Reunião da equipe · ${esc(r.secao_sigla || r.secao_nome)}</h1>
         <div class="sub"><span class="pilula ${CLS[r.status]}">${ST[r.status]}</span> · ${br(r.data)} (${diaSemana(r.data)}) · iniciada em ${dataHora(r.iniciada_em)}${r.encerrada_em ? ` · encerrada em ${dataHora(r.encerrada_em)}` : ''}</div></div>
       <div class="acoes-topo">${topo}</div></div>
@@ -156,7 +120,7 @@ async function detalhe(raiz, { id, refresh }) {
   raiz.querySelector('#salvar').addEventListener('click', async () => { try { await salvar(); toast(r.status === 'enviada' ? 'Alterações salvas.' : 'Rascunho salvo.'); } catch (e) { erro(e); } });
   raiz.querySelector('#excluir').addEventListener('click', async () => {
     if (!(await confirmar({ titulo: 'Excluir a ata', texto: 'A reunião, a ata e os registros feitos nela serão apagados e não poderão ser recuperados. As ações criadas durante a reunião continuam existindo.', rotulo: 'Excluir ata', perigo: true }))) return;
-    try { await del(`/reunioes-equipe/${r.id}`); toast('Ata excluída.'); location.hash = '#/reunioes-equipe'; } catch (e) { erro(e); }
+    try { await del(`/reunioes-equipe/${r.id}`); toast('Ata excluída.'); location.hash = '#/atas?i=equipe'; } catch (e) { erro(e); }
   });
   raiz.querySelector('#enviar')?.addEventListener('click', async () => {
     if (!(await confirmar({ titulo: 'Enviar a ata', texto: 'A ata fica disponível para quem esteve presente e para os chefes das unidades acima da sua. Você ainda poderá corrigi-la depois.', rotulo: 'Enviar aos participantes' }))) return;
@@ -367,7 +331,7 @@ export async function viewReuniaoEquipe(raiz, { id: idRota, q }) {
       else if (a === 'proxima') formProxima();
       else if (a === 'decisao') formDecisao(false);
       else if (a === 'decisao-geral') formDecisao(true);
-      else if (a === 'sair') location.hash = '#/reunioes-equipe';
+      else if (a === 'sair') location.hash = '#/atas?i=equipe';
       else if (a === 'encerrar') {
         if (await confirmar({ titulo: 'Encerrar a reunião', texto: `A ata será montada com a presença, a situação das ações, as decisões, as novas ações e as informações.${presentes().length > 1 ? '' : ' Ninguém além de você está marcado como presente: registre a presença para que a equipe leia a ata.'}`, rotulo: 'Encerrar e montar a ata' })) {
           await post(`/reunioes-equipe/${S.id}/encerrar`);

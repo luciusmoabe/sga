@@ -134,7 +134,7 @@ export async function atas(raiz, { id }) {
     return;
   }
   const lista = await get('/reunioes');
-  raiz.innerHTML = `<div class="cabeca"><div><h1>Atas</h1><div class="sub">Decisões e novas ações de cada reunião semanal, ${esc(est.user.nome.split(' ')[0])}.</div></div></div>
+  raiz.innerHTML = `<div class="cabeca"><div><h1>Reuniões e atas</h1><div class="sub">Decisões e novas ações de cada reunião semanal, ${esc(est.user.nome.split(' ')[0])}.</div></div></div>
     <div class="cartao">${lista.length ? `<table><tbody>${lista.map((r) => `<tr class="clicavel" data-id="${r.id}" tabindex="0"><td><b>Reunião de ${br(r.data)}</b></td>
       <td class="suave">${r.decisoes} decisões · ${r.novas_acoes} novas ações</td></tr>`).join('')}</tbody></table>`
       : vazio('Nenhuma ata enviada ainda', 'Depois de cada reunião, a ata revisada aparece aqui.')}</div>`;
