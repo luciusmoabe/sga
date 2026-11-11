@@ -29,12 +29,15 @@ async function imagemPng(arquivo) {
   });
   const img = new Image(); img.src = data; await img.decode();
   if (img.naturalWidth > 10000 || img.naturalHeight > 10000) throw new Error('A imagem deve ter até 10.000 pixels por dimensão.');
-  const escala = Math.min(1, 360 / Math.max(img.naturalWidth, img.naturalHeight));
-  const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(img.naturalWidth * escala)); canvas.height = Math.max(1, Math.round(img.naturalHeight * escala));
-  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-  const png = canvas.toDataURL('image/png');
-  if (png.length > 163862) throw new Error('A imagem ficou grande demais. Escolha um brasão mais simples ou menor.');
-  return png;
+  // Reduz a imagem até o PNG caber no limite do servidor (120 KB); brasão detalhado pede um tamanho menor.
+  for (let maior = 360; maior >= 120; maior -= 60) {
+    const escala = Math.min(1, maior / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(img.naturalWidth * escala)); canvas.height = Math.max(1, Math.round(img.naturalHeight * escala));
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    const png = canvas.toDataURL('image/png');
+    if (png.length <= 163862) return png;
+  }
+  throw new Error('A imagem ficou grande demais. Escolha um brasão mais simples ou menor.');
 }
 
 /** O editor do cabeçalho (texto e brasões) serve à instituição e a cada seção. `opcoes.salvar(dados)` grava e devolve o cabeçalho salvo;

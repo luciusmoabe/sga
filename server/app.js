@@ -65,7 +65,10 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth, em
   });
   app.use(cabecalhosSeguranca({ https: !!auth?.secure }));
   app.use(compression({ threshold: 512 })); // gzip/brotli: reduz JSON em ~70-80%
-  app.use(express.json({ limit: '200kb' }));
+  // O cabeçalho da ata leva dois brasões em base64 (até 164 mil caracteres cada), mais que o limite comum.
+  const jsonCabecalho = express.json({ limit: '400kb' });
+  const jsonComum = express.json({ limit: '200kb' });
+  app.use((req, res, next) => (/^\/api\/(config\/ata|reunioes-equipe\/cabecalho)$/.test(req.path) ? jsonCabecalho : jsonComum)(req, res, next));
   // Fontes vendorizadas nunca mudam sob o mesmo nome: cache longo é seguro. Demais estáticos (JS, CSS,
   // ícones) não têm nome com hash de conteúdo — evite cache longo neles, para não servir versão antiga
   // depois de um deploy. Só vale para uso local (npm start): na Vercel os estáticos vão direto pelo
