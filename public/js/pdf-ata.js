@@ -11,6 +11,8 @@ const MARGEM_ESQ = 25; // mm (2,5 cm), pedido do Diretor
 const MARGEM = 20;     // mm (2 cm nas demais margens)
 const FONTE = 'helvetica';
 const TAM_TEXTO = 11;
+const TAM_TITULO = 13;
+const ALTURA_LINHA_TITULO = 6.6; // mm, ~1.4x o corpo de 13pt
 const TAM_RODAPE = 8.5;
 const ALTURA_LINHA = 5.6; // mm, ~1.4x o corpo de 11pt
 const RECUO_LISTA = 6;    // mm, do marcador até o texto do item
@@ -107,14 +109,15 @@ export async function baixarPdfAta(ataTexto, { dataReuniao, cabecalho = {} } = {
   for (const b of blocosDaAta(ataTexto)) {
     if (b.tipo === 'p') {
       if (ehTituloAta(b.texto)) {
-        doc.setFont(FONTE, 'bold');
-        const linhas = doc.splitTextToSize(segmentosInline(b.texto).map(s => s.texto).join(''), larguraPagina - 2 * MARGEM_ESQ);
+        // Título da ata: negrito, tamanho 13 e centralizado na largura útil do papel A4.
+        doc.setFont(FONTE, 'bold'); doc.setFontSize(TAM_TITULO);
+        const linhas = doc.splitTextToSize(segmentosInline(b.texto).map(s => s.texto).join(''), larguraDisponivel);
         for (const linha of linhas) {
           if (y > limiteInferior) { doc.addPage(); y = MARGEM; }
-          doc.text(linha, larguraPagina / 2, y, { align: 'center' });
-          y += ALTURA_LINHA;
+          doc.text(linha, MARGEM_ESQ + larguraDisponivel / 2, y, { align: 'center' });
+          y += ALTURA_LINHA_TITULO;
         }
-        doc.setFont(FONTE, 'normal');
+        doc.setFont(FONTE, 'normal'); doc.setFontSize(TAM_TEXTO);
       } else y = escreverParagrafo(doc, segmentosDaLinhaAta(b.texto), MARGEM_ESQ, y, larguraDisponivel, limiteInferior);
     } else {
       b.itens.forEach((item, i) => {
