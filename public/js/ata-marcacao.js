@@ -12,7 +12,7 @@ export function ehTituloAta(texto) {
 export function segmentosDaLinhaAta(linha) {
   const segmentos = segmentosInline(linha);
   const texto = segmentos.map(s => s.texto).join('');
-  const secao = /^(Participantes|Decisões|(?:Novas )?[Aa]ções|Informações(?: e comunicados)?|Pedidos de novo prazo decididos|Impedimentos críticos em aberto):?\s*$/.test(texto.trim());
+  const secao = /^(Participantes|Ausentes|Situação das ações das seções subordinadas|Decisões|(?:Novas )?[Aa]ções|Informações(?: e comunicados)?|Pedidos de novo prazo decididos|Impedimentos críticos em aberto):?\s*$/.test(texto.trim());
   const proxima = /^Próxima reunião:/.exec(texto);
   if (secao) return segmentos.map(s => ({ ...s, negrito: true }));
   if (!proxima) return segmentos;
