@@ -612,6 +612,9 @@ dialog::backdrop { background: rgba(20,40,30,.55); backdrop-filter: blur(3px); }
   animation: entra 0.16s ease-out;
 }
 .toast.erro { background: var(--vermelho); }
+.toast.lembrete-app { line-height: 1.4; }
+.toast.lembrete-app a { color: #fff; text-decoration: underline; margin: 0 6px; }
+.toast.lembrete-app .btn { color: #fff; border-color: rgba(255,255,255,.6); }
 @keyframes entra {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: none; }

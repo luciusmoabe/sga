@@ -12,7 +12,7 @@ import { falha, h, permit } from './helpers.js';
 import { empresaAtual } from './empresa.js';
 
 const MAX_APARELHOS = 5; // por pessoa: o mais antigo sai quando passa disso
-const PERFIS_COM_AVISO = ['diretor', 'apoio', 'chefe', 'administrador'];
+export const PERFIS_COM_AVISO = ['diretor', 'apoio', 'chefe', 'administrador'];
 
 /** Lê a configuração VAPID do ambiente. `ativo` só é verdadeiro com as três variáveis preenchidas. */
 export function configurarPush(env = process.env) {

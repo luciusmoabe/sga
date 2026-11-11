@@ -135,3 +135,42 @@ export async function abrirAvisosNoCelular(usuarioId) {
   await pintar();
   return dlg;
 }
+
+// ---------- Lembretes com o app aberto (sem agendador) ----------
+// Enquanto o Agilis está aberto, a tela pergunta ao servidor se há lembrete na hora (atualização da semana, últimas horas,
+// fechamento). Cada um chega uma vez por semana. Aparece uma faixa na tela e, se a pessoa permitiu notificações, também o aviso do aparelho.
+const INTERVALO_LEMBRETES = 5 * 60 * 1000;
+let relogioLembretes = null;
+
+function mostrarLembrete(a) {
+  const el = document.createElement('div');
+  el.className = 'toast lembrete-app';
+  el.setAttribute('role', 'status');
+  el.innerHTML = `<b>${esc(a.titulo)}</b><br>${esc(a.corpo)} <a href="${esc(a.url)}">Abrir</a> <button type="button" class="btn btn-fantasma btn-mini" aria-label="Fechar o lembrete">Fechar</button>`;
+  el.querySelector('button').addEventListener('click', () => el.remove());
+  el.querySelector('a').addEventListener('click', () => el.remove());
+  $('#toasts').append(el);
+  try {
+    if ('Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then((reg) => reg.showNotification(a.titulo, { body: a.corpo, icon: '/imagens/icon-192.png', badge: '/imagens/icon-192.png', tag: 'agilis-aviso', data: { url: a.url } }));
+    }
+  } catch { /* o aviso na tela já foi mostrado */ }
+}
+
+async function verificarLembretes() {
+  try { for (const a of (await post('/lembretes/verificar')).avisos || []) mostrarLembrete(a); } catch { /* sem rede ou sessão vencida: tenta na próxima */ }
+}
+
+/** Liga a verificação enquanto o app estiver aberto: ao entrar, a cada 5 minutos e ao voltar para a aba. */
+export function iniciarLembretesDoApp(perfil) {
+  pararLembretesDoApp();
+  if (!recebeAvisos(perfil)) return;
+  verificarLembretes();
+  relogioLembretes = setInterval(() => { if (!document.hidden) verificarLembretes(); }, INTERVALO_LEMBRETES);
+  document.addEventListener('visibilitychange', aoVoltar);
+}
+const aoVoltar = () => { if (!document.hidden) verificarLembretes(); };
+export function pararLembretesDoApp() {
+  clearInterval(relogioLembretes); relogioLembretes = null;
+  document.removeEventListener('visibilitychange', aoVoltar);
+}

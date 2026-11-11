@@ -23,7 +23,7 @@ import { DIRETORIA_ADJUNTA } from './regras.js';
 import { abrirAlterarReuniao } from './reuniao-data.js';
 import { abrirTrocaSenha, telaTrocaSenha } from './senha.js';
 import { abrirAcao, acaoEstaAberta, tirarAcaoDaUrl } from './acao-comum.js';
-import { abrirAvisosNoCelular, esquecerAvisosAoSair, recebeAvisos, restaurarAvisos } from './push.js';
+import { abrirAvisosNoCelular, esquecerAvisosAoSair, iniciarLembretesDoApp, pararLembretesDoApp, recebeAvisos, restaurarAvisos } from './push.js';
 
 const GESTAO = ['diretor', 'apoio', 'administrador'];
 const LISTA_DE_ACOES = { chefe: 'minhas-acoes', membro: 'minhas-acoes', consulta: 'acoes-centros', diretor: 'acoes', apoio: 'acoes', administrador: 'acoes' };
@@ -313,9 +313,10 @@ function casca() {
   document.title = est.boot?.empresa ? `Agilis · ${est.boot.empresa.sigla || est.boot.empresa.nome}` : 'Agilis';
   $('#alterar-senha')?.addEventListener('click', () => abrirTrocaSenha());
   $('#avisos-celular')?.addEventListener('click', () => abrirAvisosNoCelular(u.id));
+  iniciarLembretesDoApp(u.perfil); // lembretes da semana enquanto o app estiver aberto (sem agendador)
   if (recebeAvisos(u.perfil)) restaurarAvisos(u.id); // se a pessoa já ativou neste aparelho, religa em silêncio
   $('#sair').addEventListener('click', async () => {
-    try { await esquecerAvisosAoSair(); await sair(); est.user = null; est.boot = null; location.hash = '#/'; render(); }
+    try { pararLembretesDoApp(); await esquecerAvisosAoSair(); await sair(); est.user = null; est.boot = null; location.hash = '#/'; render(); }
     catch (e) { toast(e.message); }
   });
   ligarCascaMovel();

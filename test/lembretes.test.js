@@ -10,7 +10,7 @@ import { createApp } from '../server/app.js';
 import { instante } from '../public/js/datas.js';
 import { comEmpresa } from '../server/empresa.js';
 import { painelSemana } from '../server/helpers.js';
-import { escolherTransporte, montarMensagem, montarNotificacao, rodarLembretes, tipoDevido, transporteEnsaio } from '../server/lembretes.js';
+import { escolherTransporte, lembretesDoUsuario, montarMensagem, montarNotificacao, rodarLembretes, tipoDevido, transporteEnsaio } from '../server/lembretes.js';
 
 const SEMANA = '2026-09-22';
 const em = (dataHora) => instante(dataHora); // horário da Bahia
@@ -208,4 +208,18 @@ test('rota do agendador: sem segredo não existe; segredo errado é recusado; ce
 
   process.env.CRON_SECRET = 'outro-segredo-4567'; delete process.env.SGC_CRON_SECRET; // a Vercel envia CRON_SECRET sozinha
   assert.equal((await fetch(`${base}?ensaio=1`, { method: 'POST', headers: { authorization: 'Bearer outro-segredo-4567' } })).status, 200);
+});
+
+test('com o app aberto: a pessoa recebe o lembrete da hora uma só vez e só o dela', async (t) => {
+  const db = await banco(t);
+  const agoraInstante = em('2026-09-21T13:00:00');
+  const [pendente] = await pendentesDoPainel(db);
+  const chefe = await db.prepare("select id from usuarios where perfil = 'chefe' and secao_id = ? and empresa_id = 1").get(pendente.secao.id);
+  const a = await comEmpresa(1, () => lembretesDoUsuario(db, chefe.id, { agoraInstante }));
+  assert.equal(a.length, 1);
+  assert.match(a[0].titulo, /últimas horas/i);
+  assert.equal(a[0].url, '/#/atualizacao');
+  const b = await comEmpresa(1, () => lembretesDoUsuario(db, chefe.id, { agoraInstante }));
+  assert.equal(b.length, 0, 'a segunda pergunta não repete');
+  assert.equal((await db.prepare('select count(*) n from lembretes_enviados').get()).n, 1, 'só o dele foi marcado');
 });

@@ -12,7 +12,8 @@ import { addDays, agora, cicloDe, DIA_PADRAO, fechamentoDe, HORA_CORTE_PADRAO, H
 import { instante } from '../public/js/datas.js';
 import { comEmpresa, empresaAtual } from './empresa.js';
 import { painelSemana } from './helpers.js';
-import { canalPush, configurarPush } from './push.js';
+import { falha, h, permit } from './helpers.js';
+import { canalPush, configurarPush, PERFIS_COM_AVISO } from './push.js';
 
 export const TIPOS_DE_LEMBRETE = ['lembrete', 'ultimas_horas', 'fechamento'];
 const NOMES_DIA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
@@ -93,7 +94,7 @@ export function escolherTransporte(env = process.env, db = null) {
 const violacaoDeUnicidade = (e) => e?.code === '23505' || /^SQLITE_CONSTRAINT/.test(String(e?.code || '')) || /UNIQUE constraint/i.test(String(e?.message || ''));
 
 /** Roda os lembretes da empresa em curso (chame dentro de `comEmpresa`). */
-async function processarEmpresa(db, { transporte, ensaio, origem, agoraInstante }) {
+async function processarEmpresa(db, { transporte, ensaio, origem, agoraInstante, somenteUsuario = null }) {
   const cfg = Object.fromEntries((await db.prepare('select chave, valor from config where empresa_id = ?').all(empresaAtual())).map((r) => [r.chave, r.valor]));
   const dia = cfg.reuniao_dia != null ? Number(cfg.reuniao_dia) : DIA_PADRAO;
   const hora = cfg.reuniao_hora || HORA_PADRAO;
@@ -117,6 +118,7 @@ async function processarEmpresa(db, { transporte, ensaio, origem, agoraInstante 
         .filter((u) => u.unidade);
 
   for (const u of pessoas) {
+    if (somenteUsuario != null && u.id !== somenteUsuario) continue;
     const dados = { tipo, unidade: u.unidade ? nomeDe(u.unidade) : null, pendentes: pendentes.map(nomeDe), semana, dia, hora, origem };
     const mensagem = montarMensagem({ ...dados, pessoa: u.nome });
     const aviso = montarNotificacao(dados);
@@ -156,4 +158,23 @@ export async function rodarLembretes(db, { transporte = escolherTransporte(proce
     saida.push({ empresa: e.slug, modo: ensaio || !transporte.real ? 'ensaio' : transporte.nome, ...r });
   }
   return saida;
+}
+
+/**
+ * Lembretes com o app aberto, sem agendador: a tela pergunta de tempos em tempos e o servidor devolve, para a pessoa que
+ * perguntou, os lembretes que já estão na hora e que ela ainda não recebeu (cada tipo uma vez por semana, como no envio por push).
+ * Chame dentro de uma requisição (a empresa vem da conta). Devolve [{ titulo, corpo, url }].
+ */
+export async function lembretesDoUsuario(db, usuario, { agoraInstante = agora() } = {}) {
+  const avisos = [];
+  const transporte = { nome: 'app', real: true, exigeEmail: false, async enviar(m) { avisos.push({ titulo: m.titulo, corpo: m.corpo, url: m.url }); return 1; } };
+  await processarEmpresa(db, { transporte, ensaio: false, origem: '', agoraInstante, somenteUsuario: usuario });
+  return avisos;
+}
+
+export function rotasLembretesDoApp(app, { db }) {
+  app.post('/api/lembretes/verificar', permit(...PERFIS_COM_AVISO), h(async (req) => {
+    if (req.user.perfil === 'plataforma') throw falha(403, 'Sem lembretes para este perfil.');
+    return { avisos: await lembretesDoUsuario(db, req.user.id) };
+  }));
 }

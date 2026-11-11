@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { falha } from './helpers.js';
-import { rodarLembretes } from './lembretes.js';
+import { rodarLembretes, rotasLembretesDoApp } from './lembretes.js';
 import { rotasPush } from './push.js';
 import { criarContexto } from './contexto.js';
 import { rotasAcoes } from './rotas-acoes.js';
@@ -120,6 +120,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth, em
   rotasEstrutura(app, { ...ctx, auth, adminAuth: contas });
   rotasReunioesEquipe(app, ctx);
   rotasPush(app, { db, emissor: emissorPush });
+  rotasLembretesDoApp(app, { db });
   const { criarDiretriz, SELECT_ACAO, acaoOut, visiveisAcoes } = rotasAcoes(app, ctx);
   rotasProdutividade(app, { ...ctx, visiveisAcoes });
   rotasSemana(app, { ...ctx, SELECT_ACAO, acaoOut });

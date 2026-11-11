@@ -21,6 +21,7 @@ const ESPERADAS = [
   'POST /api/push/assinar',
   'POST /api/push/cancelar',
   'POST /api/push/teste',
+  'POST /api/lembretes/verificar',
   'GET /api/interno/lembretes',
   'POST /api/interno/lembretes',
   'GET /api/auth/empresas',
