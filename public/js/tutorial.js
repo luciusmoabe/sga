@@ -21,7 +21,7 @@ const eh = (...perfis) => perfis.includes(est.user?.perfil);
 
 const PASSOS_COMUNS = () => [
   { rota: null, titulo: 'Bem-vindo ao Agilis', texto: 'Este tutorial leva você pelas telas que o seu perfil usa. <b>Ele só mostra: não grava nem altera nada</b>, então pode clicar sem medo. Use <b>Próximo</b> para avançar e <b>Sair</b> quando quiser; você retoma depois.' },
-  { rota: null, alvo: ['.menu', '.abas-movel'], titulo: 'O menu', texto: 'Aqui ficam as telas disponíveis para <b>o seu perfil</b>. Os pequenos números que aparecem ao lado mostram pendências (ações novas, pedidos de prazo).' },
+  { rota: null, alvo: ['.menu', '.abas-movel'], titulo: 'O menu', texto: 'Aqui ficam as telas disponíveis para <b>o seu perfil</b>. Os pequenos números ao lado mostram pendências (ações novas, pedidos de prazo). No computador, a <b>setinha no topo</b> recolhe o menu para dar mais espaço à tela; o sistema lembra a sua escolha.' },
   { rota: null, alvo: menu('agenda'), clicar: true, titulo: 'Agora é com você', texto: 'Clique em <b>Agenda</b> para abrir o calendário.' },
   { rota: '#/agenda', alvo: '#cal-grade', titulo: 'A Agenda', texto: 'Cada dia mostra o que vence nele: <b>círculo</b> = ação, <b>quadrado</b> = tarefa. A marca fica <b>vermelha</b> só quando aquela ação ou tarefa está atrasada. Clique num dia para ver os detalhes ao lado.' },
   { rota: '#/agenda', alvo: ['#cal-f-mostrar', '.cal-filtros-wrap'], titulo: 'Filtros da Agenda', texto: 'Escolha o que mostrar (tudo, só ações, só tarefas)' + (eh('chefe', 'membro', 'administrador') ? ' e use <b>Só o que é meu</b> para ver apenas o que está com você.' : ' e filtre por seção.') },

@@ -99,11 +99,11 @@ const ICONES = {
 };
 
 const MENU_GESTAO = [
+  ['reuniao', 'Iniciar reunião', 'destaque'],
   ['#Acompanhamento'],
   ['painel', 'Painel da semana'],
-  ['produtividade', 'Produtividade'],
   ['agenda', 'Agenda'],
-  ['reuniao', 'Iniciar reunião', 'destaque'],
+  ['produtividade', 'Produtividade'],
   ['#Ações'],
   ['direcionar', 'Direcionar ação'],
   ['acoes', 'Ações'],
@@ -117,15 +117,17 @@ const MENU_GESTAO = [
   ['avisos', 'Avisos', '', 'diretor'],
 ];
 const MENU_CHEFE = [
-  ['#Minha Seção'],
+  ['#Hoje'],
   ['inicio', 'Início'],
   ['gestao', 'Gestão da seção'],
   ['agenda', 'Agenda'],
-  ['atualizacao', 'Minha atualização'],
+  ['#Meu trabalho'],
   ['minhas-acoes', 'Minhas ações'],
+  ['atualizacao', 'Minha atualização'],
   ['equipe', 'Minha equipe'],
-  ['historico', 'Histórico'],
+  ['#Acompanhamento'],
   ['produtividade', 'Produtividade'],
+  ['historico', 'Histórico'],
   ['#Reunião'],
   ['combinados', 'Combinados'],
   ['atas', 'Reuniões e atas'],
@@ -306,16 +308,17 @@ function casca() {
   const base = u.perfil === 'chefe' ? (u.acesso_configuracao ? [...chefe, ['#Administração'], ['estrutura', 'Configuração']] : chefe) : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? menuConsulta() : u.perfil === 'membro' ? MENU_MEMBRO : u.perfil === 'plataforma' ? MENU_PLATAFORMA : MENU_GESTAO;
   const menu = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['equipe', 'Minha equipe'], ['atualizacao', 'Minha atualização']] : []), ...base]
     .filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
-  app.innerHTML = `<div class="app"><aside class="lateral">
-    <div class="marca"><img src="/imagens/logo-agilis.png" alt="Agilis" class="marca-logo">${est.boot?.empresa ? `<div class="marca-empresa" title="${esc(est.boot.empresa.nome)}">${esc(est.boot.empresa.sigla || est.boot.empresa.nome)}</div>` : ''}</div>
-    <nav class="menu" aria-label="Principal">${menu.map((m) => m[0].startsWith('#')
+  app.innerHTML = `<div class="app${menuRecolhido() ? ' menu-recolhido' : ''}"><aside class="lateral">
+    <div class="marca"><div class="marca-bloco"><img src="/imagens/logo-agilis.png" alt="Agilis" class="marca-logo"><img src="/imagens/favicon-32.png" alt="Agilis" class="marca-icone" width="32" height="32">${est.boot?.empresa ? `<div class="marca-empresa" title="${esc(est.boot.empresa.nome)}">${esc(est.boot.empresa.sigla || est.boot.empresa.nome)}</div>` : ''}</div><button type="button" class="menu-recolher" id="menu-recolher" aria-controls="menu-principal" aria-expanded="true" aria-label="Recolher menu" title="Recolher menu"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="12.5,4.5 7,10 12.5,15.5"/></svg></button></div>
+    <nav class="menu" id="menu-principal" aria-label="Principal">${menu.map((m) => m[0].startsWith('#')
       ? `<div class="grupo"><b>${esc(m[0].slice(1))}</b></div>`
-      : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}"><span class="menu-rotulo">${ICONES[m[0]] || ''}${esc(m[1])}</span>${selo(m[0])}</a>`).join('')}</nav>
-    <div class="usuario"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}${est.boot?.secao?.tipo === DIRETORIA_ADJUNTA ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}<br><span class="usuario-acoes">${temTutorial(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="tutorial-guiado">Tutorial</button>' : ''}${recebeAvisos(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="avisos-celular">Avisos no celular</button>' : ''}${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
-      <button class="btn btn-fantasma btn-mini oculto" id="instalar-app" style="margin-top:6px">Instalar aplicativo</button></div></aside>
+      : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}"><span class="menu-rotulo">${ICONES[m[0]] || ''}<span class="menu-texto">${esc(m[1])}</span></span>${selo(m[0])}</a>`).join('')}</nav>
+    <div class="usuario"><button type="button" class="usuario-mini" id="usuario-mini" aria-label="${esc(iniciais(u.nome))}, expandir o menu para ver a conta" title="Expandir o menu">${esc(iniciais(u.nome))}</button><div class="usuario-detalhe"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}${est.boot?.secao?.tipo === DIRETORIA_ADJUNTA ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}<br><span class="usuario-acoes">${temTutorial(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="tutorial-guiado">Tutorial</button>' : ''}${recebeAvisos(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="avisos-celular">Avisos no celular</button>' : ''}${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
+      <button class="btn btn-fantasma btn-mini oculto" id="instalar-app" style="margin-top:6px">Instalar aplicativo</button></div></div></aside>
     <main class="principal"><div id="trilho"></div><div id="conteudo"></div></main>
     ${cascaMovel(u, menu)}</div>`;
   atualizarBotaoInstalar();
+  ligarMenuRetratil();
   document.title = est.boot?.empresa ? `Agilis · ${est.boot.empresa.sigla || est.boot.empresa.nome}` : 'Agilis';
   $('#alterar-senha')?.addEventListener('click', () => abrirTrocaSenha());
   $('#avisos-celular')?.addEventListener('click', () => abrirAvisosNoCelular(u.id));
@@ -376,6 +379,27 @@ function cascaMovel(u, menu) {
         <button type="button" class="btn btn-fantasma" data-fechar-mais>Fechar</button>
       </div>
     </dialog>`;
+}
+
+// ---------- Menu retrátil (computador) ----------
+// A lateral recolhe para uma coluna de ícones (rótulos só para leitor de tela, com dica ao passar o mouse). O estado fica neste
+// navegador (localStorage, com try/catch); no celular a lateral não existe e o recolhimento não se aplica.
+const CHAVE_MENU = 'agilis:menu';
+const menuRecolhido = () => { try { return localStorage.getItem(CHAVE_MENU) === 'recolhido'; } catch { return false; } };
+function ligarMenuRetratil() {
+  const raiz = $('.app'), botao = $('#menu-recolher');
+  if (!raiz || !botao) return;
+  const aplicar = (recolhido, { gravar = true } = {}) => {
+    raiz.classList.toggle('menu-recolhido', recolhido);
+    botao.setAttribute('aria-expanded', String(!recolhido));
+    botao.setAttribute('aria-label', recolhido ? 'Expandir menu' : 'Recolher menu');
+    botao.title = recolhido ? 'Expandir menu' : 'Recolher menu';
+    for (const a of raiz.querySelectorAll('.menu a')) { if (recolhido) a.title = a.textContent.trim(); else a.removeAttribute('title'); }
+    if (gravar) { try { localStorage.setItem(CHAVE_MENU, recolhido ? 'recolhido' : 'aberto'); } catch { /* segue sem lembrar */ } }
+  };
+  aplicar(raiz.classList.contains('menu-recolhido'), { gravar: false });
+  botao.addEventListener('click', () => aplicar(!raiz.classList.contains('menu-recolhido')));
+  $('#usuario-mini')?.addEventListener('click', () => { aplicar(false); botao.focus(); });
 }
 
 function ligarCascaMovel() {
