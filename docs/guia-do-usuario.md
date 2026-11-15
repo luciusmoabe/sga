@@ -6,6 +6,7 @@ Os nomes das telas e dos tipos de unidade podem variar por empresa (vocabulário
 
 - **Entrar:** e-mail e senha. Conta criada por outra pessoa pede a troca da senha no primeiro acesso.
 - **Agenda:** calendário do mês à esquerda e, à direita, o painel do dia escolhido, com ações (pelo prazo) e tarefas (pela data). Círculo = ação, quadrado = tarefa; vermelho só quando aquela ação ou tarefa está atrasada. Filtros: *Mostrar* (Tudo/Ações/Tarefas), *De quem* ("Só o que é meu", para chefe e administrador com seção) e *Seção*. No celular ficam atrás do botão "Filtros".
+- **Tutorial guiado:** o botão **Tutorial** (na barra lateral; no celular, em **Mais**) abre lições curtas para o seu perfil. O sistema leva você de tela em tela, destaca cada parte e explica. Só ensina: nada do que você vê ali altera dados. Na primeira vez, ele oferece o tutorial; o progresso fica neste navegador.
 - **Celular:** abas inferiores e a folha "Mais" com o menu completo. Pode ser instalado como aplicativo.
 
 - **Link de uma ação:** na ficha de qualquer ação, "Copiar link da ação" gera um endereço que abre a ação direto para quem tem acesso a ela (depois de entrar, se for preciso). Recarregar a página mantém a ficha aberta.

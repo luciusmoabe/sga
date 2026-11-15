@@ -1490,3 +1490,42 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
 .seletor-instancia a[aria-current="page"] { background: var(--green-bg); color: var(--green); box-shadow: inset 0 -3px 0 var(--green); }
 .seletor-instancia a:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
 @media (max-width: 760px) { .seletor-instancia { display: flex; } .seletor-instancia a { flex: 1; text-align: center; } }
+
+/* ---------- Tutorial guiado (public/js/tutorial.js) ---------- */
+.tut-foco { position: fixed; z-index: 900; display: none; pointer-events: none; border-radius: 10px;
+  box-shadow: 0 0 0 3px var(--green), 0 0 0 9999px rgba(20, 34, 25, .5); transition: left .15s, top .15s, width .15s, height .15s; }
+.tut-foco.visivel { display: block; }
+.tut { position: fixed; z-index: 910; width: min(380px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto;
+  background: var(--card); color: var(--ink); border: 1px solid var(--line-str); border-radius: 14px; padding: 14px 16px 12px; box-shadow: 0 10px 34px rgba(20, 34, 25, .28); }
+.tut:focus { outline: none; }
+.tut:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.tut[data-pos="direita-baixo"] { right: 16px; bottom: 16px; }
+.tut[data-pos="esquerda-baixo"] { left: 16px; bottom: 16px; }
+.tut[data-pos="direita-cima"] { right: 16px; top: 16px; }
+.tut[data-pos="esquerda-cima"] { left: 16px; top: 16px; }
+.tut[data-pos="centro"] { left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.tut-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tut-rotulo { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.tut-x { background: transparent; border: 0; font-size: 1.4rem; line-height: 1; color: var(--muted); cursor: pointer; min-width: 32px; min-height: 32px; border-radius: 8px; }
+.tut-x:hover { background: var(--green-bg); color: var(--ink); }
+.tut-titulo { margin: 4px 0 6px; font-size: 1.15rem; }
+.tut-corpo p { margin: 0 0 8px; line-height: 1.45; }
+.tut-licao { font-size: .8rem; color: var(--muted); margin-bottom: 4px !important; }
+.tut-sub { font-size: .85rem; color: var(--muted); }
+.tut-barra { height: 4px; border-radius: 4px; background: var(--line); margin-bottom: 10px; overflow: hidden; }
+.tut-barra i { display: block; height: 100%; background: var(--green); }
+.tut-rodape { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: 10px; }
+.tut-rodape [data-tut="lista"]:first-child:not(:last-child) { margin-right: auto; }
+.tut-licoes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.tut-licoes button { display: flex; gap: 10px; align-items: flex-start; width: 100%; text-align: left; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--pale); color: var(--ink); cursor: pointer; font: inherit; min-height: 44px; }
+.tut-licoes button:hover { border-color: var(--green); background: var(--green-bg); }
+.tut-licoes small { display: block; color: var(--muted); font-size: .8rem; }
+.tut-marca { flex: none; width: 20px; height: 20px; margin-top: 1px; border: 2px solid var(--line-str); border-radius: 50%; display: grid; place-items: center; font-size: .75rem; color: #fff; }
+.tut-marca.feita { background: var(--green); border-color: var(--green); }
+@media (max-width: 760px) {
+  .tut { left: 12px; right: 12px; width: auto; max-height: 46vh; }
+  .tut[data-pos="baixo"], .tut[data-pos="centro"] { top: auto; bottom: calc(76px + env(safe-area-inset-bottom)); transform: none; }
+  .tut[data-pos="cima"] { top: calc(64px + env(safe-area-inset-top)); bottom: auto; }
+}
+@media (prefers-reduced-motion: reduce) { .tut-foco { transition: none; } }
+@media print { .tut, .tut-foco { display: none !important; } }
