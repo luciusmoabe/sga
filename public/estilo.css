@@ -1529,3 +1529,38 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
 }
 @media (prefers-reduced-motion: reduce) { .tut-foco { transition: none; } }
 @media print { .tut, .tut-foco { display: none !important; } }
+
+/* ---------- Gestão da seção (public/js/gestao.js) ---------- */
+.gestao-situacao { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gestao-alerta { border-color: var(--vermelho); }
+.gestao-alerta .prod-valor { color: var(--vermelho); }
+.gestao-duas { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; margin: 16px 0; align-items: start; }
+.gestao-duas > .cartao, .gestao-coluna > .cartao { margin: 0; }
+.gestao-coluna { display: grid; gap: 16px; }
+.gestao-radar { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.gestao-risco { border: 1px solid var(--line); border-left-width: 5px; border-radius: 10px; padding: 10px 12px; background: var(--pale); }
+.gestao-risco.n-critico { border-left-color: var(--vermelho); }
+.gestao-risco.n-atencao { border-left-color: var(--amarelo); }
+.gestao-risco.n-info { border-left-color: var(--line-str); }
+.gestao-risco-cab { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gestao-risco-cab .btn { margin-left: auto; }
+.gestao-nivel { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.n-critico .gestao-nivel { color: var(--vermelho); } .n-atencao .gestao-nivel { color: var(--amarelo); } .n-info .gestao-nivel { color: var(--muted); }
+.gestao-risco p { margin: 4px 0; }
+.gestao-risco ul { margin: 4px 0 0; padding-left: 18px; font-size: .9rem; }
+.gestao-ok { padding: 14px; border-radius: 10px; background: var(--verde-bg); color: var(--ink); }
+.gestao-barras { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.gestao-barra { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) 2rem auto; align-items: center; gap: 8px; font-size: .9rem; }
+.gestao-barra-rotulo { color: var(--muted); }
+.gestao-trilho { height: 10px; border-radius: 6px; background: var(--line); overflow: hidden; }
+.gestao-trilho i { display: block; height: 100%; background: var(--green); border-radius: 6px; }
+.gestao-barra.ruim .gestao-trilho i { background: var(--vermelho); } .gestao-barra.atencao .gestao-trilho i { background: var(--amarelo); } .gestao-barra.suave .gestao-trilho i { background: var(--line-str); }
+.gestao-barra .num { text-align: right; }
+.gestao-pilha { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--line); margin-bottom: 10px; }
+.gestao-pilha i, .gestao-legenda span { background: var(--line-str); } .gestao-pilha .andando, .gestao-legenda .andando { background: var(--green); } .gestao-pilha .bloq, .gestao-legenda .bloq { background: var(--vermelho); }
+.gestao-legenda { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .9rem; }
+.gestao-legenda span { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+.gestao-conversas { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.gestao-conversas li { padding: 8px 10px; border-radius: 10px; background: var(--pale); border: 1px solid var(--line); line-height: 1.4; }
+@media (max-width: 900px) { .gestao-duas { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) { .gestao-barra { grid-template-columns: 6rem minmax(0, 1fr) 1.6rem; } .gestao-barra > .suave { grid-column: 2 / -1; } }

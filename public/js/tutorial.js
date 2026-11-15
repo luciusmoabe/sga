@@ -41,6 +41,13 @@ function licoes() {
         { rota: '#/inicio', alvo: ['.atencao-quadro', '.novas-quadro'], titulo: 'Quadros de atenção', texto: 'Quando houver, aparecem aqui <b>Chegaram para você</b> (ações novas), <b>Aguardando sua validação</b> e <b>Precisa de atenção</b> (atrasadas ou sem movimento há 7 dias), com botões rápidos de status e tempo.' },
         { rota: '#/inicio', alvo: '#trilho', titulo: 'A linha do tempo da semana', texto: 'Mostra a reunião, o lembrete (sexta, 15h) e o <b>fechamento: segunda, 18h</b>. Da sexta até a reunião, uma <b>faixa amarela</b> no alto das telas lembra a atualização, e fica vermelha depois do prazo.' },
       ] },
+      { id: 'gestao', titulo: 'Gestão da seção', resumo: 'O painel para liderar a equipe da semana.', passos: [
+        { rota: '#/gestao', alvo: '#gestao-radar', titulo: 'O que precisa de você hoje', texto: 'O <b>radar</b> reúne, por gravidade, o que pede a sua decisão: impedimento crítico, atrasos, validações, prazos chegando e ações paradas. Clique numa ação para abrir a ficha.' },
+        { rota: '#/gestao', alvo: ['#gestao-fluxo', '#gestao-horizonte'], titulo: 'Fluxo e prazos', texto: 'Veja quanto está <b>a fazer, em andamento e bloqueado</b> e como se distribuem os prazos. Muita coisa começada e pouca terminada é sinal para priorizar.' },
+        { rota: '#/gestao', alvo: '#gestao-semanas', titulo: 'Estamos entregando?', texto: 'As entregas das últimas 8 semanas mostram o <b>ritmo</b> da equipe e quantas saíram no prazo. Olhe a tendência, não uma semana isolada.' },
+        { rota: '#/gestao', alvo: '#gestao-equipe', titulo: 'Carga da equipe', texto: 'Quem tem mais a resolver aparece primeiro, com sinais em texto (atrasada, parada, carga alta). Serve para <b>distribuir melhor e conversar</b>, não para ranquear.' },
+        { rota: '#/gestao', alvo: '#gestao-conversas', titulo: 'Conversas que valem a pena', texto: 'Sugestões geradas pelos números para a reunião da equipe e os 1:1: <b>apoiar</b> quem está travado, <b>alinhar</b> prioridades e <b>reconhecer</b> boas entregas.' },
+      ] },
       { id: 'acoes', titulo: 'Trabalhando suas ações', resumo: 'Status, tempo, tarefas, impedimentos e novo prazo.', passos: [
         { rota: '#/minhas-acoes', alvo: '.abas-lista', titulo: 'Suas ações', texto: 'As abas separam <b>Todas ativas</b>, <b>Abertas</b>, <b>Concluídas</b> e <b>Arquivadas</b>.' },
         { rota: '#/minhas-acoes', alvo: '.cartao.acao', titulo: 'Cada cartão é uma ação', texto: 'Os selos mostram o que importa (atrasada, nova, aguardando validação). Por aqui você muda o <b>status</b> e registra o <b>tempo em minutos</b>. <b>Concluir exige tempo maior que zero.</b>' },

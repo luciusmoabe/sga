@@ -49,7 +49,7 @@ test('tutorial do Chefe: convite, lições completas, destaque em cada passo e n
   assert.equal(await painel(p), null, 'o convite não volta');
 
   const { semDestaque, vistos, ids } = await percorrerTudo(p);
-  assert.ok(ids.length >= 5 && vistos.length >= 15, `lições do chefe (vieram ${ids.length} lições, ${vistos.length} passos)`);
+  assert.ok(ids.length >= 6 && vistos.length >= 20, `lições do chefe (vieram ${ids.length} lições, ${vistos.length} passos)`);
   // Quadros que dependem de haver dados (ações novas, a validar) podem não existir nos dados fictícios; o resto precisa ser destacado.
   const faltando = semDestaque.filter((s) => !/Quadros de atenção/.test(s));
   assert.deepEqual(faltando, [], `passos sem destaque: ${faltando.join('; ')}`);

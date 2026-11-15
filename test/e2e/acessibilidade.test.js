@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { CHEFE_COF, DIRETOR, subir } from './ajuda.js';
 
 const TELAS_DIRETOR = ['painel', 'direcionar', 'acoes', 'prazos', 'combinados', 'reunioes', 'agenda', 'produtividade', 'avisos', 'estrutura', 'reuniao', 'reuniao-config'];
-const TELAS_CHEFE = ['inicio', 'minhas-acoes', 'atualizacao', 'agenda', 'equipe', 'combinados', 'combinados?i=equipe', 'atas', 'atas?i=equipe', 'reuniao-config'];
+const TELAS_CHEFE = ['inicio', 'gestao', 'minhas-acoes', 'atualizacao', 'agenda', 'equipe', 'combinados', 'combinados?i=equipe', 'atas', 'atas?i=equipe', 'reuniao-config'];
 
 // "regra@tela": violações que já existiam. Preenchida depois da primeira execução (veja a mensagem de falha do teste).
 const CONHECIDAS = new Set([
@@ -24,9 +24,11 @@ async function auditar(app, p) {
 }
 
 async function percorrer(t, uid, telas, opcoes, rotulo) {
-  const app = await subir(t); if (!app) return;
+  let app = await subir(t); if (!app) return;
   const novas = [], conhecidas = [];
-  for (const tela of telas) {
+  for (const [i, tela] of telas.entries()) {
+    // O Chrome do teste deixa de criar páginas depois de umas 10 no mesmo navegador (também sem este código): renova a cada 8 telas.
+    if (i > 0 && i % 8 === 0) app = await subir(t);
     const p = await app.abrir(uid, `#/${tela}`, opcoes);
     await new Promise((r) => setTimeout(r, 400)); // deixa a tela terminar de montar
     for (const v of await auditar(app, p)) {

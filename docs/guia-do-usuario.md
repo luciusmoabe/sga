@@ -14,12 +14,13 @@ Os nomes das telas e dos tipos de unidade podem variar por empresa (vocabulário
 ## Chefe de seção
 
 1. **Início:** o cartão **Sua semana** lista o que falta antes da reunião (a atualização, ações atrasadas, ações novas, validações e o que vence antes da reunião), mostra quantos itens já estão em dia e quanto falta para o prazo, e cada item leva direto ao que resolve. Enquanto a atualização estiver pendente, uma **faixa amarela** aparece no alto das outras telas, da sexta às 15h até a reunião (fica vermelha depois do prazo regular), com o botão para registrar. Além disso, os quadros "Chegaram para você" (ações novas), "Aguardando sua validação" e "Precisa de atenção" (atrasadas, sem atualização há 7 dias, prazo até a reunião, com botões rápidos de status e tempo), mais o aviso vigente.
-2. **Minhas ações:** abra a ação para mudar o status, registrar o **tempo em minutos**, comentar, criar tarefas e registrar impedimentos. *Concluir exige tempo maior que zero.*
-3. **Pedir novo prazo:** em ação criada por outra pessoa, use o pedido de prazo e aguarde a decisão.
-4. **Minha atualização:** confira o relato montado automaticamente, acrescente observações e envie até a **segunda, 18h**. Se algo mudar depois, a tela avisa que o relato está desatualizado; enviar de novo cria nova versão.
-5. **Minha equipe:** cadastre membros, desative ou reative e redefina senhas.
-6. **Redirecionar** uma ação para a própria seção ou subseções; **atribuir** um responsável; **validar** ou **devolver** o que um membro concluiu.
-7. **Histórico, Combinados e Atas:** consulta. Participantes registrados podem sugerir revisão em ata publicada.
+2. **Gestão da seção:** painel para liderar a equipe da semana, só de leitura. O *radar* mostra, por gravidade, o que pede a sua decisão (impedimento crítico, atrasos, validações, prazos chegando, ações paradas); depois vêm o fluxo e os prazos das ações em curso, as entregas das últimas 8 semanas, a carga de cada pessoa e sugestões de conversa (apoiar, alinhar, reconhecer). Os números servem para conversar com a equipe, não para ranquear.
+3. **Minhas ações:** abra a ação para mudar o status, registrar o **tempo em minutos**, comentar, criar tarefas e registrar impedimentos. *Concluir exige tempo maior que zero.*
+4. **Pedir novo prazo:** em ação criada por outra pessoa, use o pedido de prazo e aguarde a decisão.
+5. **Minha atualização:** confira o relato montado automaticamente, acrescente observações e envie até a **segunda, 18h**. Se algo mudar depois, a tela avisa que o relato está desatualizado; enviar de novo cria nova versão.
+6. **Minha equipe:** cadastre membros, desative ou reative e redefina senhas.
+7. **Redirecionar** uma ação para a própria seção ou subseções; **atribuir** um responsável; **validar** ou **devolver** o que um membro concluiu.
+8. **Histórico, Combinados e Atas:** consulta. Participantes registrados podem sugerir revisão em ata publicada.
 
 Se você tem um **suplente**, ele tem os mesmos poderes e responde na sua ausência.
 
