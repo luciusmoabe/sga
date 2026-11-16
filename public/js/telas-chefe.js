@@ -10,7 +10,7 @@ import {
 import { aceitarAcao, abrirAcao, abrirEditarAcao, abrirNovoImpedimento, aceitaImpedimento, devolverAcao, lerOrigem, ligarOrigem, origemCamposHTML, validarAcao } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
 import { nomeDaReuniao, reuniaoDaAcao } from './reuniao-da-acao.js';
-import { ATALHOS, ORDENS, aplicarFiltros, contarAtalhos, ordenar } from './filtro-acoes.js';
+import { ATALHOS, FACETAS, FILTRO_VAZIO, ORDENS, ROTULO_FACETA, aplicarFiltros, contarAtalhos, contarAtivos, opcoesDe, ordenar } from './filtro-acoes.js';
 import { dataNoFuso, diasEntre, instante } from './datas.js';
 import { relatoHTML } from './telas-diretor.js';
 
@@ -271,6 +271,8 @@ export async function minhasAcoes(raiz) {
     get(`/acoes?situacao=arquivadas${daSecao}`),
   ]);
   let [abertasT, conclT, arqT] = await buscar();
+  // Datas das reuniões (só o chefe tem a da equipe; o membro não vê as duas), para o filtro de prazo "até a reunião".
+  const agendaEquipe = est.user.perfil === 'chefe' ? await get('/reunioes-equipe/agenda').catch(() => null) : null;
   // O membro vê, na aba "Minhas", as ações atribuídas a ele ou criadas por ele (as que ele executa) e, em outra aba, as
   // da seção só para leitura. O chefe vê todas as da seção.
   const ehMembro = est.user.perfil === 'membro';
@@ -282,11 +284,14 @@ export async function minhasAcoes(raiz) {
   // memória; a ordem escolhida é lembrada neste navegador.
   const CHAVE_ORDEM = 'agilis:ordem-acoes';
   const lerOrdem = () => { try { const v = localStorage.getItem(CHAVE_ORDEM); return ORDENS.some(([k]) => k === v) ? v : 'padrao'; } catch { return 'padrao'; } };
-  const filtro = { q: '', atalhos: [], ordem: lerOrdem() };
-  const ctxFiltro = { hoje: est.boot.hoje };
-  const filtrando = () => !!filtro.q.trim() || filtro.atalhos.length > 0;
+  const filtro = { ...FILTRO_VAZIO(), ordem: lerOrdem() };
+  const ctxFiltro = {
+    hoje: est.boot.hoje, usuarioId: est.user.id, secaoId: est.user.secao_id,
+    semana: est.user.perfil === 'membro' ? null : est.boot.semana, semanaEquipe: agendaEquipe?.semana ?? null, rotuloDiretor: `Demandadas ${peloTopo()}`,
+  };
+  const filtrando = () => !!filtro.q.trim() || filtro.atalhos.length > 0 || contarAtivos(filtro) > 0;
   let adiar = null; // a busca redesenha com um pequeno atraso, enquanto a pessoa digita
-  let ordemAberta = false; // no celular, a ordenação fica atrás do botão "Ordenar"
+  let painelAberto = false; // o painel "Filtros" (e, no celular, a ordenação) fica recolhido até a pessoa abrir
 
   const renderizar = () => {
     const abertas = doEscopo(abertasT), concl = doEscopo(conclT), arq = doEscopo(arqT), todasAtivas = [...abertas, ...concl];
@@ -297,14 +302,29 @@ export async function minhasAcoes(raiz) {
     const foco = raiz.contains(document.activeElement) ? document.activeElement.closest('[data-id]')?.dataset.id : null;
     // O mesmo para os controles de filtro: a busca mantém o foco e o cursor, os atalhos e a ordem mantêm o foco.
     const ativo = raiz.contains(document.activeElement) ? document.activeElement : null;
-    const focoFiltro = !ativo ? null : (ativo.id === 'ma-busca' || ativo.id === 'ma-ordem') ? `#${ativo.id}`
+    const focoFiltro = !ativo ? null : ativo.id?.startsWith('ma-') ? `#${ativo.id}`
       : ativo.dataset?.atalho ? `[data-atalho="${ativo.dataset.atalho}"]` : ativo.dataset?.limpar !== undefined ? '[data-limpar]'
-        : ativo.dataset?.alternarOrdem !== undefined ? '[data-alternar-ordem]' : null;
+        : (ativo.dataset?.alternarPainel !== undefined || ativo.dataset?.remover !== undefined) ? '[data-alternar-painel]' : null;
     const selecao = ativo?.id === 'ma-busca' ? [ativo.selectionStart, ativo.selectionEnd] : null;
     const brutaDaAba = aba === 'abertas' ? abertas : aba === 'concluidas' ? concl : aba === 'arquivadas' ? arq : todasAtivas;
     const lista = ordenar(f(brutaDaAba), filtro.ordem);
     const contagens = contarAtalhos(brutaDaAba, filtro, ctxFiltro);
     const chips = ATALHOS.filter((t) => contagens[t.id] || filtro.atalhos.includes(t.id));
+    // Filtros do painel: cada opção com a contagem considerando os outros filtros; opção sem ação some, a menos que esteja escolhida.
+    const opcoes = Object.fromEntries(FACETAS.map((fa) => [fa, opcoesDe(brutaDaAba, fa, filtro, ctxFiltro)]));
+    const campoFaceta = (fa) => {
+      const ops = opcoes[fa].filter((o) => o.n > 0 || o.valor === filtro[fa]);
+      if (!ops.length) return '';
+      return `<div class="campo"><label for="ma-f-${fa}">${ROTULO_FACETA[fa]}</label><select id="ma-f-${fa}" data-faceta="${fa}"><option value="">Todos</option>${ops.map((o) =>
+        `<option value="${esc(o.valor)}"${filtro[fa] === o.valor ? ' selected' : ''}>${esc(o.rotulo)} (${o.n})</option>`).join('')}</select></div>`;
+    };
+    const nAtivos = contarAtivos(filtro);
+    const etiquetas = FACETAS.filter((fa) => filtro[fa]).map((fa) => {
+      const op = opcoes[fa].find((o) => o.valor === filtro[fa]);
+      const texto = fa === 'prazo' && filtro.prazo === 'intervalo' ? `Prazo: de ${filtro.prazoDe ? br(filtro.prazoDe) : '…'} a ${filtro.prazoAte ? br(filtro.prazoAte) : '…'}` : `${ROTULO_FACETA[fa]}: ${op?.rotulo ?? filtro[fa]}`;
+      return { fa, texto };
+    });
+    const opcoesOrdem = ORDENS.map(([v, r]) => `<option value="${v}"${filtro.ordem === v ? ' selected' : ''}>${r}</option>`).join('');
 
     raiz.innerHTML = `
       <div class="cabeca linha entre" style="align-items:flex-start">
@@ -323,13 +343,22 @@ export async function minhasAcoes(raiz) {
         <button type="button" class="btn ${aba === 'concluidas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="concluidas">Concluídas (${conclF.length})</button>
         <button type="button" class="btn ${aba === 'arquivadas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="arquivadas">Arquivadas (${arqF.length})</button>
       </div>
-      <div class="ma-filtros${ordemAberta ? ' abertos' : ''}" role="search" aria-label="Filtrar e ordenar as ações">
+      <div class="ma-filtros" role="search" aria-label="Buscar, filtrar e ordenar as ações">
         <div class="ma-busca"><label class="sr" for="ma-busca">Buscar nas ações</label>
           <input id="ma-busca" type="search" value="${esc(filtro.q)}" placeholder="Buscar nas ações" title="Busca no título, no detalhe, no responsável e na seção; use várias palavras para refinar" autocomplete="off" enterkeyhint="search"></div>
-        <button type="button" class="btn btn-sec ma-alternar" data-alternar-ordem aria-expanded="${ordemAberta}" aria-controls="ma-ordem-campo">Ordenar</button>
-        <div class="ma-ordem" id="ma-ordem-campo"><label for="ma-ordem">Ordenar por</label>
-          <select id="ma-ordem">${ORDENS.map(([v, r]) => `<option value="${v}"${filtro.ordem === v ? ' selected' : ''}>${r}</option>`).join('')}</select></div>
+        <div class="ma-ordem"><label for="ma-ordem">Ordenar por</label><select id="ma-ordem" data-ordem>${opcoesOrdem}</select></div>
+        <button type="button" class="btn btn-sec ma-alternar" data-alternar-painel aria-expanded="${painelAberto}" aria-controls="ma-painel">Filtros${nAtivos ? ` (${nAtivos})` : ''}</button>
       </div>
+      <div class="ma-painel" id="ma-painel"${painelAberto ? '' : ' hidden'}>
+        <div class="ma-painel-grade">
+          <div class="campo ma-ordem-painel"><label for="ma-ordem-painel">Ordenar por</label><select id="ma-ordem-painel" data-ordem>${opcoesOrdem}</select></div>
+          ${campoFaceta('responsavel')}${campoFaceta('origem')}${campoFaceta('secao')}${campoFaceta('prazo')}${campoFaceta('status')}${campoFaceta('prioridade')}
+          ${filtro.prazo === 'intervalo' ? `<div class="campo"><label for="ma-prazo-de">Prazo de</label><input id="ma-prazo-de" type="date" value="${esc(filtro.prazoDe)}"></div>
+            <div class="campo"><label for="ma-prazo-ate">Prazo até</label><input id="ma-prazo-ate" type="date" value="${esc(filtro.prazoAte)}"></div>` : ''}
+        </div>
+      </div>
+      ${etiquetas.length ? `<div class="ma-etiquetas" role="group" aria-label="Filtros ativos">${etiquetas.map((e) =>
+        `<button type="button" class="ma-etiqueta" data-remover="${e.fa}" aria-label="Remover o filtro ${esc(e.texto)}">${esc(e.texto)} <span aria-hidden="true">✕</span></button>`).join('')}</div>` : ''}
       ${chips.length ? `<div class="ma-atalhos" role="group" aria-label="Atalhos de atenção (mostra as ações que tenham qualquer um dos marcados)"><span class="ma-atalhos-rotulo">Atenção</span>${chips.map((t) =>
         `<button type="button" class="ma-chip" data-atalho="${t.id}" aria-pressed="${filtro.atalhos.includes(t.id)}">${t.rotulo} <b class="num">${contagens[t.id]}</b></button>`).join('')}</div>` : ''}
       ${filtrando() ? `<p class="ma-resultado suave pequeno" role="status">Mostrando <b>${lista.length}</b> de ${brutaDaAba.length}. <button type="button" class="btn btn-fantasma btn-mini" data-limpar>Limpar filtros</button></p>` : ''}
@@ -402,7 +431,7 @@ export async function minhasAcoes(raiz) {
   on(raiz, 'keydown', '#ma-busca', (el, ev) => {
     if (ev.key === 'Escape' && el.value) { ev.preventDefault(); clearTimeout(adiar); filtro.q = ''; renderizar(); }
   });
-  on(raiz, 'change', '#ma-ordem', (el) => {
+  on(raiz, 'change', '[data-ordem]', (el) => {
     filtro.ordem = el.value;
     try { localStorage.setItem(CHAVE_ORDEM, el.value); } catch { /* segue sem lembrar */ }
     renderizar();
@@ -412,8 +441,22 @@ export async function minhasAcoes(raiz) {
     filtro.atalhos = filtro.atalhos.includes(id) ? filtro.atalhos.filter((x) => x !== id) : [...filtro.atalhos, id];
     renderizar();
   });
-  on(raiz, 'click', '[data-alternar-ordem]', () => { ordemAberta = !ordemAberta; renderizar(); });
-  on(raiz, 'click', '[data-limpar]', () => { clearTimeout(adiar); filtro.q = ''; filtro.atalhos = []; renderizar(); });
+  on(raiz, 'click', '[data-alternar-painel]', () => { painelAberto = !painelAberto; renderizar(); });
+  // Filtros do painel: cada campo escolhe uma opção; as etiquetas tiram uma a uma; "Limpar filtros" tira tudo (menos a ordem).
+  const limparPrazo = () => { filtro.prazoDe = ''; filtro.prazoAte = ''; };
+  on(raiz, 'change', '[data-faceta]', (el) => {
+    filtro[el.dataset.faceta] = el.value;
+    if (el.dataset.faceta === 'prazo' && el.value !== 'intervalo') limparPrazo();
+    renderizar();
+  });
+  on(raiz, 'change', '#ma-prazo-de', (el) => { filtro.prazoDe = el.value; renderizar(); });
+  on(raiz, 'change', '#ma-prazo-ate', (el) => { filtro.prazoAte = el.value; renderizar(); });
+  on(raiz, 'click', '[data-remover]', (el) => {
+    filtro[el.dataset.remover] = '';
+    if (el.dataset.remover === 'prazo') limparPrazo();
+    renderizar();
+  });
+  on(raiz, 'click', '[data-limpar]', () => { clearTimeout(adiar); Object.assign(filtro, FILTRO_VAZIO()); renderizar(); });
   on(raiz, 'click', '[data-validar]', async (el) => { try { await validarAcao(acaoDe(el).id); await recarregar(); } catch (e) { erro(e); } });
   on(raiz, 'click', '[data-aceitar]', async (el) => { try { await aceitarAcao(acaoDe(el).id); await recarregar(); } catch (e) { erro(e); } });
   on(raiz, 'click', '[data-devolver]', (el) => devolverAcao(acaoDe(el), recarregar));

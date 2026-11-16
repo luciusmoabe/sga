@@ -78,15 +78,17 @@ test('Minhas ações no celular: a barra de filtros cabe na tela e os atalhos ro
   assert.ok(medidas.pagina <= medidas.janela, `sem rolagem horizontal da página (${medidas.pagina} > ${medidas.janela})`);
   assert.ok(medidas.busca > 250, 'a busca ocupa a largura');
   assert.ok(medidas.chip >= 44, 'alvo de toque de 44 px ou mais');
-  // A ordenação fica atrás do botão "Ordenar": recolhida por padrão, abre e fecha, e o computador não vê o botão.
-  assert.equal(await p.$eval('#ma-ordem-campo', (e) => getComputedStyle(e).display), 'none', 'recolhida no celular');
-  await p.click('[data-alternar-ordem]');
-  assert.equal(await p.$eval('[data-alternar-ordem]', (b) => b.getAttribute('aria-expanded')), 'true');
-  assert.notEqual(await p.$eval('#ma-ordem-campo', (e) => getComputedStyle(e).display), 'none', 'aberta');
-  assert.equal(await p.evaluate(() => document.activeElement.dataset.alternarOrdem !== undefined), true, 'o foco fica no botão');
+  // No celular, a ordenação e os filtros ficam atrás do botão "Filtros": recolhidos por padrão, abrem e fecham.
+  assert.equal(await p.$eval('#ma-ordem', (e) => getComputedStyle(e).display === 'none' || getComputedStyle(e.closest('.ma-ordem')).display === 'none'), true, 'a ordem da barra some no celular');
+  assert.equal(await p.$eval('#ma-painel', (e) => e.hidden), true, 'painel recolhido por padrão');
+  await p.click('[data-alternar-painel]');
+  assert.equal(await p.$eval('[data-alternar-painel]', (b) => b.getAttribute('aria-expanded')), 'true');
+  assert.equal(await p.$eval('#ma-painel', (e) => e.hidden), false, 'painel aberto');
+  assert.notEqual(await p.$eval('#ma-ordem-painel', (e) => getComputedStyle(e.closest('.ma-ordem-painel')).display), 'none', 'a ordenação passa a estar no painel');
+  assert.equal(await p.evaluate(() => document.activeElement.dataset.alternarPainel !== undefined), true, 'o foco fica no botão');
   const pc = await app.abrir(CHEFE_COF, '#/minhas-acoes');
   await pc.waitForSelector('.ma-filtros');
-  assert.equal(await pc.$eval('[data-alternar-ordem]', (b) => getComputedStyle(b).display), 'none', 'no computador não há botão');
-  assert.notEqual(await pc.$eval('#ma-ordem-campo', (e) => getComputedStyle(e).display), 'none', 'a ordenação fica sempre à vista');
+  assert.equal(await pc.$eval('#ma-ordem', (e) => getComputedStyle(e.closest('.ma-ordem')).display), 'block', 'no computador, a ordenação fica sempre à vista na barra');
+  assert.equal(await pc.$eval('#ma-ordem-painel', (e) => getComputedStyle(e.closest('.ma-ordem-painel')).display), 'none', 'e não se repete no painel');
   assert.deepEqual(p.errosDaPagina, []);
 });
