@@ -53,7 +53,8 @@ delete from empresas;
   // ALTER identity é transacional, ao contrário de setval.
   sql += `set constraints all immediate;
 `;
-  for (const tabela of TABELAS_APP.filter(t => !['config', 'reuniao_participantes', 'acao_vistas'].includes(t))) {
+  // Só tabelas com coluna `id` (identidade). As de chave composta (config, acao_vistas, secao_config…) não têm o que reiniciar.
+  for (const tabela of TABELAS_APP.filter(t => db.prepare(`pragma table_info(${t})`).all().some(c => c.name === 'id'))) {
     const { maior } = db.prepare(`select coalesce(max(id), 0) as maior from ${tabela}`).get();
     sql += `alter table ${tabela} alter column id restart with ${maior + 1};
 `;

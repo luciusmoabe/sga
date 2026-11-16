@@ -12,6 +12,9 @@ import { cadastrarChefe } from '../../server/cadastro-chefes.js';
 
 process.env.SGC_NOW = '2026-09-19T10:00:00';
 
+// Última versão de migração, calculada: uma migração nova não deve quebrar as listas esperadas abaixo só por mudar o total.
+const ULTIMA_MIGRACAO = await (async () => { const d = openDb(':memory:'); try { return (await aplicarMigracoes(d)).at(-1); } finally { await d.close(); } })();
+
 async function servir(t, db) {
   const server = createApp(db, { auth: { mode: 'demo' } }).listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -38,7 +41,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     const primeira = await db.prepare('select id from acoes order by id limit 1').get();
     await db.prepare('update acoes set acao_pai_id=? where id!=?').run(primeira.id,primeira.id);
     await db.exec(await readFile(new URL('../../scripts/limpar-acoes-piloto.sql',import.meta.url),'utf8'));
-    for (const tabela of ['acoes','acao_comentarios','tempo','pedidos_prazo','acao_prazos','acao_vistas']) assert.equal((await db.prepare(`select count(*) n from ${tabela}`).get()).n,0);
+    for (const tabela of ['acoes','acao_comentarios','tempo','pedidos_prazo','acao_prazos','acao_vistas','impedimentos','acao_checklist','pontos_atencao','reuniao_equipe_acoes']) assert.equal((await db.prepare(`select count(*) n from ${tabela}`).get()).n,0);
     assert.deepEqual(await Promise.all(preservadas.map(tabela=>db.prepare(`select * from ${tabela}`).all())),antes);
   });
 
@@ -141,7 +144,7 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     await db.exec(`alter table decisoes drop constraint decisoes_reuniao_id_fkey,
       add constraint decisoes_reuniao_id_fkey foreign key (reuniao_id) references reunioes(id) on delete cascade`);
     // Tudo o que faltava: da versão 3 (as cascatas) até a última, e não só as quatro primeiras.
-    assert.deepEqual(await aplicarMigracoes(db), Array.from({ length: 25 }, (_, i) => i + 3));
+    assert.deepEqual(await aplicarMigracoes(db), Array.from({ length: ULTIMA_MIGRACAO - 2 }, (_, i) => i + 3));
     assert.deepEqual(await Promise.all(relacoes.map(([nome]) => db.prepare(`select * from ${nome} order by id`).all())), antes);
     await conferirIntegridade(db);
   });
@@ -358,7 +361,8 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     assert.equal((await call('POST', `/acoes/${acao.id}/encerrar`, undefined, DIRETOR)).status, 409, 'não é demanda do Diretor');
     assert.equal((await call('POST', `/acoes/${acao.id}/validar`, undefined, ANA)).status, 200);
     assert.equal((await call('GET', `/acoes/${acao.id}`, undefined, ANA)).data.aguardando_validacao, null);
-    assert.equal((await call('GET', '/equipe', undefined, ANA)).data.length, 1);
+    // O chefe de uma subseção também aparece em /equipe (só leitura, `chefe_subsecao`); aqui conta quem ele gere.
+    assert.equal((await call('GET', '/equipe', undefined, ANA)).data.filter(m => !m.chefe_subsecao).length, 1);
     assert.equal((await call('GET', '/reunioes', undefined, marta)).status, 403);
 
     const externa = (await call('POST', '/acoes', { titulo: 'Responder ofício', prazo: '2026-12-31', demandante_externo: 'Tribunal de Contas' }, ANA)).data;
@@ -464,7 +468,9 @@ test('PostgreSQL real em cluster descartável', { timeout: 120000 }, async t => 
     await assert.rejects(db.prepare("insert into usuarios (nome, perfil) values ('P', 'plataforma')").run(), { code: '23514' });
     const antes = await db.prepare('select * from usuarios order by id').all();
     assert.deepEqual(await aplicarMigracoes(db), [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]);
-    assert.deepEqual(await db.prepare('select * from usuarios order by id').all(), antes);
+    // Migrações posteriores acrescentam colunas a `usuarios`: o que importa é que as linhas existentes não mudaram nas colunas que já havia.
+    const depois = await db.prepare('select * from usuarios order by id').all();
+    assert.deepEqual(depois.map(u => Object.fromEntries(Object.keys(antes[0]).map(k => [k, u[k]]))), antes);
     await db.prepare("insert into usuarios (nome, perfil) values ('P', 'plataforma')").run();
     await assert.rejects(db.prepare("insert into usuarios (nome, perfil) values ('Q', 'outro')").run(), { code: '23514' });
     assert.deepEqual(await aplicarMigracoes(db), []);
