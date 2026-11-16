@@ -30,11 +30,15 @@ const ESPERADAS = [
 
 test('paridade de esquema entre SQLite e PostgreSQL depois das migrações', { timeout: 120000 }, async (t) => {
   const cluster = await clusterTemporario(t);
-  const [pg] = await cluster.banco(t);
-  await aplicarMigracoes(pg);
-  const sqlite = openDb(':memory:');
-  t.after(() => sqlite.close());
-  await aplicarMigracoes(sqlite);
-  const difs = diferencas(await descreverEsquema(sqlite), await descreverEsquema(pg)).filter((d) => !ESPERADAS.includes(d));
-  assert.deepEqual(difs, [], 'esquemas divergentes depois das migrações:\n' + difs.join('\n'));
+  // O banco vai num subteste, como nos demais testes do PostgreSQL: o cluster e o banco fecham as conexões em ganchos
+  // distintos, e usar o mesmo `t` para os dois fecha o mesmo pool duas vezes.
+  await t.test('esquemas iguais', async (t) => {
+    const [pg] = await cluster.banco(t);
+    await aplicarMigracoes(pg);
+    const sqlite = openDb(':memory:');
+    t.after(() => sqlite.close());
+    await aplicarMigracoes(sqlite);
+    const difs = diferencas(await descreverEsquema(sqlite), await descreverEsquema(pg)).filter((d) => !ESPERADAS.includes(d));
+    assert.deepEqual(difs, [], 'esquemas divergentes depois das migrações:\n' + difs.join('\n'));
+  });
 });
