@@ -10,6 +10,7 @@ import {
 import { aceitarAcao, abrirAcao, abrirEditarAcao, abrirNovoImpedimento, aceitaImpedimento, devolverAcao, lerOrigem, ligarOrigem, origemCamposHTML, validarAcao } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
 import { nomeDaReuniao, reuniaoDaAcao } from './reuniao-da-acao.js';
+import { ATALHOS, ORDENS, aplicarFiltros, contarAtalhos, ordenar } from './filtro-acoes.js';
 import { dataNoFuso, diasEntre, instante } from './datas.js';
 import { relatoHTML } from './telas-diretor.js';
 
@@ -277,16 +278,33 @@ export async function minhasAcoes(raiz) {
   const doEscopo = (l) => (ehMembro ? l.filter((a) => (escopo === 'minhas') === !!a.pode_executar) : l);
   const temMais = (a) => (ehMembro ? !!(a.pode_editar || a.pode_mudar_prazo || a.pode_excluir) : ((!a.demandada_diretor && !a.demandada_chefe) || a.pode_editar || a.pode_mudar_prazo));
   let aba = 'ativas';
+  // Filtros desta tela: busca, atalhos de atenção e ordenação, sobre o que já foi carregado (ver `filtro-acoes.js`). Ficam só na
+  // memória; a ordem escolhida é lembrada neste navegador.
+  const CHAVE_ORDEM = 'agilis:ordem-acoes';
+  const lerOrdem = () => { try { const v = localStorage.getItem(CHAVE_ORDEM); return ORDENS.some(([k]) => k === v) ? v : 'padrao'; } catch { return 'padrao'; } };
+  const filtro = { q: '', atalhos: [], ordem: lerOrdem() };
+  const ctxFiltro = { hoje: est.boot.hoje };
+  const filtrando = () => !!filtro.q.trim() || filtro.atalhos.length > 0;
+  let adiar = null; // a busca redesenha com um pequeno atraso, enquanto a pessoa digita
+  let ordemAberta = false; // no celular, a ordenação fica atrás do botão "Ordenar"
 
   const renderizar = () => {
     const abertas = doEscopo(abertasT), concl = doEscopo(conclT), arq = doEscopo(arqT), todasAtivas = [...abertas, ...concl];
+    const f = (l) => aplicarFiltros(l, filtro, ctxFiltro);
+    const abertasF = f(abertas), conclF = f(concl), arqF = f(arq), ativasF = [...abertasF, ...conclF];
     // Guarda os minutos digitados e o foco, para que atualizar um cartão não apague o que está em outro.
     const digitado = new Map([...raiz.querySelectorAll('[data-min]')].filter((i) => i.value).map((i) => [i.closest('[data-id]').dataset.id, i.value]));
     const foco = raiz.contains(document.activeElement) ? document.activeElement.closest('[data-id]')?.dataset.id : null;
-    let lista = todasAtivas;
-    if (aba === 'abertas') lista = abertas;
-    else if (aba === 'concluidas') lista = concl;
-    else if (aba === 'arquivadas') lista = arq;
+    // O mesmo para os controles de filtro: a busca mantém o foco e o cursor, os atalhos e a ordem mantêm o foco.
+    const ativo = raiz.contains(document.activeElement) ? document.activeElement : null;
+    const focoFiltro = !ativo ? null : (ativo.id === 'ma-busca' || ativo.id === 'ma-ordem') ? `#${ativo.id}`
+      : ativo.dataset?.atalho ? `[data-atalho="${ativo.dataset.atalho}"]` : ativo.dataset?.limpar !== undefined ? '[data-limpar]'
+        : ativo.dataset?.alternarOrdem !== undefined ? '[data-alternar-ordem]' : null;
+    const selecao = ativo?.id === 'ma-busca' ? [ativo.selectionStart, ativo.selectionEnd] : null;
+    const brutaDaAba = aba === 'abertas' ? abertas : aba === 'concluidas' ? concl : aba === 'arquivadas' ? arq : todasAtivas;
+    const lista = ordenar(f(brutaDaAba), filtro.ordem);
+    const contagens = contarAtalhos(brutaDaAba, filtro, ctxFiltro);
+    const chips = ATALHOS.filter((t) => contagens[t.id] || filtro.atalhos.includes(t.id));
 
     raiz.innerHTML = `
       <div class="cabeca linha entre" style="align-items:flex-start">
@@ -300,11 +318,21 @@ export async function minhasAcoes(raiz) {
         <button type="button" data-escopo-ac="minhas" aria-pressed="${escopo === 'minhas'}">Minhas</button>
         <button type="button" data-escopo-ac="secao" aria-pressed="${escopo === 'secao'}">Da seção (só leitura)</button></div>` : ''}
       <div class="linha abas-lista" style="margin:10px 0 16px;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn ${aba === 'ativas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="ativas">Todas ativas (${todasAtivas.length})</button>
-        <button type="button" class="btn ${aba === 'abertas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="abertas">Abertas (${abertas.length})</button>
-        <button type="button" class="btn ${aba === 'concluidas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="concluidas">Concluídas (${concl.length})</button>
-        <button type="button" class="btn ${aba === 'arquivadas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="arquivadas">Arquivadas (${arq.length})</button>
+        <button type="button" class="btn ${aba === 'ativas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="ativas">Todas ativas (${ativasF.length})</button>
+        <button type="button" class="btn ${aba === 'abertas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="abertas">Abertas (${abertasF.length})</button>
+        <button type="button" class="btn ${aba === 'concluidas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="concluidas">Concluídas (${conclF.length})</button>
+        <button type="button" class="btn ${aba === 'arquivadas' ? 'btn-sec' : 'btn-fantasma'} btn-mini" data-aba="arquivadas">Arquivadas (${arqF.length})</button>
       </div>
+      <div class="ma-filtros${ordemAberta ? ' abertos' : ''}" role="search" aria-label="Filtrar e ordenar as ações">
+        <div class="ma-busca"><label class="sr" for="ma-busca">Buscar nas ações</label>
+          <input id="ma-busca" type="search" value="${esc(filtro.q)}" placeholder="Buscar nas ações" title="Busca no título, no detalhe, no responsável e na seção; use várias palavras para refinar" autocomplete="off" enterkeyhint="search"></div>
+        <button type="button" class="btn btn-sec ma-alternar" data-alternar-ordem aria-expanded="${ordemAberta}" aria-controls="ma-ordem-campo">Ordenar</button>
+        <div class="ma-ordem" id="ma-ordem-campo"><label for="ma-ordem">Ordenar por</label>
+          <select id="ma-ordem">${ORDENS.map(([v, r]) => `<option value="${v}"${filtro.ordem === v ? ' selected' : ''}>${r}</option>`).join('')}</select></div>
+      </div>
+      ${chips.length ? `<div class="ma-atalhos" role="group" aria-label="Atalhos de atenção (mostra as ações que tenham qualquer um dos marcados)"><span class="ma-atalhos-rotulo">Atenção</span>${chips.map((t) =>
+        `<button type="button" class="ma-chip" data-atalho="${t.id}" aria-pressed="${filtro.atalhos.includes(t.id)}">${t.rotulo} <b class="num">${contagens[t.id]}</b></button>`).join('')}</div>` : ''}
+      ${filtrando() ? `<p class="ma-resultado suave pequeno" role="status">Mostrando <b>${lista.length}</b> de ${brutaDaAba.length}. <button type="button" class="btn btn-fantasma btn-mini" data-limpar>Limpar filtros</button></p>` : ''}
       ${lista.length ? lista.map((a) => `<article class="cartao acao${a.atrasada ? ' atrasada' : ''}" data-id="${a.id}">
         <header class="acao-topo">
           <div>
@@ -335,9 +363,14 @@ export async function minhasAcoes(raiz) {
               ${a.pode_excluir ? '<button type="button" class="btn btn-sec btn-mini perigo-texto" data-excluir>Excluir ação</button>' : ''}
             </div></details>` : ''}
         </footer>
-      </article>`).join('') : `<div class="cartao">${vazio('Nenhuma ação nesta visão', aba === 'arquivadas' ? 'Nenhuma ação arquivada.' : ehMembro && escopo === 'minhas' ? 'Quando o chefe atribuir uma ação a você, ou você criar uma, ela aparecerá aqui.' : `Quando ${oTopo()} ou você criarem ações, elas aparecerão aqui.`)}</div>`}`;
+      </article>`).join('') : `<div class="cartao">${filtrando() && brutaDaAba.length ? vazio('Nenhuma ação com esses filtros', 'Tente outra busca ou limpe os filtros.') : vazio('Nenhuma ação nesta visão', aba === 'arquivadas' ? 'Nenhuma ação arquivada.' : ehMembro && escopo === 'minhas' ? 'Quando o chefe atribuir uma ação a você, ou você criar uma, ela aparecerá aqui.' : `Quando ${oTopo()} ou você criarem ações, elas aparecerão aqui.`)}</div>`}`;
     for (const [id, v] of digitado) { const i = raiz.querySelector(`[data-id="${id}"] [data-min]`); if (i) i.value = v; }
     if (foco) raiz.querySelector(`[data-id="${foco}"] [data-min]`)?.focus({ preventScroll: true });
+    if (focoFiltro) {
+      const alvo = raiz.querySelector(focoFiltro) ?? (focoFiltro === '[data-limpar]' ? raiz.querySelector('#ma-busca') : null); // "Limpar" some ao limpar
+      alvo?.focus({ preventScroll: true });
+      if (selecao && alvo?.setSelectionRange) alvo.setSelectionRange(selecao[0], selecao[1]);
+    }
   };
 
   // Recarrega só os dados desta tela: a aba escolhida e os campos em edição continuam como estavam.
@@ -359,6 +392,28 @@ export async function minhasAcoes(raiz) {
     renderizar();
   });
   on(raiz, 'click', '[data-escopo-ac]', (el) => { escopo = el.dataset.escopoAc; renderizar(); });
+  // Filtros: a busca redesenha com um pequeno atraso (e devolve o foco e o cursor); atalhos, ordem e "Limpar", na hora.
+  on(raiz, 'input', '#ma-busca', (el, ev) => {
+    filtro.q = el.value;
+    if (ev.isComposing) return; // acentos e teclados com composição
+    clearTimeout(adiar);
+    adiar = setTimeout(renderizar, 150);
+  });
+  on(raiz, 'keydown', '#ma-busca', (el, ev) => {
+    if (ev.key === 'Escape' && el.value) { ev.preventDefault(); clearTimeout(adiar); filtro.q = ''; renderizar(); }
+  });
+  on(raiz, 'change', '#ma-ordem', (el) => {
+    filtro.ordem = el.value;
+    try { localStorage.setItem(CHAVE_ORDEM, el.value); } catch { /* segue sem lembrar */ }
+    renderizar();
+  });
+  on(raiz, 'click', '[data-atalho]', (el) => {
+    const id = el.dataset.atalho;
+    filtro.atalhos = filtro.atalhos.includes(id) ? filtro.atalhos.filter((x) => x !== id) : [...filtro.atalhos, id];
+    renderizar();
+  });
+  on(raiz, 'click', '[data-alternar-ordem]', () => { ordemAberta = !ordemAberta; renderizar(); });
+  on(raiz, 'click', '[data-limpar]', () => { clearTimeout(adiar); filtro.q = ''; filtro.atalhos = []; renderizar(); });
   on(raiz, 'click', '[data-validar]', async (el) => { try { await validarAcao(acaoDe(el).id); await recarregar(); } catch (e) { erro(e); } });
   on(raiz, 'click', '[data-aceitar]', async (el) => { try { await aceitarAcao(acaoDe(el).id); await recarregar(); } catch (e) { erro(e); } });
   on(raiz, 'click', '[data-devolver]', (el) => devolverAcao(acaoDe(el), recarregar));

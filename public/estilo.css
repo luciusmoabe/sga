@@ -1599,3 +1599,26 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
 }
 @media (max-width: 900px) { .menu-recolher { display: none; } }
 @media (prefers-reduced-motion: reduce) { .app, .menu-recolher svg { transition: none; } }
+
+/* ---------- Filtros de "Minhas ações" (public/js/filtro-acoes.js) ---------- */
+.ma-filtros { display: grid; grid-template-columns: minmax(0, 1fr) minmax(190px, 260px); gap: 10px 14px; align-items: end; margin: 0 0 10px; }
+.ma-filtros label:not(.sr) { display: block; font-size: .78rem; font-weight: 600; color: var(--muted); margin-bottom: 3px; }
+.ma-filtros input[type="search"], .ma-filtros select { width: 100%; }
+.ma-atalhos { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; overflow-x: auto; padding: 2px 0 6px; }
+.ma-atalhos-rotulo { flex: none; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.ma-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 4px 12px; border: 1px solid var(--line-str); border-radius: 999px; background: var(--card); color: var(--ink); font: inherit; font-size: .86rem; cursor: pointer; white-space: nowrap; }
+.ma-chip:hover { border-color: var(--green); background: var(--green-bg); }
+.ma-chip[aria-pressed="true"] { background: var(--green-bg); border-color: var(--green); font-weight: 700; }
+.ma-chip[aria-pressed="true"]::before { content: "\2713"; font-weight: 700; color: var(--green); }
+.ma-chip .num { min-width: 1.3em; text-align: center; padding: 0 5px; border-radius: 999px; background: var(--pale); font-size: .8rem; }
+.ma-resultado { margin: 0 0 12px; }
+.ma-alternar { display: none; }
+@media (max-width: 760px) {
+  /* A busca e os atalhos ficam à vista; a ordenação, atrás do botão "Ordenar" (como nas outras telas). */
+  .ma-filtros { grid-template-columns: minmax(0, 1fr) auto; }
+  .ma-alternar { display: inline-flex; align-items: center; min-height: 44px; }
+  .ma-alternar[aria-expanded="true"] { background: var(--green-bg); color: var(--ink-2); border-color: var(--ink-2); }
+  .ma-ordem { display: none; grid-column: 1 / -1; }
+  .ma-filtros.abertos .ma-ordem { display: block; }
+  .ma-chip { min-height: 44px; padding: 6px 14px; }
+}
