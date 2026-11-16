@@ -142,6 +142,8 @@ const menuConsulta = () => [['#Consulta'], ['acoes-centros', `Ações ${dosPlura
 // O Administrador tem acesso total às abas de Configuração.
 const MENU_ADMIN = MENU_GESTAO.map((m) => (m[0] === '#Organização' ? ['#Administração'] : m[0] === 'estrutura' ? ['estrutura', 'Configuração'] : m[0] === 'avisos' ? ['avisos', 'Avisos'] : m));
 const PERFIL = PERFIL_DA_EMPRESA;
+// O suplente (segundo Chefe da seção, marcado pelo servidor em `user.suplente`) aparece como "Suplente de seção", e não como "Chefe de seção".
+const rotuloDoPerfil = (u) => (u.suplente ? 'Suplente de seção' : PERFIL[u.perfil]);
 // Selos do menu, com a contagem que vem no bootstrap: pedidos de prazo pendentes (gestão) e ações recebidas
 // que a pessoa ainda não abriu (chefe e Diretoria Adjunta).
 const SELOS = { prazos: [['pedidos_pendentes'], 'pedidos de prazo pendentes'], 'minhas-acoes': [['acoes_novas', 'acoes_a_validar'], 'ações novas ou aguardando a sua validação'] };
@@ -313,7 +315,7 @@ function casca() {
     <nav class="menu" id="menu-principal" aria-label="Principal">${menu.map((m) => m[0].startsWith('#')
       ? `<div class="grupo"><b>${esc(m[0].slice(1))}</b></div>`
       : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}"><span class="menu-rotulo">${ICONES[m[0]] || ''}<span class="menu-texto">${esc(m[1])}</span></span>${selo(m[0])}</a>`).join('')}</nav>
-    <div class="usuario"><button type="button" class="usuario-mini" id="usuario-mini" aria-label="${esc(iniciais(u.nome))}, expandir o menu para ver a conta" title="Expandir o menu">${esc(iniciais(u.nome))}</button><div class="usuario-detalhe"><b>${esc(u.nome)}</b>${PERFIL[u.perfil]}${est.boot?.secao?.tipo === DIRETORIA_ADJUNTA ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}<br><span class="usuario-acoes">${temTutorial(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="tutorial-guiado">Tutorial</button>' : ''}${recebeAvisos(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="avisos-celular">Avisos no celular</button>' : ''}${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
+    <div class="usuario"><button type="button" class="usuario-mini" id="usuario-mini" aria-label="${esc(iniciais(u.nome))}, expandir o menu para ver a conta" title="Expandir o menu">${esc(iniciais(u.nome))}</button><div class="usuario-detalhe"><b>${esc(u.nome)}</b>${rotuloDoPerfil(u)}${est.boot?.secao?.tipo === DIRETORIA_ADJUNTA ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}<br><span class="usuario-acoes">${temTutorial(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="tutorial-guiado">Tutorial</button>' : ''}${recebeAvisos(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="avisos-celular">Avisos no celular</button>' : ''}${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
       <button class="btn btn-fantasma btn-mini oculto" id="instalar-app" style="margin-top:6px">Instalar aplicativo</button></div></div></aside>
     <main class="principal"><div id="trilho"></div><div id="conteudo"></div></main>
     ${cascaMovel(u, menu)}</div>`;
@@ -354,7 +356,7 @@ const iniciais = (nome) => {
 
 function cascaMovel(u, menu) {
   const abas = ABAS_MOVEL[['chefe', 'consulta', 'membro', 'plataforma'].includes(u.perfil) ? u.perfil : 'gestao'];
-  const rotuloPerfil = `${PERFIL[u.perfil]}${est.boot?.secao ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}`;
+  const rotuloPerfil = `${rotuloDoPerfil(u)}${est.boot?.secao ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}`;
   return `<header class="topo-movel">
       <img src="/imagens/logo-agilis.png" alt="Agilis" class="topo-movel-logo">
       <button type="button" class="topo-movel-conta" data-abrir-mais aria-label="${esc(iniciais(u.nome))}, conta e mais opções">${esc(iniciais(u.nome))}</button>

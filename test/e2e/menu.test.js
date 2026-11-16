@@ -62,3 +62,23 @@ test('menu: no celular não há botão de recolher', async (t) => {
   assert.equal(await p.$eval('#menu-recolher', (b) => getComputedStyle(b).display), 'none');
   assert.equal(await p.$eval('.menu', (e) => getComputedStyle(e.closest('.lateral')).display), 'none');
 });
+
+test('menu: o rótulo do perfil, no canto inferior esquerdo e na folha "Mais", mostra "Suplente de seção" para o suplente', async (t) => {
+  const app = await subir(t); if (!app) return;
+  await app.db.prepare('insert into usuarios (id, nome, email, perfil, secao_id) values (?,?,?,?,?)').run(41, 'Sílvia Duarte', 'silvia@exemplo.invalid', 'chefe', 1);
+  const rotulo = (p) => p.$eval('.usuario-detalhe', (e) => e.innerText);
+
+  const titular = await app.abrir(3, '#/inicio');
+  assert.match(await rotulo(titular), /Chefe de seção/);
+  assert.doesNotMatch(await rotulo(titular), /Suplente/);
+
+  const suplente = await app.abrir(41, '#/inicio');
+  const texto = await rotulo(suplente);
+  assert.match(texto, /Sílvia Duarte/);
+  assert.match(texto, /Suplente de seção/);
+  assert.doesNotMatch(texto, /Chefe de seção/);
+  assert.deepEqual(suplente.errosDaPagina, []);
+
+  const cel = await app.abrir(41, '#/inicio', { largura: 390, altura: 844, celular: true });
+  assert.match(await cel.$eval('.folha-conta', (e) => e.textContent), /Suplente de seção/);
+});

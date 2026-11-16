@@ -99,6 +99,26 @@ function cookie(req, nome) {
 // Enquanto a senha inicial não for trocada, só estas rotas respondem.
 const LIBERADAS_NA_TROCA = new Set(['GET /bootstrap', 'POST /auth/sair', 'POST /auth/trocar-senha']);
 
+const JUNTA_TITULAR = `left join secoes ts on ts.id = u.secao_id and ts.empresa_id = u.empresa_id
+  left join usuarios tt on tt.id = ts.chefe_id and tt.empresa_id = u.empresa_id and tt.ativo = 1 and tt.perfil = 'chefe'`;
+const COLUNAS_TITULAR = 'tt.id as titular_id, tt.ver_outros_centros as titular_ver_outros_centros, tt.acesso_configuracao as titular_acesso_configuracao';
+
+/**
+ * Chefe: marca `suplente` quando a seção tem outro chefe como titular (`secoes.chefe_id`, ativo) e herda dele as permissões por
+ * pessoa (`ver_outros_centros`, `acesso_configuracao`): o suplente enxerga o que o chefe imediato enxerga. O titular não herda do
+ * suplente, e sem titular ativo nada é herdado. Usa as colunas `titular_*` da própria consulta que carrega o usuário (sem ida
+ * extra ao banco) e não grava nada.
+ */
+export function completarChefe(linha) {
+  const { titular_id: titularId, titular_ver_outros_centros: titularVer, titular_acesso_configuracao: titularConfig, ...u } = linha;
+  u.suplente = u.perfil === 'chefe' && !!u.secao_id && titularId != null && titularId !== u.id;
+  if (u.suplente) {
+    u.ver_outros_centros = Number(u.ver_outros_centros) === 1 || Number(titularVer) === 1 ? 1 : 0;
+    u.acesso_configuracao = Number(u.acesso_configuracao) === 1 || Number(titularConfig) === 1 ? 1 : 0;
+  }
+  return u;
+}
+
 export function instalarAuth(app, db, config, provedor, contas) {
   const q1 = (sql, ...args) => db.prepare(sql).get(...args);
   const run = (sql, ...args) => db.prepare(sql).run(...args);
@@ -128,9 +148,9 @@ export function instalarAuth(app, db, config, provedor, contas) {
     app.use('/api', async (req, res, next) => {
       try {
         const valor = req.get('x-user-id') || '';
-        const u = /^\d+$/.test(valor) ? await q1('select u.* from usuarios u join empresas e on e.id = u.empresa_id where u.id = ? and u.ativo = 1 and e.ativa = 1', Number(valor)) : null;
-        if (!u) throw falha(401, 'Escolha um usuário para entrar.');
-        req.user = u;
+        const linha = /^\d+$/.test(valor) ? await q1(`select u.*, ${COLUNAS_TITULAR} from usuarios u join empresas e on e.id = u.empresa_id ${JUNTA_TITULAR} where u.id = ? and u.ativo = 1 and e.ativa = 1`, Number(valor)) : null;
+        if (!linha) throw falha(401, 'Escolha um usuário para entrar.');
+        req.user = completarChefe(linha);
         next();
       } catch (err) { next(err); }
     });
@@ -183,12 +203,13 @@ export function instalarAuth(app, db, config, provedor, contas) {
     try {
       const token = cookie(req, sessaoCookie);
       // Sessão e usuário numa só consulta: cada ida ao banco custa a latência da rede em toda requisição.
-      const linha = token ? await q1(`select s.id as sessao_id, s.csrf as sessao_csrf, s.expira_em as sessao_expira_em, s.criada_em as sessao_criada_em, u.*
-        from auth_sessoes_senha s join auth_contas i on i.id = s.conta_id join usuarios u on u.id = i.usuario_id join empresas e on e.id = u.empresa_id
+      const linha = token ? await q1(`select s.id as sessao_id, s.csrf as sessao_csrf, s.expira_em as sessao_expira_em, s.criada_em as sessao_criada_em, u.*, ${COLUNAS_TITULAR}
+        from auth_sessoes_senha s join auth_contas i on i.id = s.conta_id join usuarios u on u.id = i.usuario_id join empresas e on e.id = u.empresa_id ${JUNTA_TITULAR}
         where s.id = ? and s.expira_em > ? and i.projeto = ? and u.ativo = 1 and e.ativa = 1`,
       hash(token), segundos(), config.supabaseUrl) : null;
       if (!linha) throw falha(401, 'Entre com seu e-mail e senha.');
-      const { sessao_id, sessao_csrf, sessao_expira_em, sessao_criada_em, ...u } = linha;
+      const { sessao_id, sessao_csrf, sessao_expira_em, sessao_criada_em, ...resto } = linha;
+      const u = completarChefe(resto);
       const sessao = { id: sessao_id, csrf: sessao_csrf, expira_em: sessao_expira_em, criada_em: sessao_criada_em };
       if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)
         && (req.get('origin') !== config.origin || !igual(req.get('x-csrf-token'), sessao.csrf))) {

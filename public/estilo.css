@@ -1571,6 +1571,10 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
 @media (max-width: 900px) { .gestao-duas { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 760px) { .gestao-barra { grid-template-columns: 6rem minmax(0, 1fr) 1.6rem; } .gestao-barra > .suave { grid-column: 2 / -1; } }
 
+/* O bloco do usuário (nome, perfil, Tutorial, Sair) fica sempre visível no rodapé da lateral, mesmo quando o menu é mais alto que a tela. */
+@media (min-width: 901px) {
+  .lateral .usuario { position: sticky; bottom: -20px; margin-bottom: -20px; padding-bottom: 20px; background: var(--sidebar); z-index: 1; }
+}
 /* ---------- Menu retrátil (public/js/main.js, `ligarMenuRetratil`) ---------- */
 @media (min-width: 901px) {
   .app { transition: grid-template-columns .18s ease; }

@@ -23,7 +23,7 @@ Os nomes das telas e dos tipos de unidade podem variar por empresa (vocabulário
 7. **Redirecionar** uma ação para a própria seção ou subseções; **atribuir** um responsável; **validar** ou **devolver** o que um membro concluiu.
 8. **Histórico, Combinados e Atas:** consulta. Participantes registrados podem sugerir revisão em ata publicada.
 
-Se você tem um **suplente**, ele tem os mesmos poderes e responde na sua ausência.
+Se você tem um **suplente**, ele tem os mesmos poderes e responde na sua ausência. Ele vê os mesmos dados que você (inclusive a leitura das ações de todos os Centros e a Configuração, quando você tem esse acesso) e aparece no menu como **Suplente de seção**. Só não edita nem exclui as ações que você criou.
 
 ## Membro da equipe
 
