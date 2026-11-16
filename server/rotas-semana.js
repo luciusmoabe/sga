@@ -21,10 +21,13 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
         `select count(*) n from pedidos_prazo p join acoes a on a.id = p.acao_id
          where a.empresa_id = ? and p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and (${req.user.perfil === 'administrador' ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'})`, empresaAtual()),
       recebe ? arvore.then((ids) => q1(
-        `select count(*) n from acoes a where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and a.recebida_em is not null
-           and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
-           and not exists (select 1 from acao_vistas v where v.acao_id = a.id and v.usuario_id = ? and v.vista_em >= a.recebida_em)`,
-        empresaAtual(), ...ids, req.user.id))
+        `select count(*) n from acoes a where a.empresa_id = ? and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
+           and ((a.secao_id in (${marks(ids)}) and a.recebida_em is not null
+               and not exists (select 1 from acao_vistas v where v.acao_id = a.id and v.usuario_id = ? and v.vista_em >= a.recebida_em))
+             -- atribuída a ele por quem está acima, numa ação da seção-mãe (fora da árvore dele)
+             or (a.secao_id not in (${marks(ids)}) and a.responsavel_id = ? and a.atribuida_em is not null
+               and not exists (select 1 from acao_vistas v where v.acao_id = a.id and v.usuario_id = ? and v.vista_em >= a.atribuida_em)))`,
+        empresaAtual(), ...ids, req.user.id, ...ids, req.user.id, req.user.id))
         // O membro recebe a ação quando o chefe a atribui a ele: nova até ele abrir o detalhe.
         : req.user.perfil === 'membro' ? q1(
           `select count(*) n from acoes a where a.empresa_id = ? and a.responsavel_id = ? and a.atribuida_em is not null

@@ -19,7 +19,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     if (user.perfil === 'administrador') return { inner: '1 = 1', params: [] }; // o Administrador consulta tudo, inclusive ações internas
     if (!deSecao(user)) return { inner: '(a.interna = 0 or a.compartilhada = 1)', params: [] };
     const ids = user.secao_id ? await subarvore(db, user.secao_id) : [-1];
-    return { inner: `a.secao_id in (${marks(ids)})`, params: ids };
+    // Além da árvore da própria seção, a ação atribuída à pessoa é sempre dela: o responsável pode vir de uma subseção
+    // (`executoresDa`) e a ação ficar na seção-mãe, fora da árvore dele. Sem isto ele não a veria nem a executaria.
+    return { inner: `(a.secao_id in (${marks(ids)}) or a.responsavel_id = ?)`, params: [...ids, user.id] };
   };
   const daEmpresa = (inner, params) => ({ where: `a.empresa_id = ? and (${inner})`, params: [empresaAtual(), ...params] });
   const visiveisAcoes = async (user) => {
@@ -38,7 +40,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     if (user.perfil === 'consulta') return new Set(lista.map((a) => a.id));
     if (user.perfil !== 'chefe' || !user.ver_outros_centros) return new Set();
     const arvore = user.secao_id ? await subarvore(db, user.secao_id) : [];
-    return new Set(lista.filter((a) => !arvore.includes(a.secao_id)).map((a) => a.id));
+    return new Set(lista.filter((a) => !arvore.includes(a.secao_id) && a.responsavel_id !== user.id).map((a) => a.id)); // a atribuída a ele não é só leitura
   };
   const SEM_PERMISSOES = {
     pode_editar: false, pode_descrever: false, pode_mudar_prazo: false, pode_mudar_demanda: false, pode_excluir: false,
@@ -94,10 +96,12 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
    *  atribuiu a ele. Vazio se não chegou para ela. */
   const chegadaPara = (user, a, secoes) => {
     if (user.perfil === 'membro') return a.responsavel_id === user.id ? a.atribuida_em : null;
-    return secoes.includes(a.secao_id) ? a.recebida_em : null;
+    if (secoes.includes(a.secao_id)) return a.recebida_em;
+    // Ação de fora da árvore dele (da seção-mãe) que o chefe de cima atribuiu a ele: chega quando foi atribuída.
+    return a.responsavel_id === user.id ? a.atribuida_em : null;
   };
   const marcarNovas = async (user, lista) => {
-    const brutas = lista.filter((a) => emCurso(a) && (user.perfil === 'membro' ? a.atribuida_em && a.responsavel_id === user.id : a.recebida_em)); // sem nenhuma, nem consulta a árvore
+    const brutas = lista.filter((a) => emCurso(a) && (user.perfil === 'membro' ? a.atribuida_em && a.responsavel_id === user.id : a.recebida_em || (a.atribuida_em && a.responsavel_id === user.id))); // sem nenhuma, nem consulta a árvore
     const secoes = user.perfil !== 'membro' && brutas.length ? await secoesRecebidas(user) : [];
     const candidatas = brutas.filter((a) => chegadaPara(user, a, secoes)).map((a) => a.id);
     const vistas = candidatas.length
