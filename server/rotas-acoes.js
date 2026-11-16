@@ -444,8 +444,11 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const f = req.query;
     if (f.secao) {
       const ids = await subarvore(db, Number(f.secao));
-      where.push(`a.secao_id in (${marks(ids)})`);
-      params.push(...ids);
+      // `minhas=1` (telas do chefe e do membro, "Minhas ações" e Início): além da seção, as ações atribuídas a quem consulta, que
+      // podem ficar numa seção-mãe, fora da árvore dele. Sem isso o filtro por seção as esconderia.
+      const comMinhas = f.minhas === '1' && deSecao(req.user);
+      where.push(comMinhas ? `(a.secao_id in (${marks(ids)}) or a.responsavel_id = ?)` : `a.secao_id in (${marks(ids)})`);
+      params.push(...ids, ...(comMinhas ? [req.user.id] : []));
     }
     if (STATUS_OK.has(f.status)) { where.push('a.status = ?'); params.push(f.status); }
     if (f.origem === 'externa') where.push('a.demandante_externo is not null'); // demandas de entidades fora da subordinação ao Diretor

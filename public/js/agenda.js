@@ -53,7 +53,7 @@ export async function agenda(raiz) {
   // ---------- Filtros e índice por data ----------
   // "Só o que é meu": as tarefas atribuídas a mim (em qualquer ação) e, das ações, as da minha seção (a própria seção, não as
   // de fora) ou, para o membro, as que ele executa (atribuídas a ele ou criadas por ele).
-  const doFiltroAcao = (a) => mostrar !== 'tarefas' && (!soMinhas || (ehMembro ? !!a.pode_executar : a.secao_id === minhaSecao)) && (!secao || String(a.secao_id) === secao);
+  const doFiltroAcao = (a) => mostrar !== 'tarefas' && (!soMinhas || (ehMembro ? !!a.pode_executar : (a.secao_id === minhaSecao || a.responsavel_id === est.user.id))) && (!secao || String(a.secao_id) === secao);
   const doFiltroTarefa = (t) => mostrar !== 'acoes' && (!soMinhas || t.responsavel_id === est.user.id) && (!secao || String(t.secao_id) === secao);
   const visiveis = () => ({ as: acoes.filter(doFiltroAcao), ts: tarefas.filter(doFiltroTarefa) });
   const indice = () => {

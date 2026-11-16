@@ -193,7 +193,7 @@ export async function inicio(raiz, { refresh }) {
   const semana = est.boot.semana;
   // Só a seção do usuário (e as subordinadas): para o Administrador da Diretoria Adjunta, restringe à própria seção.
   const [up, abertas, { aviso }, concluidas, agendaEquipe, relatoEquipe] = await Promise.all([
-    get(`/atualizacao?semana=${semana}&resumo=1`), get(`/acoes?situacao=abertas&secao=${est.user.secao_id}`), get('/avisos/atual'),
+    get(`/atualizacao?semana=${semana}&resumo=1`), get(`/acoes?situacao=abertas&secao=${est.user.secao_id}&minhas=1`), get('/avisos/atual'),
     est.boot.acoes_a_validar ? get(`/acoes?situacao=concluidas&secao=${est.user.secao_id}`) : [],
     // A reunião da equipe tem agenda própria, com o mesmo trilho da reunião da instituição (só para o chefe da seção).
     est.user.perfil === 'chefe' ? get('/reunioes-equipe/agenda').catch(() => null) : null,
@@ -245,7 +245,8 @@ export async function minhasAcoes(raiz) {
   if (!est.user.secao_id) return semSecao(raiz);
   // Só a seção do usuário (e as subordinadas). Para o chefe é o mesmo que ele já enxerga; para o Administrador
   // da Diretoria Adjunta, que enxerga todas as seções, restringe a tela à própria seção.
-  const daSecao = `&secao=${est.user.secao_id}`;
+  // `minhas=1`: junto com a seção, as ações atribuídas a mim que estão na seção-mãe (fora da minha árvore).
+  const daSecao = `&secao=${est.user.secao_id}&minhas=1`;
   const buscar = () => Promise.all([
     get(`/acoes?situacao=abertas${daSecao}`),
     get(`/acoes?situacao=concluidas${daSecao}`),

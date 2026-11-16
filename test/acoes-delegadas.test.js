@@ -98,3 +98,14 @@ test('a ação delegada aparece também nas tarefas e nada muda para quem já a 
   // O Diretor segue vendo a ação como sempre.
   assert.ok((await lista(DIRETOR)).some((x) => x.id === id));
 });
+
+test('filtro por seção das telas do chefe e do membro: com minhas=1 inclui as atribuídas a quem consulta, sem isso não', async (t) => {
+  const { call, criar } = await demo(t);
+  const id = await criar('Ação da seção-mãe atribuída à subseção', MARINA);
+  const ids = async (uid, qs) => (await call(uid, 'GET', `/acoes?situacao=abertas&secao=${IND}${qs}`)).data.map((a) => a.id);
+  assert.ok(!(await ids(MARINA, '')).includes(id), 'sem minhas=1, o filtro por seção continua restrito à seção');
+  assert.ok((await ids(MARINA, '&minhas=1')).includes(id), 'com minhas=1, a ação atribuída a ela entra');
+  assert.ok((await ids(GABRIELA_IND, '&minhas=1')).every((x) => x !== id), 'não vale para quem não é o responsável');
+  // Quem não é da seção (gestão) não ganha nada com o parâmetro: o filtro segue exato.
+  assert.ok(!(await ids(DIRETOR, '&minhas=1')).includes(id));
+});
