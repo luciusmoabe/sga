@@ -122,7 +122,7 @@ Impedimentos são histórico: não se editam nem se apagam. Para corrigir, resol
 
 ### Lição A8: equipe e reunião
 
-1. **Minha equipe**: cadastre membros, defina quem é Membro ou Suplente (o suplente tem os mesmos poderes seus), desative ou redefina senha.
+1. **Minha equipe**: cadastre membros, **exclua** um cadastro feito por engano (só quem nunca deixou histórico; senão, Desativar), defina quem é Membro ou Suplente (o suplente tem os mesmos poderes seus), desative ou redefina senha.
 2. **Combinados** e **Reuniões e atas**: consulte o que foi definido. Quem participou pode sugerir revisão numa ata enviada.
 3. **Configuração da reunião** e a reunião da equipe: se você reúne sua própria equipe, o fluxo é o mesmo da reunião do Diretor (veja a Trilha D, lição D5, na instância "equipe").
 

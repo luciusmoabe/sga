@@ -38,7 +38,7 @@ function licoes() {
     L.push(
       { id: 'inicio', titulo: 'Sua semana, no Início', resumo: 'O que falta fazer antes da reunião.', passos: [
         { rota: '#/inicio', alvo: '.sua-semana', titulo: 'Sua semana', texto: 'Este cartão lista <b>o que falta antes da reunião</b>: a atualização, ações atrasadas, ações novas, validações e o que vence antes da reunião. Cada item leva direto à tela que resolve.' },
-        { rota: '#/inicio', alvo: ['.atencao-quadro', '.novas-quadro'], titulo: 'Quadros de atenção', texto: 'Quando houver, aparecem aqui <b>Chegaram para você</b> (ações novas, inclusive as que um chefe de cima atribuiu a você; a sigla mostra de qual seção vieram), <b>Aguardando sua validação</b> e <b>Precisa de atenção</b> (atrasadas ou sem movimento há 7 dias), com botões rápidos de status e tempo.' },
+        { rota: '#/inicio', alvo: ['.atencao-quadro', '.novas-quadro'], titulo: 'Quadros de atenção', texto: 'Quando houver, aparecem aqui <b>Chegaram para você</b> (ações novas, inclusive as que um chefe de cima atribuiu a você; a sigla mostra de qual seção vieram), <b>Aguardando sua validação</b> e <b>Precisa de atenção</b> (atrasadas, sem movimento há 7 dias ou com prazo até a reunião em que serão tratadas: a <b>da organização</b>, para o que o Diretor demandou, ou a <b>da equipe</b>, para o que você trata com ela; o alerta diz qual e quando), com botões rápidos de status e tempo.' },
         { rota: '#/inicio', alvo: '#trilho', titulo: 'A linha do tempo da semana', texto: 'Mostra a reunião, o lembrete (sexta, 15h) e o <b>fechamento: segunda, 18h</b>. Da sexta até a reunião, uma <b>faixa amarela</b> no alto das telas lembra a atualização, e fica vermelha depois do prazo.' },
       ] },
       { id: 'gestao', titulo: 'Painel de gestão', resumo: 'O painel para liderar a equipe da semana.', passos: [
@@ -66,7 +66,7 @@ function licoes() {
         { rota: '#/atualizacao', alvo: '#obs', titulo: 'Observações e envio', texto: `Acrescente o que ${oTopo()} precisa saber e envie. Se algo mudar depois, a tela avisa que o relato está <b>desatualizado</b>: envie de novo (cria nova versão; o histórico fica em <b>Histórico</b>).` },
       ] },
       { id: 'equipe', titulo: 'Sua equipe e as reuniões', resumo: 'Membros, combinados e atas.', passos: [
-        { rota: '#/equipe', alvo: '#conteudo .cabeca', titulo: 'Minha equipe', texto: 'Cadastre os membros da seção, escolha quem é <b>Membro</b> ou <b>Suplente</b> (o suplente tem os mesmos poderes que você), desative quem sair e redefina senhas.' },
+        { rota: '#/equipe', alvo: '#conteudo .cabeca', titulo: 'Minha equipe', texto: 'Cadastre os membros da seção, escolha quem é <b>Membro</b> ou <b>Suplente</b> (o suplente tem os mesmos poderes que você), desative quem sair (a pessoa continua nos registros, com o nome) e redefina senhas. <b>Excluir</b> só vale para quem nunca deixou histórico, como um cadastro feito por engano.' },
         { rota: '#/combinados', alvo: '#conteudo .cabeca', titulo: 'Combinados', texto: 'Os acordos lembrados na abertura das reuniões. Você consulta aqui o que está valendo.' },
         { rota: '#/atas', alvo: '#conteudo .cabeca', titulo: 'Reuniões e atas', texto: 'As atas enviadas ficam aqui. Quem participou pode <b>sugerir revisão</b>. Para reunir a sua própria equipe, use o seletor de <b>equipe</b> no alto da tela.' },
       ] },

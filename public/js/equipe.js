@@ -1,7 +1,7 @@
 // Minha equipe: o chefe cadastra, consulta, define o perfil (membro ou suplente) e desativa os membros da equipe da própria seção (e das subseções).
 // O membro lê as ações da seção e executa só as que o chefe atribuiu a ele ou que ele criou; a validação do que ele conclui é do chefe.
 import { aoTopo, oTopo } from './vocab.js';
-import { get, patch, post } from './api.js';
+import { del, get, patch, post } from './api.js';
 import { est } from './estado.js';
 import { TAM_SENHA } from './regras.js';
 import { abrirForm, confirmar, esc, on, plural, toast, vazio } from './ui.js';
@@ -42,7 +42,8 @@ export async function equipe(raiz, { refresh }) {
         <td data-rotulo="Situação">${situacao(m)}</td>
         <td><div class="linha" style="gap:6px;flex-wrap:wrap">${m.ativo
     ? '<button type="button" class="btn btn-fantasma btn-mini" data-perfil>Mudar perfil</button><button type="button" class="btn btn-fantasma btn-mini" data-senha>Redefinir senha</button><button type="button" class="btn btn-fantasma btn-mini" data-desativar>Desativar</button>'
-    : '<button type="button" class="btn btn-sec btn-mini" data-reativar>Reativar</button>'}</div></td></tr>`).join('')}
+    : '<button type="button" class="btn btn-sec btn-mini" data-reativar>Reativar</button>'}${m.perfil === 'membro'
+    ? '<button type="button" class="btn btn-fantasma btn-mini perigo-texto" data-excluir>Excluir</button>' : ''}</div></td></tr>`).join('')}
       </tbody></table></div></div>`
     : `<div class="cartao">${vazio('Nenhum membro na equipe', 'Cadastre as pessoas da sua equipe para atribuir ações a elas.')}</div>`}`;
 
@@ -103,6 +104,17 @@ export async function equipe(raiz, { refresh }) {
     });
     if (!ok) return;
     try { await patch(`/equipe/${m.id}`, { ativo: false }); toast('Acesso desativado.'); await refresh(); } catch (e) { erro(e); }
+  });
+  // Excluir só vale para quem nunca deixou histórico (ações, tempo, comentários…); com histórico o servidor recusa e orienta a desativar.
+  on(raiz, 'click', '[data-excluir]', async (el) => {
+    const m = membroDe(el);
+    const ok = await confirmar({
+      titulo: 'Excluir membro',
+      texto: `<b>${esc(m.nome)}</b> será excluído para sempre, com o login. Só é possível se a pessoa não tem histórico no sistema (ações, tempo, comentários); se tiver, use <b>Desativar</b>, que preserva o nome nos registros.`,
+      rotulo: 'Excluir membro', perigo: true,
+    });
+    if (!ok) return;
+    try { await del(`/equipe/${m.id}`); toast('Membro excluído.'); await refresh(); } catch (e) { erro(e); }
   });
   on(raiz, 'click', '[data-reativar]', async (el) => {
     try { await patch(`/equipe/${membroDe(el).id}`, { ativo: true }); toast('Acesso reativado.'); await refresh(); } catch (e) { erro(e); }

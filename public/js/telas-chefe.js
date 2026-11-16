@@ -5,10 +5,11 @@ import { abrirAlterarReuniao } from './reuniao-data.js';
 import { agendaComoBoot } from './agenda-equipe.js';
 import { agora, est } from './estado.js';
 import {
-  $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, seloNova, STATUS, tempoRestante, textoEtapa, toast, trilho, vazio,
+  $, abrirForm, addDias, br, brCurto, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, seloNova, STATUS, tempoRestante, textoEtapa, toast, trilho, vazio,
 } from './ui.js';
 import { aceitarAcao, abrirAcao, abrirEditarAcao, abrirNovoImpedimento, aceitaImpedimento, devolverAcao, lerOrigem, ligarOrigem, origemCamposHTML, validarAcao } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
+import { nomeDaReuniao, reuniaoDaAcao } from './reuniao-da-acao.js';
 import { dataNoFuso, diasEntre, instante } from './datas.js';
 import { relatoHTML } from './telas-diretor.js';
 
@@ -46,14 +47,21 @@ const selosDaAcao = (a) => {
   return `${itens.slice(0, MAX).join(' ')}<details class="selos-mais"><summary class="pilula" title="Mostrar os demais selos">+${itens.length - MAX}</summary><div class="selos-resto">${itens.slice(MAX).join(' ')}</div></details>`;
 };
 
+/** Dia da semana e data de uma reunião: "segunda, 23/11". O Início tem a reunião da organização (a do Diretor) e a da equipe;
+ *  "a reunião" sozinha confundia, e a data pode ter sido alterada (Alterar a data). */
+const diaEData = (data) => `${diaSemana(data)}, ${brCurto(data)}`;
+/** Contexto que decide em qual reunião cada ação é tratada (ver `reuniao-da-acao.js`). */
+const contextoDeReuniao = (semana, agendaEquipe) => ({ semana, semanaEquipe: agendaEquipe?.semana ?? null, hoje: est.boot.hoje, usuarioId: est.user.id, secaoId: est.user.secao_id });
+
 /** Ações em aberto que pedem um gesto do chefe, cada uma pelo motivo mais urgente: atrasada, sem atualização
- *  há DIAS_SEM_MOVIMENTO dias ou mais, ou com prazo até o dia da reunião. */
-function itensAtencao(abertas, semana) {
+ *  há DIAS_SEM_MOVIMENTO dias ou mais, ou com prazo até o dia da reunião em que ela será tratada (a da organização ou a da equipe). */
+function itensAtencao(abertas, ctx) {
   const hoje = est.boot.hoje;
   const motivo = (a) => {
     if (a.atrasada) return { ordem: 0, texto: `Atrasada desde ${br(a.prazo)}`, classe: 'ruim' };
     if (a.parada) return { ordem: 1, texto: `Sem atualização há ${diasSemMovimento(a)} dias`, classe: 'atencao' };
-    if (a.prazo >= hoje && a.prazo <= semana) return { ordem: 2, texto: `Vence em ${br(a.prazo)}, até a reunião`, classe: 'atencao' };
+    const r = reuniaoDaAcao(a, ctx);
+    if (a.prazo >= hoje && a.prazo <= r.data) return { ordem: 2, texto: `Vence em ${br(a.prazo)}, até a reunião ${nomeDaReuniao(r)} (${diaEData(r.data)})`, classe: 'atencao' };
     return null;
   };
   return abertas.map((a) => ({ a, m: motivo(a) })).filter((x) => x.m)
@@ -69,13 +77,13 @@ const botoesRapidos = (a) => {
     <button type="button" class="btn btn-fantasma btn-mini" data-rapido-abrir>Abrir</button>`;
 };
 
-function quadroAtencaoHTML(abertas, semana) {
-  const itens = itensAtencao(abertas, semana);
+function quadroAtencaoHTML(abertas, ctx) {
+  const itens = itensAtencao(abertas, ctx);
   const MAX = 6;
   return `<aside class="atencao-quadro" aria-labelledby="atencao-titulo">
     <p class="atencao-sobre">Um momento para atualizar</p>
     <h2 id="atencao-titulo">Precisa de atenção</h2>
-    ${itens.length ? `<p class="atencao-lead">Estas ações estão atrasadas, vencem até a reunião ou estão há algum tempo sem andamento registrado. Atualizar o status mantém ${oTopo()} a par antes da reunião.</p>
+    ${itens.length ? `<p class="atencao-lead">Estas ações estão atrasadas, vencem até a reunião em que serão tratadas (${ctx.semanaEquipe ? `a da equipe, ${diaEData(ctx.semanaEquipe)}, ou a da organização, ${diaEData(ctx.semana)}` : `a da organização, ${diaEData(ctx.semana)}`}) ou estão há algum tempo sem andamento registrado. Atualizar o status mantém ${oTopo()} a par antes da reunião.</p>
       <ul class="atencao-lista">${itens.slice(0, MAX).map(({ a, m }) => `<li data-atencao="${a.id}">
         <div class="atencao-item-titulo">${esc(a.titulo)}</div>
         <div class="pequeno"><span class="${m.classe}">${m.texto}</span> · ${pilulaStatus(a)}</div>
@@ -148,12 +156,17 @@ function quadroValidarHTML(lista) {
 
 // ---------- Sua semana ----------
 /** O que falta fazer antes da reunião, num só lugar: cada item mostra se está em dia e leva ao que resolve. O de cima é o que vence primeiro. */
-function suaSemanaHTML({ up, semana, abertas, aValidar, atrasadas }) {
+function suaSemanaHTML({ up, semana, abertas, aValidar, atrasadas, ctx }) {
   const veespera = addDias(semana, -1);
   const fechamento = instante(`${veespera}T${String(HORA_FECHAMENTO).padStart(2, '0')}:00:00`).getTime();
   const agoraMs = agora().getTime();
   const novas = abertas.filter((a) => a.nova).length;
-  const antesDaReuniao = abertas.filter((a) => !a.atrasada && a.prazo < semana).length;
+  // Cada ação conta para a reunião em que será tratada (a da organização ou a da equipe).
+  const antes = abertas.filter((a) => !a.atrasada).map((a) => ({ a, r: reuniaoDaAcao(a, ctx) })).filter(({ a, r }) => a.prazo < r.data);
+  const deTipo = (tipo) => antes.filter(({ r }) => r.tipo === tipo).length;
+  const antesDaReuniao = antes.length;
+  const textoAntes = [['organizacao', semana], ['equipe', ctx.semanaEquipe]].filter(([tipo]) => deTipo(tipo))
+    .map(([tipo, data]) => `${plural(deTipo(tipo), 'ação vence', 'ações vencem')} antes da reunião ${nomeDaReuniao({ tipo })} (${diaEData(data)})`).join(' · ');
   const prazo = `${diaSemana(veespera)}, ${br(veespera)}, às ${HORA_FECHAMENTO}h`;
   const itens = [
     { feito: !!up.atual,
@@ -163,7 +176,7 @@ function suaSemanaHTML({ up, semana, abertas, aValidar, atrasadas }) {
     { feito: !atrasadas, texto: atrasadas ? `${plural(atrasadas, 'ação atrasada', 'ações atrasadas')} para resolver` : 'Nenhuma ação atrasada', link: '#/minhas-acoes', rotulo: 'Ver ações' },
     { feito: !novas, texto: novas ? `${plural(novas, 'ação nova', 'ações novas')} ainda não aberta${novas === 1 ? '' : 's'}` : 'Nenhuma ação nova por abrir', link: '#/minhas-acoes', rotulo: 'Abrir' },
     { feito: !aValidar.length, texto: aValidar.length ? `${plural(aValidar.length, 'ação concluída', 'ações concluídas')} pela equipe para validar` : 'Nada aguardando a sua validação', link: '#/minhas-acoes', rotulo: 'Validar' },
-    { feito: !antesDaReuniao, texto: antesDaReuniao ? `${plural(antesDaReuniao, 'ação vence', 'ações vencem')} antes da reunião` : 'Nada vence antes da reunião', link: '#/minhas-acoes', rotulo: 'Ver ações' },
+    { feito: !antesDaReuniao, texto: antesDaReuniao ? textoAntes : 'Nada vence antes da reunião', link: '#/minhas-acoes', rotulo: 'Ver ações' },
   ];
   const emDia = itens.filter((i) => i.feito).length;
   const classe = !up.atual && agoraMs >= fechamento ? ' encerrado' : !up.atual && fechamento - agoraMs < 24 * 3600000 ? ' urgente' : '';
@@ -202,6 +215,7 @@ export async function inicio(raiz, { refresh }) {
     // A seção que tem chefe acima relata também para a reunião dele (resumo: só o que já foi enviado).
     est.user.perfil === 'chefe' && est.boot.secao?.tipo === 'subsecao' ? get('/reunioes-equipe/atualizacao?resumo=1').catch(() => null) : null,
   ]);
+  const ctx = contextoDeReuniao(semana, agendaEquipe);
   const aValidar = concluidas.filter((a) => a.aguardando_validacao === 'chefe' || (a.aguardando_validacao === 'demandante' && a.pode_aceitar_demanda));
   const atrasadas = abertas.filter((a) => a.atrasada).length;
   const vencendo = abertas.filter((a) => !a.atrasada && a.prazo <= addDias(est.boot.hoje, 2)).length;
@@ -214,7 +228,7 @@ export async function inicio(raiz, { refresh }) {
     ${quadroNovasHTML(abertas)}
     ${quadroValidarHTML(aValidar)}
     <div class="inicio-grade"><div class="inicio-principal">
-    ${suaSemanaHTML({ up, semana, abertas, aValidar, atrasadas })}
+    ${suaSemanaHTML({ up, semana, abertas, aValidar, atrasadas, ctx })}
     <div class="espaco"></div>
     <div class="grade" style="grid-template-columns:repeat(4,1fr)">
       <div class="cartao"><div class="suave pequeno">Ações abertas</div><div style="font-family:var(--head);font-weight:650;font-size:2rem" class="num">${abertas.length}</div></div>
@@ -228,7 +242,7 @@ export async function inicio(raiz, { refresh }) {
         <td><b>${esc(a.titulo)}</b>${a.demandada_diretor ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">Demandada ${peloTopo()} em ${br(a.demandado_em || a.criada_em)}</div>` : a.demandada_chefe ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">Demandada por ${esc(a.demandado_por_nome || 'o chefe da seção acima')} em ${br(a.demandado_em || a.criada_em)}</div>` : ''}</td>
         <td class="num">${br(a.prazo)}</td><td>${pilulaStatus(a)}</td></tr>`).join('')}</tbody></table>`
         : vazio('Nenhuma ação em aberto', `Quando ${oTopo()} direcionar algo, aparecerá aqui.`)}</div>
-    </div>${quadroAtencaoHTML(abertas, semana)}</div>`;
+    </div>${quadroAtencaoHTML(abertas, ctx)}</div>`;
   ligarAtencao(raiz, abertas, refresh);
   if (agendaEquipe) {
     on(raiz, 'click', '[data-alterar-reuniao]', () => abrirAlterarReuniao(agendaComoBoot(agendaEquipe), () => refresh(), { salvar: (corpo) => put('/reunioes-equipe/agenda', corpo) }));

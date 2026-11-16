@@ -20,7 +20,7 @@ Os nomes das telas e dos tipos de unidade podem variar por empresa (vocabulário
 4. **Minhas ações:** abra a ação para mudar o status, registrar o **tempo em minutos**, comentar, criar tarefas e registrar impedimentos. *Concluir exige tempo maior que zero.*
 5. **Pedir novo prazo:** em ação criada por outra pessoa, use o pedido de prazo e aguarde a decisão.
 6. **Minha atualização:** confira o relato montado automaticamente, acrescente observações e envie até a **segunda, 18h**. Se algo mudar depois, a tela avisa que o relato está desatualizado; enviar de novo cria nova versão.
-7. **Minha equipe:** cadastre membros, desative ou reative e redefina senhas.
+7. **Minha equipe:** cadastre membros, desative ou reative, redefina senhas e **exclua** um cadastro feito por engano (só quem nunca deixou histórico: com ações, tempo ou comentários, use Desativar; suplentes e chefes de subseção também saem por Desativar).
 8. **Redirecionar** uma ação para a própria seção ou subseções; **atribuir** um responsável; **validar** ou **devolver** o que um membro concluiu.
 9. **Histórico, Combinados e Atas:** consulta. Participantes registrados podem sugerir revisão em ata publicada.
 

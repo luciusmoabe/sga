@@ -10,6 +10,7 @@ const ESPERADAS = [
   'DELETE /api/reunioes/:id/decisoes/:decisaoId',
   'DELETE /api/secoes/:id',
   'DELETE /api/usuarios/:id',
+  'DELETE /api/equipe/:id',
   'GET /api/acoes',
   'GET /api/acoes/:id',
   'GET /api/acoes/:id/executores',

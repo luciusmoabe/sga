@@ -36,15 +36,14 @@ export async function editarHierarquia(db, id, dados, { niveis = 3, nomeAdjunta 
   await db.prepare('update secoes set tipo=?,pai_id=? where id=? and empresa_id=?').run(tipo,pai,id,empresaAtual());
 }
 
-export async function excluirCadastro(db, tabela, id) {
-  try {
-    return await db.transaction(async()=>{
-      const row=await db.prepare(`select * from ${tabela} where id=? and empresa_id=?`).get(id, empresaAtual());
-      if(!row) throw falha(404,'Cadastro não encontrado.');
-      if(tabela==='usuarios') {
-        if(row.perfil==='diretor') throw falha(409,'Não é possível excluir a conta {topo:do}.');
-        if(row.perfil==='administrador') throw falha(409,'O Administrador não pode ser excluído por aqui.');
-        const referencias = [
+/**
+ * Tudo o que aponta para um usuário e é HISTÓRICO: com qualquer um desses registros a conta não é excluída (use Desativar, que
+ * preserva a autoria). Inclui as ações (criadas, atribuídas, sob responsabilidade, validadas), as tarefas, o tempo, os comentários,
+ * os impedimentos e os pontos de atenção. `test/exclusao-usuario.test.js` compara esta lista com o esquema e reprova se uma coluna
+ * de usuário nova ficar de fora (ou fora de `LIMPEZA_NA_EXCLUSAO`).
+ * @type {[string, string, string][]} [tabela, coluna, como aparece na mensagem]
+ */
+export const REFERENCIAS_DE_USUARIO = [
           ['acoes','criado_por','ações criadas'],
           ['diretrizes','criado_por','diretrizes'],
           ['acao_comentarios','usuario_id','comentários'],
@@ -75,7 +74,29 @@ export async function excluirCadastro(db, tabela, id) {
           ['acoes','responsavel_id','ações sob sua responsabilidade'],
           ['acoes','atribuido_por','ações que atribuiu'],
           ['acoes','validada_chefe_por','validações de ações'],
-        ];
+          ['pontos_atencao','criado_por','pontos de atenção registrados'],
+          ['pontos_atencao','situacao_por','pontos de atenção ativados ou inativados'],
+          ['atualizacoes_equipe','usuario_id','relatos semanais da equipe'],
+          ['avisos','criado_por','avisos'],
+          ['secao_combinados','criado_por','combinados da seção'],
+          ['secao_cabecalho_ata','alterado_por','cabeçalhos de ata da seção'],
+          ['reuniao_equipe_revisoes','criado_por','versões publicadas de ata da equipe'],
+          ['reuniao_equipe_sugestoes','usuario_id','sugestões de revisão de ata da equipe'],
+          ['reuniao_equipe_sugestoes','respondida_por','respostas a sugestões de ata da equipe'],
+];
+
+/** O que aponta para o usuário mas NÃO é histórico: sai junto com a conta (login, sessões, aparelhos com aviso e lembretes enviados). */
+export const LIMPEZA_NA_EXCLUSAO = ['auth_contas.usuario_id', 'auth_identidades.usuario_id', 'push_assinaturas.usuario_id', 'lembretes_enviados.usuario_id'];
+
+export async function excluirCadastro(db, tabela, id) {
+  try {
+    return await db.transaction(async()=>{
+      const row=await db.prepare(`select * from ${tabela} where id=? and empresa_id=?`).get(id, empresaAtual());
+      if(!row) throw falha(404,'Cadastro não encontrado.');
+      if(tabela==='usuarios') {
+        if(row.perfil==='diretor') throw falha(409,'Não é possível excluir a conta {topo:do}.');
+        if(row.perfil==='administrador') throw falha(409,'O Administrador não pode ser excluído por aqui.');
+        const referencias = REFERENCIAS_DE_USUARIO;
         const historico=[];
         for (const [origem,coluna,rotulo] of referencias) {
           const {n}=await db.prepare(`select count(*) /*global*/ as n from ${origem} where ${coluna}=?`).get(id);
@@ -87,6 +108,7 @@ export async function excluirCadastro(db, tabela, id) {
         await db.prepare('update secoes set chefe_id=null where chefe_id=? and empresa_id=?').run(id, empresaAtual());
         // Aparelhos com avisos no celular não são histórico: saem junto com a conta.
         await db.prepare('delete from push_assinaturas where usuario_id=? and empresa_id=?').run(id, empresaAtual());
+        await db.prepare('delete from lembretes_enviados where usuario_id=? and empresa_id=?').run(id, empresaAtual());
         await db.prepare('delete from auth_sessoes_senha where conta_id in (select id from auth_contas where usuario_id=?)').run(id);
         await db.prepare('delete from auth_contas where usuario_id=?').run(id);
         await db.prepare('delete from auth_sessoes where identidade_id in (select id from auth_identidades where usuario_id=?)').run(id);

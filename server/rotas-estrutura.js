@@ -357,6 +357,24 @@ export function rotasEstrutura(app, { db, q, q1, run, agoraISO, auth, adminAuth,
     });
     return membroOut(await q1(`${MEMBRO_DA_EQUIPE} where u.id = ? and u.empresa_id = ?`, id, empresaAtual()));
   }));
+  // Excluir um membro da equipe: só quem nunca deixou histórico (a mesma proteção de `excluirCadastro`: ações, tempo, comentários,
+  // ciência, relatos… ficam com o nome da pessoa; nesses casos, o caminho é Desativar). Suplentes e chefes de subseção continuam com
+  // {topo:o} e o Administrador. Apaga também a conta de login remota, para o e-mail poder ser cadastrado de novo.
+  app.delete('/api/equipe/:id', permit('chefe', 'administrador'), h(async (req) => {
+    if (!req.user.secao_id) semSecao();
+    const id = Number(req.params.id);
+    if (id === req.user.id) throw falha(409, 'Você não exclui a própria conta.');
+    const alvo = await alvoDaEquipe(req.user, id);
+    if (!alvo) throw falha(404, 'Pessoa não encontrada na sua equipe.');
+    if (alvo.papel !== 'membro') throw falha(409, 'Por aqui só se exclui membro da equipe. Para tirar um suplente ou o chefe de uma subseção da equipe, use Desativar.');
+    const contas = auth.mode === 'supabase' ? await q('select subject from auth_contas where usuario_id = ?', id) : [];
+    const resultado = await excluirCadastro(db, 'usuarios', id); // 409 com o histórico, se houver
+    const remoto = adminAuth || administradorAuth(auth);
+    for (const c of contas) {
+      try { await remoto.remover(c.subject); } catch { /* a conta remota fica sem vínculo no sistema; não impede a exclusão */ }
+    }
+    return resultado;
+  }));
   app.delete('/api/usuarios/:id', permit('diretor', 'administrador'), h(req => excluirCadastro(db,'usuarios',Number(req.params.id))));
   app.delete('/api/secoes/:id', permitConfiguracao, h(req => excluirCadastro(db,'secoes',Number(req.params.id))));
 }
