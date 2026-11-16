@@ -55,7 +55,7 @@ const api = async (uid, metodo, caminho, corpo) => {
 };
 
 // ---------------------------------------------------------------- 2. as telas
-const DIRETOR = 1, CHEFE_COF = 4;
+const DIRETOR = 1, CHEFE_CPE = 3, CHEFE_COF = 4;
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 const clicarTexto = (p, sel, txt) => p.evaluate((s, t) => { const e = [...document.querySelectorAll(s)].find((x) => x.offsetParent !== null && x.textContent.trim().includes(t)); if (e) e.click(); return !!e; }, sel, txt);
 const ficha = (await api(CHEFE_COF, 'GET', '/acoes')).dados.find((a) => a.status !== 'concluida');
@@ -86,6 +86,12 @@ const TELAS = [
   ['27-pedir-prazo', CHEFE_COF, '#/minhas-acoes', { depois: (p) => clicarTexto(p, 'button', 'Pedir novo prazo') }],
   ['28-nova-acao', CHEFE_COF, '#/minhas-acoes', { depois: (p) => clicarTexto(p, 'button, a', 'Nova ação') }],
   ['29-avisos-celular', CHEFE_COF, '#/inicio', { permissoes: true, depois: (p) => p.click('#avisos-celular') }],
+  // O CPE tem subseções: é o chefe que direciona ações a elas e que tem o Painel de gestão mais cheio.
+  ['32-chefe-gestao', CHEFE_CPE, '#/gestao', { altura: 1500 }],
+  ['33-chefe-direcionar', CHEFE_CPE, '#/direcionar'],
+  ['34-menu-recolhido', CHEFE_COF, '#/inicio', { largura: 1100, altura: 640, recorte: false, depois: (p) => p.click('#menu-recolher') }],
+  // O tutorial só oferece o convite na primeira visita: esta captura é a única que o deixa aparecer e o abre na primeira lição.
+  ['35-tutorial', CHEFE_COF, '#/inicio', { largura: 1280, altura: 760, recorte: false, convite: true, depois: async (p) => { await p.click('[data-tut="lista"]'); await esperar(400); await p.click('[data-tut="licao"][data-id="inicio"]'); await esperar(900); } }],
   ['30-cel-inicio', CHEFE_COF, '#/inicio', { largura: 390, altura: 844, celular: true, recorte: false }],
   ['31-cel-acoes', CHEFE_COF, '#/minhas-acoes', { largura: 390, altura: 844, celular: true, recorte: false }],
   ['40-reuniao-conferencia', DIRETOR, '#/reuniao'],
@@ -97,17 +103,28 @@ let reuniaoId = null;
 const LARGURA_LATERAL = 250; // px CSS da barra lateral
 
 let navegador = null;
-const abrirNavegador = async () => { navegador = await puppeteer.launch({ executablePath: chrome, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] }); };
+let paginasNoNavegador = 0;
+// O Chrome deixa de criar páginas depois de umas 10 no mesmo navegador: renova antes (a cada 8).
+const abrirNavegador = async () => { paginasNoNavegador = 0; navegador = await puppeteer.launch({ executablePath: chrome, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] }); };
 
 async function capturar([nome, uid, rota, o = {}]) {
-  const { largura = 1440, altura = 900, celular = false, recorte = true, permissoes = false, depois } = o;
+  const { largura = 1440, altura = 900, celular = false, recorte = true, permissoes = false, convite = false, depois } = o;
   for (let tentativa = 1; tentativa <= 3; tentativa++) {
     try {
+      if (navegador && paginasNoNavegador >= 8) { await navegador.close(); navegador = null; }
       if (!navegador) await abrirNavegador();
+      paginasNoNavegador += 1;
       if (permissoes) await navegador.defaultBrowserContext().overridePermissions(BASE, ['notifications']);
       const p = await navegador.newPage();
       await p.setViewport({ width: largura, height: altura, deviceScaleFactor: celular ? 2 : 1.6, isMobile: celular, hasTouch: celular });
-      if (uid) await p.evaluateOnNewDocument((u) => { try { localStorage.setItem('agilis-usuario', String(u)); } catch { /* segue */ } }, uid);
+      if (uid) await p.evaluateOnNewDocument((u, comConvite) => {
+        try {
+          localStorage.setItem('agilis-usuario', String(u));
+          // Sem isto, o convite do tutorial ("Primeira vez por aqui?") apareceria por cima de todas as telas.
+          if (comConvite) localStorage.removeItem(`agilis:tutorial:${u}`); // o navegador pode ter guardado o "já convidado" de telas anteriores
+          else localStorage.setItem(`agilis:tutorial:${u}`, '{"convidado":true}');
+        } catch { /* segue */ }
+      }, uid, convite);
       await p.goto(`${BASE}/${typeof rota === 'function' ? rota() : rota}`, { waitUntil: 'networkidle0' });
       await esperar(1100);
       if (depois) { await depois(p); await esperar(700); }

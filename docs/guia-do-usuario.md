@@ -14,10 +14,10 @@ Os nomes das telas e dos tipos de unidade podem variar por empresa (vocabulário
 
 ## Chefe de seção
 
-1. **Início:** o cartão **Sua semana** lista o que falta antes da reunião (a atualização, ações atrasadas, ações novas, validações e o que vence antes da reunião), mostra quantos itens já estão em dia e quanto falta para o prazo, e cada item leva direto ao que resolve. Enquanto a atualização estiver pendente, uma **faixa amarela** aparece no alto das outras telas, da sexta às 15h até a reunião (fica vermelha depois do prazo regular), com o botão para registrar. Além disso, os quadros "Chegaram para você" (ações novas), "Aguardando sua validação" e "Precisa de atenção" (atrasadas, sem atualização há 7 dias, prazo até a reunião, com botões rápidos de status e tempo), mais o aviso vigente.
+1. **Início:** o cartão **Sua semana** lista o que falta antes da reunião (a atualização, ações atrasadas, ações novas, validações e o que vence antes da reunião), mostra quantos itens já estão em dia e quanto falta para o prazo, e cada item leva direto ao que resolve. Enquanto a atualização estiver pendente, uma **faixa amarela** aparece no alto das outras telas, da sexta às 15h até a reunião (fica vermelha depois do prazo regular), com o botão para registrar. Além disso, os quadros "Chegaram para você" (ações novas), "Aguardando sua validação" e "Precisa de atenção" (atrasadas, sem atualização há 7 dias, prazo até a reunião, com botões rápidos de status e tempo), mais o aviso vigente. O prazo de cada ação é comparado com a **reunião em que ela será tratada**, e o alerta diz qual e quando: a **da organização** para o que o Diretor demandou, a **da equipe** para o que você trata com ela (a demanda do Diretor delegada à equipe vale para a que vier primeiro). O relato semanal ao Diretor não muda.
 2. **Painel de gestão:** painel para liderar a equipe da semana, só de leitura. O *radar* mostra, por gravidade, o que pede a sua decisão (impedimento crítico, atrasos, validações, prazos chegando, ações paradas); depois vêm o fluxo e os prazos das ações em curso, as entregas das últimas 8 semanas, a carga de cada pessoa e sugestões de conversa (apoiar, alinhar, reconhecer). Os números servem para conversar com a equipe, não para ranquear.
 3. **Direcionar ação** (só se a sua seção tem subseções): demande uma ação às subseções, como o Diretor faz com os Centros. Escolha "Todas as subseções" (as diretamente abaixo da sua seção) ou "Escolher subseções", informe o prazo e direcione. Cada subseção recebe a sua ação, que chega como nova. Quando a subseção conclui, a ação volta a você em **Aguardando sua validação**, no Início: **Aceitar e encerrar** ou **Devolver para ajuste**, dizendo o que falta. Quem recebeu não edita nem arquiva a ação; para mudar o prazo, pede novo prazo.
-4. **Minhas ações:** abra a ação para mudar o status, registrar o **tempo em minutos**, comentar, criar tarefas e registrar impedimentos. *Concluir exige tempo maior que zero.*
+4. **Minhas ações:** abra a ação para mudar o status, registrar o **tempo em minutos**, comentar, criar tarefas e registrar impedimentos. *Concluir exige tempo maior que zero.* As abas separam Todas ativas, Abertas, Concluídas e **Arquivadas** (o botão **Desarquivar**, no cartão, traz a ação de volta).
 5. **Pedir novo prazo:** em ação criada por outra pessoa, use o pedido de prazo e aguarde a decisão.
 6. **Minha atualização:** confira o relato montado automaticamente, acrescente observações e envie até a **segunda, 18h**. Se algo mudar depois, a tela avisa que o relato está desatualizado; enviar de novo cria nova versão.
 7. **Minha equipe:** cadastre membros, desative ou reative, redefina senhas e **exclua** um cadastro feito por engano (só quem nunca deixou histórico: com ações, tempo ou comentários, use Desativar; suplentes e chefes de subseção também saem por Desativar).
@@ -28,18 +28,18 @@ Se você tem um **suplente**, ele tem os mesmos poderes e responde na sua ausên
 
 ## Membro da equipe
 
-Em **Minhas ações** há as abas "Minhas" e "Da seção, só leitura". Você muda status, registra tempo, cria tarefas e comenta nas ações atribuídas a você ou criadas por você. Em ação de outra pessoa, só marca como feita a tarefa que é sua e comenta onde tem tarefa. Relatos, reuniões, atas, estrutura e contas não estão disponíveis.
+Em **Minhas ações** há as abas "Minhas" e "Da seção, só leitura". A ação que o chefe atribuir a você chega como **nova**, mesmo vinda de uma seção acima da sua. Você muda status, registra tempo, cria tarefas e comenta nas ações atribuídas a você ou criadas por você. Em ação de outra pessoa, só marca como feita a tarefa que é sua e comenta onde tem tarefa. Relatos, reuniões, atas, estrutura e contas não estão disponíveis.
 
 ## Diretor e Apoio
 
 - **Painel:** semáforo por unidade, em ordem de necessidade; abra uma unidade para o detalhe.
-- **Direcionar ação:** escolha "todos os Centros" ou seções específicas, informe o prazo. O sistema avisa se as seções já têm ações com o mesmo prazo. Depois, "Acrescentar seções" em "Últimas ações direcionadas" inclui outras seções com a mesma ação.
+- **Direcionar ação:** escolha "todos os Centros" ou seções específicas, informe o prazo. O sistema avisa se as seções já têm ações com o mesmo prazo. Depois, "Acrescentar seções" em "Últimas ações direcionadas" inclui outras seções com a mesma ação. Os direcionamentos que os chefes fazem às próprias subseções não aparecem nessa lista, e quem os aceita é o chefe que demandou.
 - **Ações:** lista com filtros (inclusive "demanda de entidade externa").
 - **Pedidos de prazo:** aprovar ou recusar. O Apoio só decide dentro de reunião em andamento.
 - **Aceitar ou devolver** ações concluídas que o Diretor demandou.
 - **Combinados:** criar, editar e arquivar (nunca excluir).
 - **Reuniões e atas**, **Produtividade**, **Quadro de avisos** (Diretor) e **Configuração**.
-- O Diretor também gere **Estrutura** (seções) e contas de Chefe e Apoio. O Apoio não vê ações internas das subseções.
+- O Diretor também gere **Estrutura** (seções) e contas de Chefe e Apoio. Conta com ações, tarefas ou qualquer outro histórico não é excluída: use Desativar. O Apoio não vê ações internas das subseções.
 
 ## Conduzindo a reunião (Modo Reunião)
 
@@ -56,7 +56,7 @@ Tela **Ações dos Centros**: lista de todas as ações dos Centros (sem as inte
 
 ## Administrador
 
-Faz tudo o que os demais fazem, em qualquer seção, e gere contas, perfis e estrutura em "Contas e estrutura". Exclui versões do histórico de atualizações quando necessário. O Administrador vinculado à Diretoria Adjunta tem a tela "Início da seção" como o chefe.
+Faz tudo o que os demais fazem, em qualquer seção, e gere contas, perfis e estrutura em "Contas e estrutura". Exclui versões do histórico de atualizações quando necessário. A exclusão de contas segue a regra do Diretor: só quem nunca deixou histórico. O Administrador vinculado à Diretoria Adjunta tem a tela "Início da seção" como o chefe.
 
 ## Plataforma
 

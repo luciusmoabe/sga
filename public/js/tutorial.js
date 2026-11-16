@@ -37,7 +37,7 @@ function licoes() {
   if (chefe) {
     L.push(
       { id: 'inicio', titulo: 'Sua semana, no Início', resumo: 'O que falta fazer antes da reunião.', passos: [
-        { rota: '#/inicio', alvo: '.sua-semana', titulo: 'Sua semana', texto: 'Este cartão lista <b>o que falta antes da reunião</b>: a atualização, ações atrasadas, ações novas, validações e o que vence antes da reunião. Cada item leva direto à tela que resolve.' },
+        { rota: '#/inicio', alvo: '.sua-semana', titulo: 'Sua semana', texto: 'Este cartão lista <b>o que falta antes da reunião</b>: a atualização, ações atrasadas, ações novas, validações e o que vence antes da reunião (cada ação conta para a reunião em que será tratada, a da organização ou a da equipe, e o texto diz qual e quando). Cada item leva direto à tela que resolve.' },
         { rota: '#/inicio', alvo: ['.atencao-quadro', '.novas-quadro'], titulo: 'Quadros de atenção', texto: 'Quando houver, aparecem aqui <b>Chegaram para você</b> (ações novas, inclusive as que um chefe de cima atribuiu a você; a sigla mostra de qual seção vieram), <b>Aguardando sua validação</b> e <b>Precisa de atenção</b> (atrasadas, sem movimento há 7 dias ou com prazo até a reunião em que serão tratadas: a <b>da organização</b>, para o que o Diretor demandou, ou a <b>da equipe</b>, para o que você trata com ela; o alerta diz qual e quando), com botões rápidos de status e tempo.' },
         { rota: '#/inicio', alvo: '#trilho', titulo: 'A linha do tempo da semana', texto: 'Mostra a reunião, o lembrete (sexta, 15h) e o <b>fechamento: segunda, 18h</b>. Da sexta até a reunião, uma <b>faixa amarela</b> no alto das telas lembra a atualização, e fica vermelha depois do prazo.' },
       ] },
@@ -104,7 +104,7 @@ function licoes() {
       { id: 'direcionar', titulo: 'Direcionando ações', resumo: 'Pedir um trabalho às seções.', passos: [
         { rota: '#/direcionar', alvo: '#d-titulo', titulo: 'O que precisa ser feito', texto: 'Escreva a ação com clareza. O detalhamento é opcional.' },
         { rota: '#/direcionar', alvo: '#alvos', titulo: 'Para quem', texto: 'Para todas as unidades de uma vez ou só para as seções escolhidas. Se elas já tiverem ações com o mesmo prazo, o sistema avisa antes de criar.' },
-        { rota: '#/direcionar', alvo: '#d-prazo', titulo: 'Prazo obrigatório', texto: 'Toda ação direcionada tem prazo. Depois, em <b>Últimas ações direcionadas</b>, você vê quem já abriu a ação e pode <b>Acrescentar seções</b>.' },
+        { rota: '#/direcionar', alvo: '#d-prazo', titulo: 'Prazo obrigatório', texto: 'Toda ação direcionada tem prazo. Depois, em <b>Últimas ações direcionadas</b>, você vê quem já abriu a ação e pode <b>Acrescentar seções</b>. Os direcionamentos que os chefes fazem às próprias subseções não aparecem nesta lista.' },
       ] },
       { id: 'acompanhar', titulo: 'Acompanhando e decidindo', resumo: 'Lista de ações, pedidos de prazo e aceite.', passos: [
         { rota: '#/acoes', alvo: '.filtros-acoes', titulo: 'Todas as ações', texto: 'Filtre por seção, situação, origem e status, ou busque por texto. Uma ação enviada a várias seções aparece <b>agrupada</b>.' },
@@ -121,7 +121,7 @@ function licoes() {
         { rota: '#/combinados', alvo: '#conteudo .cabeca', titulo: 'Combinados', texto: 'Crie, edite e reordene. Para tirar um combinado, <b>arquive</b>: nunca se exclui, porque cada reunião guarda uma cópia do que estava valendo. Acima de 7 ativos, o sistema avisa.' },
         ...(eh('diretor', 'administrador') ? [
           { rota: '#/avisos', alvo: '#conteudo .cabeca', titulo: 'Quadro de avisos', texto: 'Uma mensagem com início e fim, exibida em destaque no Início dos chefes. Só uma aparece por vez: a vigente mais recente.' },
-          { rota: '#/estrutura', alvo: '#conteudo .cabeca', titulo: 'Configuração', texto: 'Organize as seções, as pessoas e acessos, a rotina da reunião, o cabeçalho da ata e os nomes das unidades.' },
+          { rota: '#/estrutura', alvo: '#conteudo .cabeca', titulo: 'Configuração', texto: 'Organize as seções, as pessoas e acessos, a rotina da reunião, o cabeçalho da ata e os nomes das unidades. Conta com ações, tarefas ou qualquer histórico não é excluída: use <b>Desativar</b>.' },
         ] : [
           { rota: '#/configuracao', alvo: '#conteudo .cabeca', titulo: 'Configuração da ata', texto: 'Aqui você configura o cabeçalho e a rotina da ata das reuniões.' },
         ]),
