@@ -1,4 +1,4 @@
-// Cálculo puro (sem DOM nem rede) da tela "Gestão da seção" do chefe. Entra a lista de ações que o chefe enxerga (`GET /api/acoes`)
+// Cálculo puro (sem DOM nem rede) da tela "Painel de gestão" do chefe. Entra a lista de ações que o chefe enxerga (`GET /api/acoes`)
 // e, opcionalmente, as pessoas de `GET /api/produtividade` (entregas e horas do período); sai tudo o que a tela desenha.
 // Só mede o que o sistema já registra e nunca muda semáforo nem status. Os limites abaixo são SUGESTÕES de gestão, não regra de
 // negócio: ajuste com o Diretor se a realidade da seção pedir.

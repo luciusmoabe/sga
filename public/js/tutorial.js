@@ -41,7 +41,7 @@ function licoes() {
         { rota: '#/inicio', alvo: ['.atencao-quadro', '.novas-quadro'], titulo: 'Quadros de atenção', texto: 'Quando houver, aparecem aqui <b>Chegaram para você</b> (ações novas), <b>Aguardando sua validação</b> e <b>Precisa de atenção</b> (atrasadas ou sem movimento há 7 dias), com botões rápidos de status e tempo.' },
         { rota: '#/inicio', alvo: '#trilho', titulo: 'A linha do tempo da semana', texto: 'Mostra a reunião, o lembrete (sexta, 15h) e o <b>fechamento: segunda, 18h</b>. Da sexta até a reunião, uma <b>faixa amarela</b> no alto das telas lembra a atualização, e fica vermelha depois do prazo.' },
       ] },
-      { id: 'gestao', titulo: 'Gestão da seção', resumo: 'O painel para liderar a equipe da semana.', passos: [
+      { id: 'gestao', titulo: 'Painel de gestão', resumo: 'O painel para liderar a equipe da semana.', passos: [
         { rota: '#/gestao', alvo: '#gestao-radar', titulo: 'O que precisa de você hoje', texto: 'O <b>radar</b> reúne, por gravidade, o que pede a sua decisão: impedimento crítico, atrasos, validações, prazos chegando e ações paradas. Clique numa ação para abrir a ficha.' },
         { rota: '#/gestao', alvo: ['#gestao-fluxo', '#gestao-horizonte'], titulo: 'Fluxo e prazos', texto: 'Veja quanto está <b>a fazer, em andamento e bloqueado</b> e como se distribuem os prazos. Muita coisa começada e pouca terminada é sinal para priorizar.' },
         { rota: '#/gestao', alvo: '#gestao-semanas', titulo: 'Estamos entregando?', texto: 'As entregas das últimas 8 semanas mostram o <b>ritmo</b> da equipe e quantas saíram no prazo. Olhe a tendência, não uma semana isolada.' },

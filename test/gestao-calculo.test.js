@@ -1,4 +1,4 @@
-// Cálculo da tela "Gestão da seção" (public/js/gestao-calculo.js): radar, horizonte, semanas, carga por pessoa e conversas.
+// Cálculo da tela "Painel de gestão" (public/js/gestao-calculo.js): radar, horizonte, semanas, carga por pessoa e conversas.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LIMITES, calcularGestao, conversas, entregasPorSemana, horizonte } from '../public/js/gestao-calculo.js';

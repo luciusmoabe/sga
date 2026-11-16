@@ -53,7 +53,7 @@ const ROTAS = {
   // Sem id: tela comum de início (nada é criado ao abrir a rota). Com id: Modo Reunião em tela cheia.
   reuniao: { f: (r, p) => (p.id ? viewReuniao(r, p) : inicioReuniao(r, p)), perfis: GESTAO, tv: (p) => !!p.id, titulo: 'Modo Reunião' },
   // Painel de gestão do chefe: radar do dia, fluxo, entregas por semana, carga da equipe e pontos de conversa (só leitura).
-  gestao: { f: gestao, perfis: ['chefe'], titulo: 'Gestão da seção' },
+  gestao: { f: gestao, perfis: ['chefe'], titulo: 'Painel de gestão' },
   inicio: { f: inicio, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Início' },
   // Link neutro de uma ação (`#/acao/ID`, o que o botão "Copiar link da ação" gera): cada perfil o leva à sua lista, com a ficha aberta.
   acao: { f: (raiz, { id }) => { raiz.innerHTML = '<p class="suave">Abrindo a ação…</p>'; location.replace(`#/${LISTA_DE_ACOES[est.user.perfil] || 'acoes'}?acao=${Number(id) || 0}`); }, perfis: [...TODOS, 'consulta', 'membro'], titulo: 'Ação' },
@@ -119,7 +119,7 @@ const MENU_GESTAO = [
 const MENU_CHEFE = [
   ['#Hoje'],
   ['inicio', 'Início'],
-  ['gestao', 'Gestão da seção'],
+  ['gestao', 'Painel de gestão'],
   ['agenda', 'Agenda'],
   ['#Meu trabalho'],
   ['minhas-acoes', 'Minhas ações'],

@@ -1,4 +1,4 @@
-// Gestão da seção: painel do chefe para liderar a equipe da semana. Responde, nesta ordem, a cinco perguntas:
+// Painel de gestão do chefe, para liderar a equipe da semana. Responde, nesta ordem, a cinco perguntas:
 //   1. O que precisa de mim hoje? (radar)   2. Como está o fluxo e o horizonte de prazos?   3. Estamos entregando? (8 semanas)
 //   4. Como está a carga de cada pessoa?    5. Que conversas valem a pena? (apoiar, alinhar, reconhecer)
 // Só lê (`GET /api/acoes`, `GET /api/produtividade`); nada aqui grava dados nem muda o semáforo. O cálculo está em
@@ -106,7 +106,7 @@ export async function gestao(raiz) {
   const k = g.kpis;
   const motivo = g.radar[0] ? textoRadar(g.radar[0])[0] : 'Sem pendências';
   raiz.innerHTML = `
-    <div class="cabeca"><div><h1>Gestão da seção</h1>
+    <div class="cabeca"><div><h1>Painel de gestão</h1>
       <div class="sub">Para conduzir a equipe da semana: o que precisa de você, como anda o fluxo, se estamos entregando e quem precisa de apoio.</div></div>
       <div class="gestao-situacao"><span class="suave pequeno">Situação</span> ${sem(g.cor)}<span class="suave pequeno">${motivo}</span></div></div>
     <div class="prod-grade" id="gestao-kpis">
