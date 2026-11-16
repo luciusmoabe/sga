@@ -35,7 +35,7 @@ Autenticação em produção: Supabase Auth (e-mail e senha), mediada pelo servi
 
 `createApp(db, { auth })` monta, nesta ordem: cabeçalhos de segurança, compressão, JSON (limite de 200 kb), estáticos, autenticação, escopo da empresa e três travas por perfil. Depois registra as rotas e, por último, o tratador de erros.
 
-As três travas são **listas fechadas**: o perfil Consulta só lê quatro rotas de ações; o Plataforma só acessa `/bootstrap` e `/plataforma/*`; o Membro só acessa `ROTAS_MEMBRO`. Rota nova não precisa fazer nada para ficar fechada a esses perfis.
+As três travas são **listas fechadas**: o perfil Consulta só lê quatro rotas de ações; o Plataforma só acessa `/bootstrap` e `/plataforma/*`; o Membro só acessa a lista `MEMBRO`. As três listas ficam em `server/politicas-rotas.js`. Rota nova não precisa fazer nada para ficar fechada a esses perfis, e `test/politicas-rotas.test.js` mostra o que cada perfil alcança em toda rota registrada.
 
 ### Arquivos por responsabilidade
 

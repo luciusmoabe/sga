@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": [
+    "server/logic.js",
+    "public/js/regras.js",
+    "public/js/datas.js",
+    "public/js/gestao-calculo.js",
+    "public/js/vocabulario.js",
+    "public/js/ata-marcacao.js"
+  ]
+}

@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "engines": {
-    "node": ">=22.12"
+    "node": ">=22.12 <25"
   },
   "scripts": {
     "start": "node server/index.js",
@@ -20,6 +20,7 @@
     "push:chaves": "node server/gerar-chaves-push.js",
     "senha:redefinir": "node server/redefinir-senha.js",
     "admin:secao": "node server/secao-administrador.js",
+    "lint": "eslint . && tsc -p .",
     "test": "node --test test/*.test.js",
     "test:postgres": "node --test test/postgres/*.test.js",
     "guia": "node scripts/guia/gerar.mjs",
@@ -36,6 +37,9 @@
   },
   "devDependencies": {
     "axe-core": "^4.14.0",
-    "puppeteer-core": "^23.11.1"
+    "eslint": "^9.39.5",
+    "globals": "^17.14.0",
+    "puppeteer-core": "^23.11.1",
+    "typescript": "^5.9.3"
   }
 }

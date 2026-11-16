@@ -1,6 +1,6 @@
 # Regras de negócio
 
-Fonte: plano do projeto. **Não altere sem combinar com o Diretor.** Este texto é um resumo legível; o detalhe técnico (nomes de rotas, campos e funções) está em [CLAUDE.md](../CLAUDE.md). As constantes compartilhadas estão em `public/js/regras.js`; as regras de data e semáforo, em `server/logic.js`.
+Fonte: plano do projeto. **Não altere sem combinar com o Diretor.** Este texto é um resumo legível; o detalhe técnico (nomes de rotas, campos e funções) está em [regras-tecnicas.md](regras-tecnicas.md). As constantes compartilhadas estão em `public/js/regras.js`; as regras de data e semáforo, em `server/logic.js`.
 
 ## Semana, fechamento e semáforo
 

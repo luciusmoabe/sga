@@ -19,6 +19,8 @@ jobs:
       - run: npm test
         env:
           SGC_LINT_EMPRESA: '1'
+      # ESLint (erros reais: variável indefinida, `==`, etc.) e checagem de tipos nas regras puras (tsconfig.json).
+      - run: npm run lint
       - name: Sintaxe dos módulos da interface
         run: for f in public/js/*.js; do node --check "$f" || exit 1; done
 

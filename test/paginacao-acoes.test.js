@@ -63,3 +63,17 @@ test('limite e offset inválidos são recusados com orientação', async (t) => 
     assert.match(r.dados.erro, /limite|offset/i, caminho);
   }
 });
+
+test('busca: % e _ digitados valem como texto, não como curinga', async (t) => {
+  const get = await montar(t);
+  const tudo = (await get('/acoes')).dados;
+  const termo = tudo[0].titulo.slice(0, 4);
+  const achou = await get(`/acoes?q=${encodeURIComponent(termo)}&limite=100`);
+  assert.ok(achou.dados.length >= 1 && achou.dados.every((a) => `${a.titulo} ${a.detalhe || ''}`.toLowerCase().includes(termo.toLowerCase())));
+  assert.equal(Number(achou.total), achou.dados.length);
+  for (const curinga of ['%', '_', '\\']) {
+    const r = await get(`/acoes?q=${encodeURIComponent(curinga)}`);
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.dados, [], `"${curinga}" não casa com tudo`);
+  }
+});

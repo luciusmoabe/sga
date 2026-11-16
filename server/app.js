@@ -17,6 +17,7 @@ import { rotasPlataforma } from './rotas-plataforma.js';
 import { rotasProdutividade } from './rotas-produtividade.js';
 import { rotasCabecalhoAta } from './ata-cabecalho.js';
 import { cabecalhosSeguranca } from './seguranca-http.js';
+import { POLITICAS, liberadaParaPerfil } from './politicas-rotas.js';
 import { configurarAuth, instalarAuth } from './auth.js';
 import { administradorAuth } from './cadastro-chefes.js';
 import { comEmpresa, escopoDaEmpresa, instalarLintDeEmpresa } from './empresa.js';
@@ -83,38 +84,13 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth, em
   instalarAuth(app, db, auth, provedor, contas);
   // Daqui em diante toda consulta roda na empresa de quem está logado (server/empresa.js).
   app.use('/api', escopoDaEmpresa);
-  // Perfil Consulta: só lê as ações. Lista fechada, para que nenhuma rota, atual ou futura, fique aberta a ele por
-  // descuido. Entrar, sair e trocar a senha são atendidos antes, em instalarAuth.
-  const LEITURA_CONSULTA = [/^\/bootstrap$/, /^\/acoes$/, /^\/acoes\/\d+$/, /^\/tarefas$/];
+  // Perfis com lista fechada de rotas (Consulta, Plataforma, Membro): veja server/politicas-rotas.js. O que não está na lista
+  // responde 403 mesmo que a rota, atual ou futura, não confira o perfil. Entrar, sair e trocar a senha são atendidos antes,
+  // em instalarAuth.
   app.use('/api', (req, res, next) => {
-    if (req.user?.perfil !== 'consulta' || (req.method === 'GET' && LEITURA_CONSULTA.some((r) => r.test(req.path)))) return next();
-    next(falha(403, 'O perfil Consulta só permite ler as ações das unidades.'));
-  });
-  // Perfil Plataforma: administra as empresas e não toca em dados de negócio. Lista fechada, como as outras: só o bootstrap e as
-  // rotas /plataforma respondem; qualquer outra rota (atual ou futura) responde 403 a ele.
-  app.use('/api', (req, res, next) => {
-    if (req.user?.perfil !== 'plataforma' || (req.method === 'GET' && req.path === '/bootstrap') || req.path.startsWith('/plataforma/')) return next();
-    next(falha(403, 'O perfil Plataforma só administra as empresas.'));
-  });
-  // Membro da equipe: lê as ações e tarefas da sua seção e age só no que é dele. Lista fechada, como a da Consulta: o
-  // que não está aqui (relatos, reuniões, atas, combinados, estrutura, contas, aceite, validação, arquivar, redirecionar e
-  // pedir prazo) responde 403 mesmo que a rota, por descuido, não confira o perfil. Quem pode o quê em cada ação é
-  // decidido dentro das rotas (executa/ehAutor em rotas-acoes.js).
-  const ROTAS_MEMBRO = [
-    ['GET', /^\/(bootstrap|secoes|tarefas|avisos\/atual)$/],
-    ['GET', /^\/reunioes-equipe(\/\d+)?$/], // as atas das reuniões da equipe de que participou
-    ['POST', /^\/reunioes-equipe\/\d+\/sugestoes$/], // e a sugestão de revisão dessas atas
-    ['GET', /^\/acoes(\/\d+(\/(responsaveis|executores))?)?$/],
-    ['POST', /^\/acoes$/],
-    ['PATCH', /^\/acoes\/\d+$/],
-    ['DELETE', /^\/acoes\/\d+$/],
-    ['POST', /^\/acoes\/\d+\/(tempo|comentarios|vista|checklist|impedimentos|impedimentos\/\d+\/resolver|pontos-atencao)$/],
-    ['PATCH', /^\/acoes\/\d+\/(checklist|pontos-atencao)\/\d+$/],
-    ['DELETE', /^\/acoes\/\d+\/checklist\/\d+$/],
-  ];
-  app.use('/api', (req, res, next) => {
-    if (req.user?.perfil !== 'membro' || ROTAS_MEMBRO.some(([metodo, rota]) => req.method === metodo && rota.test(req.path))) return next();
-    next(falha(403, 'O seu perfil de membro da equipe não dá acesso a esta função. Fale com o chefe da seção.'));
+    const liberada = liberadaParaPerfil(req.user?.perfil, req.method, req.path);
+    if (liberada !== false) return next();
+    next(falha(403, POLITICAS[req.user.perfil].negado));
   });
 
   rotasEstrutura(app, { ...ctx, auth, adminAuth: contas });

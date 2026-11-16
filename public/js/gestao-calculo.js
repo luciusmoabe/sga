@@ -66,7 +66,7 @@ function pessoasDe(acoes, abertas, hoje, doPeriodo) {
     ],
   }));
   // Quem tem mais a resolver primeiro; "sem responsável" por último.
-  return lista.sort((x, y) => (x.id == null) - (y.id == null) || y.atrasadas - x.atrasadas || y.abertas - x.abertas || x.nome.localeCompare(y.nome));
+  return lista.sort((x, y) => Number(x.id == null) - Number(y.id == null) || y.atrasadas - x.atrasadas || y.abertas - x.abertas || x.nome.localeCompare(y.nome));
 }
 
 /** Pontos de conversa para a reunião de equipe e para os 1:1: apoiar, alinhar e reconhecer (nunca cobrar). */

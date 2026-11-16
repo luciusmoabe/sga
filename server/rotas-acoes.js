@@ -121,6 +121,17 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
         where v.acao_id = ? and v.vista_em >= ? order by v.vista_em, v.usuario_id`, a.id, a.recebida_em)
     : []);
 
+  // Só junções 1:1 (cada uma por id): contar sobre elas dá o mesmo total da lista, sem calcular as colunas da seleção.
+  const FROM_ACAO = `from acoes a
+    join secoes s on s.id = a.secao_id
+    left join usuarios ua on ua.id = a.criado_por
+    left join usuarios ur on ur.id = a.responsavel_id
+    left join usuarios uat on uat.id = a.atribuido_por
+    left join usuarios uvc on uvc.id = a.validada_chefe_por
+    left join secoes us on us.id = ua.secao_id
+    left join diretrizes d on d.id = a.diretriz_id
+    left join usuarios ud on ud.id = d.criado_por
+    left join reunioes r on r.id = d.reuniao_id`;
   const SELECT_ACAO = `select a.*, s.nome as secao_nome, s.sigla as secao_sigla,
       ua.perfil as autor_perfil,
       ua.secao_id as autor_secao_id,
@@ -141,16 +152,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       exists(select 1 from impedimentos i where i.acao_id = a.id and i.resolvido_em is null and i.critico = 1) as impedimento_critico,
       (select count(*) from acao_checklist c where c.acao_id = a.id) as checklist_total,
       (select count(*) from acao_checklist c where c.acao_id = a.id and c.concluido = 1) as checklist_feitos
-    from acoes a
-    join secoes s on s.id = a.secao_id
-    left join usuarios ua on ua.id = a.criado_por
-    left join usuarios ur on ur.id = a.responsavel_id
-    left join usuarios uat on uat.id = a.atribuido_por
-    left join usuarios uvc on uvc.id = a.validada_chefe_por
-    left join secoes us on us.id = ua.secao_id
-    left join diretrizes d on d.id = a.diretriz_id
-    left join usuarios ud on ud.id = d.criado_por
-    left join reunioes r on r.id = d.reuniao_id`;
+    ${FROM_ACAO}`;
   /** Validação de quem delegou, depois de a ação ser concluída. Só ações demandadas pelo Diretor (aceite dele) e as que
    *  o chefe atribuiu a outra pessoa (validação do chefe) têm uma; as demais ficam prontas ao serem concluídas.
    *  Em sequência: primeiro o chefe, depois o Diretor. */
@@ -454,19 +456,28 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       else if (sit === 'concluidas') where.push(`a.status = 'concluida' and a.encerrada = 0`);
       else if (sit === 'encerradas') where.push('a.encerrada = 1');
     }
-    if (f.q) { where.push('(a.titulo like ? or a.detalhe like ?)'); params.push(`%${f.q}%`, `%${f.q}%`); }
-    let linhas = await q(`${SELECT_ACAO} where ${where.join(' and ')}
-              order by a.encerrada, case a.status when 'concluida' then 1 else 0 end,
-                       case when a.status != 'concluida' and a.prazo < '${hoje()}' then 0 else 1 end, a.prazo, a.id`, ...params);
-    // Paginação opcional (?limite=N&offset=M; no máximo 500 por página). Sem `limite` a resposta é a lista inteira, como sempre foi:
-    // nenhuma tela mudou. O total vem em X-Total-Count para quem pagina saber onde está.
-    res.set('X-Total-Count', String(linhas.length));
+    if (f.q) { where.push(`(a.titulo like ? escape '\\' or a.detalhe like ? escape '\\')`); const termo = `%${String(f.q).replace(/[\\%_]/g, '\\$&')}%`; params.push(termo, termo); } // % e _ digitados valem como texto
+    // Paginação opcional (?limite=N&offset=M; no máximo 500 por página), feita no banco. Sem `limite` a resposta é a lista inteira, como
+    // sempre foi: nenhuma tela mudou. O total vem em X-Total-Count para quem pagina saber onde está.
+    let limite = null, offset = 0;
     if (f.limite !== undefined) {
-      const limite = Number(f.limite), offset = f.offset === undefined ? 0 : Number(f.offset);
+      limite = Number(f.limite);
+      offset = f.offset === undefined ? 0 : Number(f.offset);
       if (!Number.isInteger(limite) || limite < 1 || limite > MAX_POR_PAGINA) throw falha(400, `Informe um limite entre 1 e ${MAX_POR_PAGINA}.`);
       if (!Number.isInteger(offset) || offset < 0) throw falha(400, 'Informe um offset de 0 em diante.');
-      linhas = linhas.slice(offset, offset + limite);
     }
+    const onde = where.join(' and ');
+    const ordem = `order by a.encerrada, case a.status when 'concluida' then 1 else 0 end,
+                       case when a.status != 'concluida' and a.prazo < ? then 0 else 1 end, a.prazo, a.id`;
+    let linhas, total;
+    if (limite === null) {
+      linhas = await q(`${SELECT_ACAO} where ${onde} ${ordem}`, ...params, hoje());
+      total = linhas.length;
+    } else {
+      total = Number((await q1(`select count(*) as n ${FROM_ACAO} where ${onde}`, ...params)).n);
+      linhas = await q(`${SELECT_ACAO} where ${onde} ${ordem} limit ? offset ?`, ...params, hoje(), limite, offset);
+    }
+    res.set('X-Total-Count', String(total));
     return marcarLeitura(req.user, await marcarNovas(req.user, linhas.map((a) => ({ ...acaoOut(a), ...permissoes(req.user, a) }))));
   }));
 

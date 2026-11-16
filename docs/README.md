@@ -22,7 +22,8 @@ Esta pasta reúne a documentação geral. Os documentos que já existiam na raiz
 | Arquivo | Assunto |
 | --- | --- |
 | [README.md](../README.md) | Como rodar, comandos e limites conhecidos |
-| [CLAUDE.md](../CLAUDE.md) | Instruções para quem desenvolve (com o Claude Code); a fonte mais detalhada das regras |
+| [CLAUDE.md](../CLAUDE.md) | Instruções para quem desenvolve (com o Claude Code): comandos, arquitetura e resumo das regras |
+| [regras-tecnicas.md](regras-tecnicas.md) | Regras de negócio com rotas, campos e funções; a fonte mais detalhada |
 | [AUTENTICACAO.md](../AUTENTICACAO.md) | Login por e-mail e senha com Supabase Auth |
 | [HOMOLOGACAO.md](../HOMOLOGACAO.md) | Roteiro de homologação com o Supabase real |
 | [MIGRACOES.md](../MIGRACOES.md) | Como as migrações do banco funcionam |
