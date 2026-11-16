@@ -16,7 +16,10 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     const [{ dia, hora, intervalo, proxima, referencia, config }, empresa, secao, pedidos, novas, aValidar] = await Promise.all([
       cfgReuniao(),
       q1('select nome, sigla, slug from empresas where id = ?', empresaAtual()),
-      req.user.secao_id ? q1('select id, nome, sigla, tipo from secoes where id = ? and empresa_id = ?', req.user.secao_id, empresaAtual()) : null,
+      // `tem_subsecoes` mostra o menu "Direcionar ação" ao chefe que tem subseções ativas abaixo (sem consulta a mais).
+      req.user.secao_id ? q1(`select id, nome, sigla, tipo,
+          exists(select 1 from secoes f where f.pai_id = secoes.id and f.tipo = 'subsecao' and f.ativa = 1 and f.empresa_id = secoes.empresa_id) as tem_subsecoes
+        from secoes where id = ? and empresa_id = ?`, req.user.secao_id, empresaAtual()) : null,
       ['chefe', 'membro', 'consulta'].includes(req.user.perfil) ? null : q1(
         `select count(*) n from pedidos_prazo p join acoes a on a.id = p.acao_id
          where a.empresa_id = ? and p.status = 'pendente' and a.arquivada = 0 and a.encerrada = 0 and (${req.user.perfil === 'administrador' ? '1 = 1' : 'a.interna = 0 or a.compartilhada = 1'})`, empresaAtual()),
@@ -34,11 +37,17 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
              and a.status != 'concluida' and a.encerrada = 0 and a.arquivada = 0
              and not exists (select 1 from acao_vistas v where v.acao_id = a.id and v.usuario_id = ? and v.vista_em >= a.atribuida_em)`,
           empresaAtual(), req.user.id, req.user.id) : null,
-      // Ações que o chefe atribuiu a membros e eles concluíram: aguardam a validação dele.
+      // Aguardam a validação ou o aceite do chefe: as que ele atribuiu a membros e eles concluíram, e as que ele direcionou às
+      // subseções (aceite de quem demandou, só depois da validação do chefe da seção quando houve atribuição a um membro).
       recebe ? arvore.then((ids) => q1(
-        `select count(*) n from acoes a join usuarios r on r.id = a.responsavel_id and r.perfil = 'membro'
+        `select count(*) n from acoes a left join usuarios r on r.id = a.responsavel_id
+           left join diretrizes d on d.id = a.diretriz_id left join usuarios ud on ud.id = d.criado_por
          where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and a.status = 'concluida' and a.encerrada = 0 and a.arquivada = 0
-           and a.atribuido_por is not null and a.atribuido_por != a.responsavel_id and a.validada_chefe_em is null`, empresaAtual(), ...ids)) : null,
+           and (
+             (r.perfil = 'membro' and a.atribuido_por is not null and a.atribuido_por != a.responsavel_id and a.validada_chefe_em is null)
+             or (ud.perfil = 'chefe' and ud.secao_id = ?
+                 and not (r.perfil = 'membro' and a.atribuido_por is not null and a.atribuido_por != a.responsavel_id and a.validada_chefe_em is null))
+           )`, empresaAtual(), ...ids, req.user.secao_id)) : null,
     ]);
     const semana = referencia();
     // Quem envia a atualização da seção (chefe e Administrador vinculado): a unidade já enviou nesta semana? Alimenta a faixa de aviso.
@@ -52,7 +61,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
       csrf: req.csrf,
       empresa,
       vocabulario: completarVocabulario(json(config.vocabulario, null)),
-      secao,
+      secao: secao ? { ...secao, tem_subsecoes: !!secao.tem_subsecoes } : null,
       agora: agoraISO(),
       hoje: hoje(),
       semana,

@@ -97,7 +97,9 @@ test('Diretor direciona a todos os Centros, com prazo obrigatório', async () =>
   assert.equal(esp.data.acoes_criadas, 2);
   const sub = await call(DIRETOR, 'POST', '/diretrizes', { titulo: 'Y', destino: 'especificos', secoes: [7], prazo: '2026-10-06' });
   assert.equal(sub.status, 400, 'o Diretor direciona a Centros, não a subseções');
-  assert.equal((await call(CHEFE.CPE, 'POST', '/diretrizes', { titulo: 'Z', destino: 'todos', prazo: '2026-10-06' })).status, 403);
+  // O chefe direciona só às subseções da própria árvore (ver test/direcionar-subsecoes.test.js): a Centros, não.
+  assert.equal((await call(CHEFE.CPE, 'POST', '/diretrizes', { titulo: 'Z', destino: 'especificos', secoes: [2], prazo: '2026-10-06' })).status, 400);
+  assert.equal((await call(CHEFE.CPE, 'POST', '/diretrizes', { titulo: 'Z', destino: 'todos', prazo: '2026-10-06' })).data.acoes_criadas, 1, 'só a subseção IND, abaixo do CPE');
 });
 
 test('concluir exige tempo em minutos; o tempo é somado em lançamentos', async () => {

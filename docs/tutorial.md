@@ -33,7 +33,7 @@ Para consulta depois do treino, use o [Guia do usuário](guia-do-usuario.md) (re
 
 1. Abra o endereço do Agilis no navegador.
 2. Digite **e-mail** e **senha**. Se a conta foi criada por outra pessoa, o sistema pede para você **definir uma nova senha** agora.
-3. Olhe o **menu à esquerda** (no celular, as abas de baixo e o botão **Mais**). Ele mostra só o que o seu perfil pode usar.
+3. Olhe o **menu à esquerda** (no celular, as abas de baixo e o botão **Mais**). Ele mostra só o que o seu perfil pode usar, em grupos por assunto. No computador, a setinha ao lado da logo **recolhe** o menu para uma coluna de ícones; o sistema lembra a sua escolha. Embaixo ficam o seu nome e o seu perfil (quem é suplente aparece como **Suplente de seção** e vê os mesmos dados do titular).
 4. No alto, a **linha do tempo da semana** mostra a reunião, o lembrete e o fechamento.
 5. Abra a **Agenda**: o calendário mostra ações (círculo) e tarefas (quadrado). Clique num dia para ver o que vence nele. Vermelho = atrasado.
 6. (Opcional) Abra **Avisos no celular** e toque em **Ativar avisos neste aparelho**. No iPhone, só funciona com o Agilis instalado na tela inicial.
@@ -48,6 +48,8 @@ Para consulta depois do treino, use o [Guia do usuário](guia-do-usuario.md) (re
 
 ### Lição A1: o Início e "Sua semana"
 
+> Ação que um chefe de cima atribuiu a você, mesmo vinda de uma seção acima da sua, chega em **Chegaram para você** com a sigla da seção de origem.
+
 1. Abra **Início**.
 2. Leia o cartão **Sua semana**. Ele lista o que falta antes da reunião: atualização, ações atrasadas, ações novas, validações e o que vence antes da reunião.
 3. Clique em qualquer item: ele leva direto à tela que resolve.
@@ -57,7 +59,7 @@ Para consulta depois do treino, use o [Guia do usuário](guia-do-usuario.md) (re
 
 ### Lição A2: trabalhar uma ação
 
-1. Abra **Minhas ações**. As abas separam Todas ativas, Abertas, Concluídas e Arquivadas.
+1. Abra **Minhas ações**. As abas separam Todas ativas, Abertas, Concluídas e Arquivadas (em **Arquivadas** está o que foi arquivado; **Desarquivar**, no cartão, traz a ação de volta).
 2. Abra uma ação **nova** (traz o selo "nova"; abrir avisa quem direcionou que você viu).
 3. Mude o status para **Em andamento**.
 4. Registre o **tempo em minutos** (ex.: 90).
@@ -98,7 +100,27 @@ Impedimentos são histórico: não se editam nem se apagam. Para corrigir, resol
 
 ✅ Você aprendeu quando a faixa sumiu e a seção deixou de aparecer como pendente.
 
-### Lição A6: equipe e reunião
+### Lição A6: Painel de gestão
+
+1. Abra **Painel de gestão** (grupo "Hoje"). É só leitura: nada ali grava dados.
+2. Leia o **radar** "O que precisa de você hoje": impedimento crítico, atrasos, validações, prazos chegando e ações paradas, por gravidade. Clique numa ação para abrir a ficha.
+3. Veja o **fluxo** (a fazer, em andamento, bloqueadas) e os **prazos** das ações em curso.
+4. Olhe as **entregas por semana** (8 semanas) e a **carga da equipe**: serve para distribuir melhor e conversar, não para ranquear.
+5. Em **Conversas que valem a pena**, veja sugestões para apoiar, alinhar e reconhecer.
+
+✅ Você aprendeu quando sabe dizer o que precisa de você hoje e quem precisa de apoio.
+
+### Lição A7: direcionar às subseções ⚠️ (só quem tem subseções)
+
+1. Abra **Direcionar ação** (grupo "Meu trabalho"; o item só aparece se a sua seção tem subseções).
+2. Escreva o que precisa ser feito e escolha **Todas as subseções** (as diretamente abaixo da sua seção) ou **Escolher subseções**.
+3. Informe o **prazo** (obrigatório) e direcione. Se as subseções já têm ações com o mesmo prazo, o sistema avisa antes.
+4. Em **Últimas ações direcionadas**, veja quem já abriu a ação e use **Acrescentar seções** se precisar incluir outra subseção.
+5. Quando a subseção concluir, a ação volta a você, no Início, em **Aguardando sua validação**: **Aceitar e encerrar** ou **Devolver para ajuste**, dizendo o que falta. O Diretor não aceita essas ações.
+
+✅ Você aprendeu quando direcionou uma ação e viu a subseção recebê-la.
+
+### Lição A8: equipe e reunião
 
 1. **Minha equipe**: cadastre membros, defina quem é Membro ou Suplente (o suplente tem os mesmos poderes seus), desative ou redefina senha.
 2. **Combinados** e **Reuniões e atas**: consulte o que foi definido. Quem participou pode sugerir revisão numa ata enviada.

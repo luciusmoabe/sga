@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CHEFE_COF, DIRETOR, subir } from './ajuda.js';
+import { CHEFE_COF, CHEFE_CPE, DIRETOR, subir } from './ajuda.js';
 
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 const painel = (p) => p.evaluate(() => { const e = document.querySelector('.tut'); return e ? { modo: e.dataset.modo, texto: e.innerText, foco: !!document.querySelector('.tut-foco.visivel') } : null; });
@@ -53,6 +53,7 @@ test('tutorial do Chefe: convite, lições completas, destaque em cada passo e n
   // Quadros que dependem de haver dados (ações novas, a validar) podem não existir nos dados fictícios; o resto precisa ser destacado.
   const faltando = semDestaque.filter((s) => !/Quadros de atenção/.test(s));
   assert.deepEqual(faltando, [], `passos sem destaque: ${faltando.join('; ')}`);
+  assert.ok(!ids.includes('direcionar'), 'sem subseções, a lição de direcionar não existe');
   assert.deepEqual(p.errosDaPagina, []);
 
   // Lição concluída fica marcada e a lista lembra.
@@ -120,4 +121,17 @@ test('tutorial: Esc fecha, e o painel passa no axe no computador e no celular', 
   const caixa = await pm.evaluate(() => { const r = document.querySelector('.tut').getBoundingClientRect(); const f = document.querySelector('.tut-foco.visivel')?.getBoundingClientRect(); return { r: [r.left, r.right, r.top, r.bottom], f: f && [f.left, f.right, f.top, f.bottom], l: innerWidth, a: innerHeight }; });
   assert.ok(caixa.r[0] >= 0 && caixa.r[1] <= caixa.l && caixa.r[3] <= caixa.a, 'o painel cabe na tela do celular');
   if (caixa.f) assert.ok(!(caixa.f[0] < caixa.r[1] && caixa.f[1] > caixa.r[0] && caixa.f[2] < caixa.r[3] && caixa.f[3] > caixa.r[2]), 'o painel não cobre o destaque');
+});
+
+test('tutorial do Chefe que tem subseções: a lição "Direcionar às subseções" existe e cada passo é destacado', async (t) => {
+  const app = await subir(t); if (!app) return;
+  const p = await app.abrir(CHEFE_CPE, '#/inicio');
+  await esperarModo(p, 'convite');
+  await p.click('[data-tut="sair"]'); // "Agora não": o botão Tutorial abre a lista
+  const { semDestaque, vistos, ids } = await percorrerTudo(p);
+  assert.ok(ids.includes('direcionar'));
+  assert.ok(vistos.some((v) => v.startsWith('direcionar: Aceite ao concluir')));
+  const faltando = semDestaque.filter((s) => !/Quadros de atenção/.test(s));
+  assert.deepEqual(faltando, [], `passos sem destaque: ${faltando.join('; ')}`);
+  assert.deepEqual(p.errosDaPagina, []);
 });

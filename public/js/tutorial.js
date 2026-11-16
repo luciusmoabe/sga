@@ -21,7 +21,7 @@ const eh = (...perfis) => perfis.includes(est.user?.perfil);
 
 const PASSOS_COMUNS = () => [
   { rota: null, titulo: 'Bem-vindo ao Agilis', texto: 'Este tutorial leva você pelas telas que o seu perfil usa. <b>Ele só mostra: não grava nem altera nada</b>, então pode clicar sem medo. Use <b>Próximo</b> para avançar e <b>Sair</b> quando quiser; você retoma depois.' },
-  { rota: null, alvo: ['.menu', '.abas-movel'], titulo: 'O menu', texto: 'Aqui ficam as telas disponíveis para <b>o seu perfil</b>. Os pequenos números ao lado mostram pendências (ações novas, pedidos de prazo). No computador, a <b>setinha no topo</b> recolhe o menu para dar mais espaço à tela; o sistema lembra a sua escolha.' },
+  { rota: null, alvo: ['.menu', '.abas-movel'], titulo: 'O menu', texto: 'Aqui ficam as telas disponíveis para <b>o seu perfil</b>. Os pequenos números ao lado mostram pendências (ações novas, pedidos de prazo). No computador, a <b>setinha no topo</b> recolhe o menu para dar mais espaço à tela; o sistema lembra a sua escolha. Embaixo ficam o seu nome e o seu perfil' + (est.user?.suplente ? ' (você aparece como <b>Suplente de seção</b>: vê os mesmos dados que o titular da seção)' : '') + '.' },
   { rota: null, alvo: menu('agenda'), clicar: true, titulo: 'Agora é com você', texto: 'Clique em <b>Agenda</b> para abrir o calendário.' },
   { rota: '#/agenda', alvo: '#cal-grade', titulo: 'A Agenda', texto: 'Cada dia mostra o que vence nele: <b>círculo</b> = ação, <b>quadrado</b> = tarefa. A marca fica <b>vermelha</b> só quando aquela ação ou tarefa está atrasada. Clique num dia para ver os detalhes ao lado.' },
   { rota: '#/agenda', alvo: ['#cal-f-mostrar', '.cal-filtros-wrap'], titulo: 'Filtros da Agenda', texto: 'Escolha o que mostrar (tudo, só ações, só tarefas)' + (eh('chefe', 'membro', 'administrador') ? ' e use <b>Só o que é meu</b> para ver apenas o que está com você.' : ' e filtre por seção.') },
@@ -38,7 +38,7 @@ function licoes() {
     L.push(
       { id: 'inicio', titulo: 'Sua semana, no Início', resumo: 'O que falta fazer antes da reunião.', passos: [
         { rota: '#/inicio', alvo: '.sua-semana', titulo: 'Sua semana', texto: 'Este cartão lista <b>o que falta antes da reunião</b>: a atualização, ações atrasadas, ações novas, validações e o que vence antes da reunião. Cada item leva direto à tela que resolve.' },
-        { rota: '#/inicio', alvo: ['.atencao-quadro', '.novas-quadro'], titulo: 'Quadros de atenção', texto: 'Quando houver, aparecem aqui <b>Chegaram para você</b> (ações novas), <b>Aguardando sua validação</b> e <b>Precisa de atenção</b> (atrasadas ou sem movimento há 7 dias), com botões rápidos de status e tempo.' },
+        { rota: '#/inicio', alvo: ['.atencao-quadro', '.novas-quadro'], titulo: 'Quadros de atenção', texto: 'Quando houver, aparecem aqui <b>Chegaram para você</b> (ações novas, inclusive as que um chefe de cima atribuiu a você; a sigla mostra de qual seção vieram), <b>Aguardando sua validação</b> e <b>Precisa de atenção</b> (atrasadas ou sem movimento há 7 dias), com botões rápidos de status e tempo.' },
         { rota: '#/inicio', alvo: '#trilho', titulo: 'A linha do tempo da semana', texto: 'Mostra a reunião, o lembrete (sexta, 15h) e o <b>fechamento: segunda, 18h</b>. Da sexta até a reunião, uma <b>faixa amarela</b> no alto das telas lembra a atualização, e fica vermelha depois do prazo.' },
       ] },
       { id: 'gestao', titulo: 'Painel de gestão', resumo: 'O painel para liderar a equipe da semana.', passos: [
@@ -49,11 +49,17 @@ function licoes() {
         { rota: '#/gestao', alvo: '#gestao-conversas', titulo: 'Conversas que valem a pena', texto: 'Sugestões geradas pelos números para a reunião da equipe e os 1:1: <b>apoiar</b> quem está travado, <b>alinhar</b> prioridades e <b>reconhecer</b> boas entregas.' },
       ] },
       { id: 'acoes', titulo: 'Trabalhando suas ações', resumo: 'Status, tempo, tarefas, impedimentos e novo prazo.', passos: [
-        { rota: '#/minhas-acoes', alvo: '.abas-lista', titulo: 'Suas ações', texto: 'As abas separam <b>Todas ativas</b>, <b>Abertas</b>, <b>Concluídas</b> e <b>Arquivadas</b>.' },
+        { rota: '#/minhas-acoes', alvo: '.abas-lista', titulo: 'Suas ações', texto: 'As abas separam <b>Todas ativas</b>, <b>Abertas</b>, <b>Concluídas</b> e <b>Arquivadas</b>. Para ver o que foi arquivado, abra <b>Arquivadas</b>; o botão <b>Desarquivar</b>, no cartão, traz a ação de volta.' },
         { rota: '#/minhas-acoes', alvo: '.cartao.acao', titulo: 'Cada cartão é uma ação', texto: 'Os selos mostram o que importa (atrasada, nova, aguardando validação). Por aqui você muda o <b>status</b> e registra o <b>tempo em minutos</b>. <b>Concluir exige tempo maior que zero.</b>' },
         { rota: '#/minhas-acoes', alvo: '.cartao.acao', titulo: 'A ficha da ação', texto: 'Em <b>Detalhes e histórico</b> você cria <b>tarefas</b> (apoio, não mudam o status), registra <b>impedimentos</b> (quem trava a ação; ficam como histórico, não se apagam) e comenta. Em ação criada por outra pessoa, o prazo só muda pelo botão <b>Pedir novo prazo</b>.' },
         { rota: '#/minhas-acoes', alvo: '#btn-nova-acao', titulo: 'Criar uma ação', texto: 'Informe título, prazo, prioridade e, se quiser, o <b>responsável</b> entre os membros da sua seção. A ação chega para ele como "nova". Quando ele concluir, você <b>valida</b> ou <b>devolve</b> com o motivo.' },
       ] },
+      ...(est.boot?.secao?.tem_subsecoes ? [{ id: 'direcionar', titulo: 'Direcionar às subseções', resumo: 'Demandar ações às subseções e aceitar o que elas concluem.', passos: [
+        { rota: '#/direcionar', alvo: '#form-dir .escolha', titulo: 'Para quem', texto: 'Escolha <b>Todas as subseções</b> (as que ficam diretamente abaixo da sua seção) ou <b>Escolher subseções</b>. Cada uma recebe a sua própria ação, com acompanhamento individual.' },
+        { rota: '#/direcionar', alvo: '#d-prazo', titulo: 'Prazo obrigatório', texto: 'Todo direcionamento tem prazo. Se as subseções já têm ações com o mesmo prazo, o sistema avisa antes de criar. A ação chega a elas como <b>nova</b>.' },
+        { rota: '#/direcionar', alvo: '#form-dir + .cartao', titulo: 'Acompanhe', texto: 'Aqui você vê quem já abriu a ação (a <b>ciência</b> de cada subseção), o andamento e pode <b>Acrescentar seções</b> a um direcionamento já feito.' },
+        { rota: '#/inicio', alvo: ['.validar-quadro', '.sua-semana'], titulo: 'Aceite ao concluir', texto: 'Quando a subseção conclui, a ação volta a você em <b>Aguardando sua validação</b>: <b>Aceitar e encerrar</b> ou <b>Devolver para ajuste</b>, dizendo o que falta. Quem recebeu não edita nem arquiva a ação; para mudar o prazo, pede novo prazo.' },
+      ] }] : []),
       { id: 'atualizacao', titulo: 'Enviando a atualização semanal', resumo: 'O passo mais importante da semana.', passos: [
         { rota: '#/atualizacao', alvo: '.cabeca', titulo: 'Quando enviar', texto: 'O prazo é <b>segunda-feira, 18h</b>. Se passar, a seção aparece como pendente na reunião.' },
         { rota: '#/atualizacao', alvo: '#form-at', titulo: 'O relato já vem pronto', texto: 'O sistema monta o relato com as suas ações e impedimentos: o que foi feito, o que está atrasado, o que vence e o que trava. <b>Algo errado? Corrija na própria ação</b> e volte: o relato se refaz.' },
@@ -70,7 +76,7 @@ function licoes() {
   if (membro) {
     L.push(
       { id: 'acoes', titulo: 'Suas ações', resumo: 'O que é seu e como executar.', passos: [
-        { rota: '#/minhas-acoes', alvo: '.segmento', titulo: 'Minhas e da seção', texto: '<b>Minhas</b> traz o que foi atribuído a você ou criado por você. <b>Da seção (só leitura)</b> mostra o resto, sem alteração.' },
+        { rota: '#/minhas-acoes', alvo: '.segmento', titulo: 'Minhas e da seção', texto: '<b>Minhas</b> traz o que foi atribuído a você ou criado por você. <b>Da seção (só leitura)</b> mostra o resto, sem alteração. Ação que o chefe atribuir a você chega aqui como <b>nova</b>, mesmo vinda de uma seção acima da sua.' },
         { rota: '#/minhas-acoes', alvo: '.cartao.acao', titulo: 'Executando', texto: 'Na ficha da ação você muda status e prioridade, registra o <b>tempo em minutos</b> (concluir exige tempo maior que zero), cria e marca <b>tarefas</b>, registra impedimentos e comenta. Se o seu chefe valida o que você conclui, ele pode devolver com um motivo: leia nos comentários.' },
         { rota: '#/minhas-acoes', titulo: 'O que não é seu', texto: 'Em ação de outra pessoa você só marca a tarefa que é sua e comenta onde tem tarefa. Relatos, reuniões e contas são com o seu chefe.' },
       ] },

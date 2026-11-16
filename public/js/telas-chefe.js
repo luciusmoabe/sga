@@ -5,9 +5,9 @@ import { abrirAlterarReuniao } from './reuniao-data.js';
 import { agendaComoBoot } from './agenda-equipe.js';
 import { agora, est } from './estado.js';
 import {
-  $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, seloNova, STATUS, tempoRestante, toast, trilho, vazio,
+  $, abrirForm, addDias, br, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, seloNova, STATUS, tempoRestante, textoEtapa, toast, trilho, vazio,
 } from './ui.js';
-import { abrirAcao, abrirEditarAcao, abrirNovoImpedimento, aceitaImpedimento, devolverAcao, lerOrigem, ligarOrigem, origemCamposHTML, validarAcao } from './acao-comum.js';
+import { aceitarAcao, abrirAcao, abrirEditarAcao, abrirNovoImpedimento, aceitaImpedimento, devolverAcao, lerOrigem, ligarOrigem, origemCamposHTML, validarAcao } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
 import { dataNoFuso, diasEntre, instante } from './datas.js';
 import { relatoHTML } from './telas-diretor.js';
@@ -28,10 +28,11 @@ const selosDaAcao = (a) => {
     [a.nova ? 0 : null, seloNova(a)],
     [a.atrasada ? 1 : null, '<span class="pilula atraso">Atrasada</span>'],
     [a.impedimento_critico ? 2 : null, '<span class="pilula atraso">Impedimento crítico</span>'],
-    [a.aguardando_validacao ? 3 : null, `<span class="pilula validacao">${a.aguardando_validacao === 'chefe' ? 'Aguardando validação do chefe' : `Aguardando aceite ${doTopo()}`}</span>`],
+    [a.aguardando_validacao ? 3 : null, `<span class="pilula validacao">${esc(textoEtapa(a))}</span>`],
     [a.parada ? 4 : null, seloParada(a)],
     [5, `<span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade].toLowerCase()}</span>`],
     [a.demandada_diretor ? 6 : null, `<span class="pilula diretor" title="Ações demandadas ${peloTopo()} não podem ser arquivadas nem excluídas pela seção">Demandada ${peloTopo()}</span>`],
+    [a.demandada_chefe ? 6 : null, `<span class="pilula diretor" title="Ação direcionada pelo chefe da seção acima: quem a recebe não a arquiva nem a exclui">Demandada por ${esc(a.demandado_por_nome || 'o chefe da seção acima')}</span>`],
     [a.demandante_externo ? 7 : null, `<span class="pilula externa" title="Demanda de entidade fora da subordinação ${aoTopo()}">Demanda externa: ${esc(a.demandante_externo)}</span>`],
     [!a.impedimento_critico && a.impedimentos_abertos ? 8 : null, '<span class="pilula st-bloqueada">Impedimento aberto</span>'],
     [a.pedido_pendente ? 9 : null, '<span class="pilula">Pedido de prazo enviado</span>'],
@@ -128,16 +129,17 @@ function quadroNovasHTML(abertas) {
 }
 
 // ---------- Aguardando sua validação ----------
-/** Ações que o chefe atribuiu a membros da equipe e eles concluíram: ele valida ou devolve para ajuste. */
+/** Ações concluídas que esperam o chefe: as que ele atribuiu a membros (valida) e as que ele direcionou às subseções (aceita); em
+ *  qualquer caso, ele pode devolver para ajuste dizendo o que falta. */
 function quadroValidarHTML(lista) {
   if (!lista.length) return '';
   return `<section class="cartao novas-quadro validar-quadro" aria-labelledby="validar-titulo">
     <div class="linha entre"><h2 id="validar-titulo">Aguardando sua validação</h2><span class="pilula validacao">${plural(lista.length, 'ação', 'ações')}</span></div>
-    <p class="suave pequeno" style="margin:2px 0 10px">Ações que você atribuiu a membros da equipe e que eles concluíram. Valide, ou devolva para ajuste dizendo o que falta.</p>
+    <p class="suave pequeno" style="margin:2px 0 10px">Ações que você atribuiu a membros da equipe ou direcionou às subseções e que foram concluídas. Valide ou aceite, ou devolva para ajuste dizendo o que falta.</p>
     <ul class="novas-lista">${lista.map((a) => `<li data-validar-item="${a.id}"><div class="novas-item novas-item-estatico">
       <span class="novas-item-titulo">${esc(a.titulo)}</span>
-      <span class="pequeno suave">Concluída por ${esc(a.responsavel_nome || 'um membro da equipe')}${a.concluida_em ? ` em ${dataHora(a.concluida_em)}` : ''} · prazo <span class="num">${br(a.prazo)}</span></span>
-      <span class="atencao-botoes"><button type="button" class="btn btn-ok btn-mini" data-validar-q>Validar</button>
+      <span class="pequeno suave">Concluída por ${esc(a.responsavel_nome || (a.aguardando_validacao === 'demandante' ? `${a.secao_sigla || a.secao_nome}` : 'um membro da equipe'))}${a.concluida_em ? ` em ${dataHora(a.concluida_em)}` : ''} · prazo <span class="num">${br(a.prazo)}</span></span>
+      <span class="atencao-botoes">${a.aguardando_validacao === 'demandante' ? '<button type="button" class="btn btn-ok btn-mini" data-aceitar-q>Aceitar e encerrar</button>' : '<button type="button" class="btn btn-ok btn-mini" data-validar-q>Validar</button>'}
         <button type="button" class="btn btn-fantasma btn-mini" data-devolver-q>Devolver para ajuste</button>
         <button type="button" class="btn btn-fantasma btn-mini" data-abrir-q>Abrir</button></span></div></li>`).join('')}</ul>
   </section>
@@ -200,7 +202,7 @@ export async function inicio(raiz, { refresh }) {
     // A seção que tem chefe acima relata também para a reunião dele (resumo: só o que já foi enviado).
     est.user.perfil === 'chefe' && est.boot.secao?.tipo === 'subsecao' ? get('/reunioes-equipe/atualizacao?resumo=1').catch(() => null) : null,
   ]);
-  const aValidar = concluidas.filter((a) => a.aguardando_validacao === 'chefe');
+  const aValidar = concluidas.filter((a) => a.aguardando_validacao === 'chefe' || (a.aguardando_validacao === 'demandante' && a.pode_aceitar_demanda));
   const atrasadas = abertas.filter((a) => a.atrasada).length;
   const vencendo = abertas.filter((a) => !a.atrasada && a.prazo <= addDias(est.boot.hoje, 2)).length;
   const pedidos = abertas.filter((a) => a.pedido_pendente).length;
@@ -223,7 +225,7 @@ export async function inicio(raiz, { refresh }) {
     <div class="espaco"></div>
     <div class="cartao"><div class="linha entre"><h2>Próximas ações</h2><a href="#/minhas-acoes">Ver todas</a></div>
       ${abertas.length ? `<table><tbody>${abertas.slice(0, 4).map((a) => `<tr class="clicavel" data-acao="${a.id}" tabindex="0">
-        <td><b>${esc(a.titulo)}</b>${a.demandada_diretor ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">Demandada ${peloTopo()} em ${br(a.demandado_em || a.criada_em)}</div>` : ''}</td>
+        <td><b>${esc(a.titulo)}</b>${a.demandada_diretor ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">Demandada ${peloTopo()} em ${br(a.demandado_em || a.criada_em)}</div>` : a.demandada_chefe ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">Demandada por ${esc(a.demandado_por_nome || 'o chefe da seção acima')} em ${br(a.demandado_em || a.criada_em)}</div>` : ''}</td>
         <td class="num">${br(a.prazo)}</td><td>${pilulaStatus(a)}</td></tr>`).join('')}</tbody></table>`
         : vazio('Nenhuma ação em aberto', `Quando ${oTopo()} direcionar algo, aparecerá aqui.`)}</div>
     </div>${quadroAtencaoHTML(abertas, semana)}</div>`;
@@ -235,6 +237,7 @@ export async function inicio(raiz, { refresh }) {
   on(raiz, 'click', 'tr[data-acao], .novas-item[data-acao]', abrir);
   const itemDe = (el) => aValidar.find((a) => a.id === Number(el.closest('[data-validar-item]').dataset.validarItem));
   on(raiz, 'click', '[data-validar-q]', async (el) => { try { await validarAcao(itemDe(el).id); await refresh(); } catch (e) { toast(e.message, 'erro'); } });
+  on(raiz, 'click', '[data-aceitar-q]', async (el) => { try { await aceitarAcao(itemDe(el).id); await refresh(); } catch (e) { toast(e.message, 'erro'); } });
   on(raiz, 'click', '[data-devolver-q]', (el) => devolverAcao(itemDe(el), refresh));
   on(raiz, 'click', '[data-abrir-q]', (el) => abrirAcao(itemDe(el).id, refresh).catch((e) => toast(e.message, 'erro')));
   on(raiz, 'keydown', 'tr[data-acao]', (el, ev) => { if (ev.key === 'Enter') abrir(el); });
@@ -258,7 +261,7 @@ export async function minhasAcoes(raiz) {
   const ehMembro = est.user.perfil === 'membro';
   let escopo = 'minhas';
   const doEscopo = (l) => (ehMembro ? l.filter((a) => (escopo === 'minhas') === !!a.pode_executar) : l);
-  const temMais = (a) => (ehMembro ? !!(a.pode_editar || a.pode_mudar_prazo || a.pode_excluir) : (!a.demandada_diretor || a.pode_editar || a.pode_mudar_prazo));
+  const temMais = (a) => (ehMembro ? !!(a.pode_editar || a.pode_mudar_prazo || a.pode_excluir) : ((!a.demandada_diretor && !a.demandada_chefe) || a.pode_editar || a.pode_mudar_prazo));
   let aba = 'ativas';
 
   const renderizar = () => {
@@ -292,7 +295,7 @@ export async function minhasAcoes(raiz) {
         <header class="acao-topo">
           <div>
             <h3>${esc(a.titulo)}</h3>
-            <div class="acao-meta">Prazo <b class="num">${br(a.prazo)}</b> · ${esc(a.secao_sigla)}${a.interna ? ' · ação interna' : ''}${a.demandada_diretor ? ` · demandada em ${br(a.demandado_em || a.criada_em)}` : ''}</div>
+            <div class="acao-meta">Prazo <b class="num">${br(a.prazo)}</b> · ${esc(a.secao_sigla)}${a.interna ? ' · ação interna' : ''}${a.demandada_diretor || a.demandada_chefe ? ` · demandada em ${br(a.demandado_em || a.criada_em)}` : ''}</div>
           </div>
           <div class="acao-selos">${selosDaAcao(a)}
           </div>
@@ -310,10 +313,11 @@ export async function minhasAcoes(raiz) {
           ${!ehMembro && !a.arquivada && a.status !== 'concluida' && !a.pedido_pendente && !a.pode_mudar_prazo ? '<button type="button" class="btn btn-fantasma btn-mini" data-prazo>Pedir novo prazo</button>' : ''}
           ${aceitaImpedimento(a) && a.pode_executar ? '<button type="button" class="btn btn-fantasma btn-mini" data-impedimento>Impedimento</button>' : ''}
           ${a.aguardando_validacao === 'chefe' && a.pode_executar && !ehMembro ? '<button type="button" class="btn btn-ok btn-mini" data-validar>Validar</button><button type="button" class="btn btn-fantasma btn-mini" data-devolver>Devolver</button>' : ''}
+          ${a.pode_aceitar_demanda ? '<button type="button" class="btn btn-ok btn-mini" data-aceitar>Aceitar e encerrar</button><button type="button" class="btn btn-fantasma btn-mini" data-devolver>Devolver</button>' : ''}
           ${temMais(a) ? `<details class="mais"><summary class="btn btn-fantasma btn-mini">Mais</summary>
             <div class="mais-itens">
               ${a.pode_editar || a.pode_mudar_demanda ? '<button type="button" class="btn btn-sec btn-mini" data-editar>Editar</button>' : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" data-editar>Alterar prazo</button>' : ''}
-              ${a.demandada_diretor || ehMembro ? '' : a.arquivada ? '<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar</button>' : '<button type="button" class="btn btn-sec btn-mini" data-arquivar>Arquivar</button>'}
+              ${a.demandada_diretor || a.demandada_chefe || ehMembro ? '' : a.arquivada ? '<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar</button>' : '<button type="button" class="btn btn-sec btn-mini" data-arquivar>Arquivar</button>'}
               ${a.pode_excluir ? '<button type="button" class="btn btn-sec btn-mini perigo-texto" data-excluir>Excluir ação</button>' : ''}
             </div></details>` : ''}
         </footer>
@@ -342,6 +346,7 @@ export async function minhasAcoes(raiz) {
   });
   on(raiz, 'click', '[data-escopo-ac]', (el) => { escopo = el.dataset.escopoAc; renderizar(); });
   on(raiz, 'click', '[data-validar]', async (el) => { try { await validarAcao(acaoDe(el).id); await recarregar(); } catch (e) { erro(e); } });
+  on(raiz, 'click', '[data-aceitar]', async (el) => { try { await aceitarAcao(acaoDe(el).id); await recarregar(); } catch (e) { erro(e); } });
   on(raiz, 'click', '[data-devolver]', (el) => devolverAcao(acaoDe(el), recarregar));
 
   on(raiz, 'click', '[data-impedimento]', (el) => abrirNovoImpedimento(acaoDe(el), recarregar));

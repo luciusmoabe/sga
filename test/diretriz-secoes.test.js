@@ -59,7 +59,7 @@ test('validações: seção repetida, subseção, prazo vencido, perfil e Direto
   assert.equal((await call(DIRETOR, 'POST', `/diretrizes/${d.id}/secoes`, { secoes: [IND] })).status, 400, 'subseção não');
   assert.equal((await call(DIRETOR, 'POST', `/diretrizes/${d.id}/secoes`, { secoes: [COF], prazo: '2026-09-01' })).status, 400);
   assert.equal((await call(DIRETOR, 'POST', '/diretrizes/999999/secoes', { secoes: [COF] })).status, 404);
-  assert.equal((await call(ANA_CPE, 'POST', `/diretrizes/${d.id}/secoes`, { secoes: [COF] })).status, 403);
+  assert.equal((await call(ANA_CPE, 'POST', `/diretrizes/${d.id}/secoes`, { secoes: [COF] })).status, 404, 'o chefe não mexe no direcionamento do Diretor');
   assert.equal((await call(APOIO, 'POST', `/diretrizes/${d.id}/secoes`, { secoes: [COF] })).status, 201);
 
   // Diretriz cujo prazo já passou: só com prazo novo.

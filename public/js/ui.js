@@ -35,6 +35,10 @@ export const STATUS = { a_fazer: 'A fazer', em_andamento: 'Em andamento', bloque
 export const PRIO = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 export const COR = { verde: 'Em dia', amarelo: 'Atenção', vermelho: 'Crítico' };
 
+/** Quem a ação concluída espera: o chefe da seção (validação), quem a demandou (chefe que direcionou) ou o Diretor (aceite). */
+export const textoEtapa = (a) => (a.aguardando_validacao === 'chefe' ? 'Aguardando validação do chefe'
+  : a.aguardando_validacao === 'demandante' ? `Aguardando aceite de ${a.demandado_por_nome || 'quem demandou'}` : `Aguardando aceite ${doTopo()}`);
+
 export const sem = (cor) => `<span class="sem sem-${cor}">${COR[cor]}</span>`;
 // `nova`: ação recebida que quem consulta ainda não abriu (o servidor só marca para quem a recebeu).
 export const seloNova = (a) => (a.nova ? '<span class="pilula nova" title="Recebida e ainda não aberta por você">● Nova</span> ' : '');
@@ -43,7 +47,7 @@ export const pilulaStatus = (a) =>
   (a.atrasada ? ' <span class="pilula atraso">Atrasada</span>' : '') +
   (a.impedimento_critico ? ' <span class="pilula atraso">Impedimento crítico</span>' : a.impedimentos_abertos ? ' <span class="pilula st-bloqueada">Impedimento aberto</span>' : '') +
   (a.checklist_total ? ` <span class="pilula" title="Tarefas feitas">☑ ${a.checklist_feitos}/${a.checklist_total}</span>` : '') +
-  (a.aguardando_validacao ? ` <span class="pilula validacao" title="A ação foi concluída e espera a conferência de quem a delegou">${a.aguardando_validacao === 'chefe' ? 'Aguardando validação do chefe' : `Aguardando aceite ${doTopo()}`}</span>` : '') +
+  (a.aguardando_validacao ? ` <span class="pilula validacao" title="A ação foi concluída e espera a conferência de quem a delegou">${esc(textoEtapa(a))}</span>` : '') +
   (a.demandante_externo ? ` <span class="pilula externa" title="Demanda de entidade fora da subordinação ${aoTopo()}">Demanda externa: ${esc(a.demandante_externo)}</span>` : '') +
   (a.encerrada ? ' <span class="pilula enc">Encerrada</span>' : '');
 export const vazio = (titulo, texto = '') => `<div class="vazio"><b>${esc(titulo)}</b>${esc(texto)}</div>`;

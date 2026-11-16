@@ -34,7 +34,8 @@ const TODOS = ['diretor', 'apoio', 'chefe', 'administrador'];
 const ROTAS = {
   painel: { f: painel, perfis: LEITURA, trilho: true, titulo: 'Painel da semana' },
   centro: { f: centro, perfis: LEITURA, get titulo() { return nomeTipo('centro'); } },
-  direcionar: { f: direcionar, perfis: GESTAO, titulo: 'Direcionar ação' },
+  // O chefe que tem subseções ativas abaixo direciona ações a elas (quem demandou aceita ou devolve o que for concluído).
+  direcionar: { f: direcionar, perfis: [...GESTAO, 'chefe'], titulo: 'Direcionar ação', exige: () => est.user.perfil !== 'chefe' || !!est.boot?.secao?.tem_subsecoes },
   acoes: { f: acoes, perfis: LEITURA, titulo: 'Ações' },
   prazos: { f: prazos, perfis: LEITURA, titulo: 'Pedidos de prazo' },
   pauta: { f: pauta, perfis: LEITURA, titulo: 'Pauta' },
@@ -123,6 +124,7 @@ const MENU_CHEFE = [
   ['agenda', 'Agenda'],
   ['#Meu trabalho'],
   ['minhas-acoes', 'Minhas ações'],
+  ['direcionar', 'Direcionar ação'],
   ['atualizacao', 'Minha atualização'],
   ['equipe', 'Minha equipe'],
   ['#Acompanhamento'],
@@ -309,7 +311,8 @@ function casca() {
   const chefe = lePorTodosOsCentros() ? MENU_CHEFE.flatMap((m) => (m[0] === 'minhas-acoes' ? [m, ['acoes-centros', `Ações ${dosPlural('centro')}`]] : [m])) : MENU_CHEFE;
   const base = u.perfil === 'chefe' ? (u.acesso_configuracao ? [...chefe, ['#Administração'], ['estrutura', 'Configuração']] : chefe) : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? menuConsulta() : u.perfil === 'membro' ? MENU_MEMBRO : u.perfil === 'plataforma' ? MENU_PLATAFORMA : MENU_GESTAO;
   const menu = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['equipe', 'Minha equipe'], ['atualizacao', 'Minha atualização']] : []), ...base]
-    .filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil));
+    .filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil))
+    .filter((m) => !(m[0] === 'direcionar' && u.perfil === 'chefe' && !est.boot?.secao?.tem_subsecoes)); // o chefe só direciona se tem subseções
   app.innerHTML = `<div class="app${menuRecolhido() ? ' menu-recolhido' : ''}"><aside class="lateral">
     <div class="marca"><div class="marca-bloco"><img src="/imagens/logo-agilis.png" alt="Agilis" class="marca-logo"><img src="/imagens/favicon-32.png" alt="Agilis" class="marca-icone" width="32" height="32">${est.boot?.empresa ? `<div class="marca-empresa" title="${esc(est.boot.empresa.nome)}">${esc(est.boot.empresa.sigla || est.boot.empresa.nome)}</div>` : ''}</div><button type="button" class="menu-recolher" id="menu-recolher" aria-controls="menu-principal" aria-expanded="true" aria-label="Recolher menu" title="Recolher menu"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="12.5,4.5 7,10 12.5,15.5"/></svg></button></div>
     <nav class="menu" id="menu-principal" aria-label="Principal">${menu.map((m) => m[0].startsWith('#')
@@ -466,7 +469,7 @@ async function renderizar() {
     }
     document.body.classList.remove('tv');
     // A casca muda com o perfil e com a consulta aos outros Centros (o menu ganha "Ações dos Centros").
-    const chaveCasca = `${est.user.perfil}:${lePorTodosOsCentros() ? 1 : 0}`;
+    const chaveCasca = `${est.user.perfil}:${lePorTodosOsCentros() ? 1 : 0}:${est.boot?.secao?.tem_subsecoes ? 1 : 0}`;
     if (!$('.app') || $('.app')?.dataset.perfil !== chaveCasca) { casca(); $('.app').dataset.perfil = chaveCasca; }
     for (const a of document.querySelectorAll('.menu a, .abas-movel a, .folha-menu a')) {
       const ativa = a.dataset.rota === rota || (rota === 'centro' && a.dataset.rota === 'painel') || (rota === 'pauta' && a.dataset.rota === 'painel') || (['reunioes-equipe', 'reuniao-equipe'].includes(rota) && a.dataset.rota === 'atas');

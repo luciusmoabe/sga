@@ -112,6 +112,7 @@ const tarefaCamposHTML = (responsaveis, it = {}) => `
  *  (marcar/adicionar/excluir tarefa não fecha e reabre a tela toda). */
 const badgesHTML = (a) => `${pilulaStatus(a)}
   ${a.demandada_diretor ? `<span class="pilula diretor">Demandada ${peloTopo()}</span>` : ''}
+  ${a.demandada_chefe ? `<span class="pilula diretor">Demandada por ${esc(a.demandado_por_nome || 'o chefe da seção acima')}</span>` : ''}
   ${a.apresentada ? `<span class="pilula" title="Título e detalhamento não mudam mais; o prazo pode ser alterado">Apresentada em reunião (${br(a.apresentada_em)})</span>` : ''}
   <span class="pilula prio-${a.prioridade}">Prioridade ${PRIO[a.prioridade]}</span>
   ${a.esforco ? `<span class="pilula" title="Estimativa de esforço, usada nos indicadores de produtividade">Esforço ${ROTULO_ESFORCO[a.esforco]}</span>` : ''}
@@ -189,6 +190,12 @@ export function lerOrigem(d) {
 export async function validarAcao(id) {
   await post(`/acoes/${id}/validar`);
   toast('Ação validada.');
+  selosMudaram();
+}
+/** Quem demandou (o Diretor, ou o chefe que direcionou às subseções) aceita a ação concluída e a encerra. */
+export async function aceitarAcao(id) {
+  await post(`/acoes/${id}/encerrar`);
+  toast('Ação aceita e encerrada.');
   selosMudaram();
 }
 /** Devolve a ação concluída para ajuste, com o motivo (o chefe, na etapa dele; o Diretor, na dele). */
@@ -308,6 +315,10 @@ const validacaoHTML = (a) => {
       ${a.responsavel_nome ? `<span class="suave pequeno"> ${esc(a.responsavel_nome)} concluiu a ação.</span>` : ''}
       ${chefeAgindo ? '<div class="linha" style="margin-top:8px"><button type="button" class="btn btn-ok" data-validar>Validar</button><button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>' : ''}</div>`;
   }
+  if (a.aguardando_validacao === 'demandante') {
+    return `<div class="aviso-validacao"><b>Aguardando o aceite de ${esc(a.demandado_por_nome || 'quem demandou')}.</b>${a.validada_chefe ? ` <span class="suave pequeno">O chefe da seção já validou${a.validada_chefe_por_nome ? ` (${esc(a.validada_chefe_por_nome)})` : ''}.</span>` : ''}
+      ${a.pode_aceitar_demanda || ehAdmin() ? '<div class="linha" style="margin-top:8px"><button type="button" class="btn btn-ok" data-encerrar>Aceitar e encerrar</button><button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>' : ''}</div>`;
+  }
   if (a.aguardando_validacao === 'diretor') {
     return `<div class="aviso-validacao"><b>Aguardando o aceite ${doTopo()}.</b>${a.validada_chefe ? ` <span class="suave pequeno">O chefe já validou${a.validada_chefe_por_nome ? ` (${esc(a.validada_chefe_por_nome)})` : ''}.</span>` : ''}
       ${ehDiretor() ? '<div class="linha" style="margin-top:8px"><button type="button" class="btn btn-ok" data-encerrar>Aceitar e encerrar</button><button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>' : ''}</div>`;
@@ -360,6 +371,14 @@ export async function abrirAcao(id, aoMudar) {
     <div class="linha" style="justify-content:flex-end;margin:-6px 0 4px"><button type="button" class="btn btn-fantasma btn-mini" data-copiar-link>Copiar link da ação</button></div>
     ${leitura ? '<div class="info">Somente leitura: você acompanha esta ação, mas quem a altera é a seção responsável.</div>'
     : ehMembro && !a.pode_executar ? '<div class="info">Esta ação é de outra pessoa da equipe. Você marca como feitas as tarefas atribuídas a você e pode comentar; o resto fica com quem a executa.</div>' : ''}
+    ${a.demandada_chefe ? `
+      <div class="banner-origem diretor">
+        <span class="banner-origem-icone">🎯</span>
+        <div>
+          <strong>Demandada por ${esc(a.demandado_por_nome || 'o chefe da seção acima')}</strong>
+          <div class="detalhes">Direcionada em ${dataHora(a.demandado_em || a.criada_em)} · quem demandou aceita ou devolve a ação depois de concluída</div>
+        </div>
+      </div>` : ''}
     ${a.demandada_diretor ? `
       <div class="banner-origem diretor">
         <span class="banner-origem-icone">🎯</span>
@@ -426,7 +445,7 @@ export async function abrirAcao(id, aoMudar) {
     ${a.pode_editar || a.pode_mudar_demanda ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Editar ação</button>'
       : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Alterar prazo</button>' : ''}
     ${aceitaRedirecionar(a) ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-redirecionar>Redirecionar para outra seção</button>' : ''}
-    ${leitura || ehMembro ? '' : !a.demandada_diretor || (a.demanda_diretor && !a.diretriz_id) || ehAdmin() ? `
+    ${leitura || ehMembro ? '' : (!a.demandada_diretor && !a.demandada_chefe) || (a.demanda_diretor && !a.diretriz_id) || ehAdmin() ? `
       <div class="linha" style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line);align-items:center">
         ${a.arquivada
           ? `<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar ação</button>`
@@ -435,7 +454,7 @@ export async function abrirAcao(id, aoMudar) {
       </div>
     ` : `
       <div class="suave pequeno" style="margin-top:14px;padding-top:8px;border-top:1px solid var(--line)">
-        <i>Esta ação foi demandada ${peloTopo()} e não pode ser excluída nem arquivada pela seção.</i>
+        <i>${a.demandada_chefe ? 'Esta ação foi direcionada pelo chefe da seção acima e não pode ser arquivada por quem a recebeu.' : `Esta ação foi demandada ${peloTopo()} e não pode ser excluída nem arquivada pela seção.`}</i>
       </div>
     `}
     ${a.pode_excluir ? '<button type="button" class="btn btn-perigo" style="margin-top:12px" data-excluir>Excluir ação</button>' : ''}

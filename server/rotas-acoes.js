@@ -44,7 +44,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
   };
   const SEM_PERMISSOES = {
     pode_editar: false, pode_descrever: false, pode_mudar_prazo: false, pode_mudar_demanda: false, pode_excluir: false,
-    pode_executar: false, pode_comentar: false, pode_atribuir: false,
+    pode_executar: false, pode_comentar: false, pode_atribuir: false, pode_aceitar_demanda: false,
   };
   /** Marca `somente_leitura` e tira as permissões das ações que a pessoa só lê. O membro lê toda a árvore da seção,
    *  mas age só nas ações dele; numa ação de outra pessoa, só mexe (e comenta) onde há tarefa atribuída a ele. */
@@ -120,9 +120,10 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     return true;
   };
   /** Quem já tomou ciência da ação desde que ela chegou à seção atual. */
+  // O chefe que direcionou a ação às subseções já nasce ciente (para ela não chegar "nova" para ele): isso não é ciência da seção.
   const vistasDa = (a) => (a.recebida_em
     ? q(`select v.usuario_id, u.nome as usuario_nome, v.vista_em from acao_vistas v join usuarios u on u.id = v.usuario_id
-        where v.acao_id = ? and v.vista_em >= ? order by v.vista_em, v.usuario_id`, a.id, a.recebida_em)
+        where v.acao_id = ? and v.vista_em >= ? and v.usuario_id != ? order by v.vista_em, v.usuario_id`, a.id, a.recebida_em, a.demandado_por_perfil === 'chefe' ? (a.demandado_por_id ?? -1) : -1)
     : []);
 
   // Só junções 1:1 (cada uma por id): contar sobre elas dá o mesmo total da lista, sem calcular as colunas da seleção.
@@ -147,6 +148,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       d.criado_por as demandado_por_id,
       ud.nome as demandado_por_nome,
       ud.perfil as demandado_por_perfil,
+      ud.secao_id as demandado_por_secao_id,
       coalesce(d.criado_em, a.criada_em) as demandado_em,
       d.reuniao_id,
       r.semana as reuniao_semana,
@@ -158,18 +160,22 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       (select count(*) from acao_checklist c where c.acao_id = a.id and c.concluido = 1) as checklist_feitos
     ${FROM_ACAO}`;
   /** Validação de quem delegou, depois de a ação ser concluída. Só ações demandadas pelo Diretor (aceite dele) e as que
-   *  o chefe atribuiu a outra pessoa (validação do chefe) têm uma; as demais ficam prontas ao serem concluídas.
-   *  Em sequência: primeiro o chefe, depois o Diretor. */
+   *  o chefe atribuiu a outra pessoa (validação do chefe) têm uma, e também as que um chefe direcionou às subseções dele
+   *  (aceite de quem demandou, `demandante`); as demais ficam prontas ao serem concluídas.
+   *  Em sequência: primeiro o chefe da seção da ação (se atribuiu a um membro), depois quem demandou (Diretor ou chefe). */
   const validacaoDe = (a) => {
-    const demandadaDiretor = !!a.demanda_diretor || !!a.diretriz_id || a.demandado_por_perfil === 'diretor';
+    // Direcionada por um chefe às subseções dele: quem demandou aceita (ou devolve), não o Diretor.
+    const demandadaChefe = !!a.diretriz_id && a.demandado_por_perfil === 'chefe';
+    const demandadaDiretor = !demandadaChefe && (!!a.demanda_diretor || !!a.diretriz_id || a.demandado_por_perfil === 'diretor');
     // Delegada: atribuída a um membro da equipe por outra pessoa (o chefe). Entre chefes, ou quando a pessoa executa a
     // própria ação, não há quem validar.
     const delegada = !!a.responsavel_id && !!a.atribuido_por && a.responsavel_id !== a.atribuido_por && a.responsavel_perfil === 'membro';
     const concluida = a.status === 'concluida' && !a.encerrada && !a.arquivada;
     let aguardando = null;
     if (concluida && delegada && !a.validada_chefe_em) aguardando = 'chefe';
+    else if (concluida && demandadaChefe) aguardando = 'demandante';
     else if (concluida && demandadaDiretor) aguardando = 'diretor';
-    return { demandada_diretor: demandadaDiretor, delegada, exige_validacao_chefe: delegada, exige_validacao_diretor: demandadaDiretor,
+    return { demandada_diretor: demandadaDiretor, demandada_chefe: demandadaChefe, delegada, exige_validacao_chefe: delegada, exige_validacao_diretor: demandadaDiretor, exige_validacao_demandante: demandadaChefe,
       validada_chefe: !!a.validada_chefe_em, aguardando_validacao: aguardando };
   };
   const acaoOut = (a) => ({
@@ -302,8 +308,14 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       pode_comentar: user.perfil !== 'consulta' && (user.perfil !== 'membro' || executa(user, a)),
       // Atribuir a ação a alguém da seção: o chefe e o Administrador, enquanto ela está em curso.
       pode_atribuir: (user.perfil === 'administrador' || (user.perfil === 'chefe' && !!user.secao_id)) && emCurso,
+      // Aceitar ou devolver a ação que o chefe direcionou às subseções, depois de concluída: só quem demandou (a seção dele).
+      pode_aceitar_demanda: demandanteDe(user, a) && validacaoDe(a).aguardando_validacao === 'demandante',
     };
   };
+  /** O chefe da seção que direcionou a ação (titular ou suplente): é quem aceita ou devolve o que as subseções concluem. */
+  function demandanteDe(user, a) {
+    return user.perfil === 'chefe' && !!user.secao_id && a.demandado_por_perfil === 'chefe' && a.demandado_por_secao_id === user.secao_id;
+  }
   const NAO_GERE = 'Só quem criou a ação pode editá-la ou excluí-la: o chefe, as que ele (ou o seu suplente) criou; o Diretor e o Diretor Adjunto, as que direcionaram.';
   const chefeGere = (user, acao) => {
     if (executa(user, acao)) return;
@@ -314,6 +326,21 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
 
 
   // ---------- Diretrizes e ações ----------
+  /** Subseções ativas para onde um chefe pode direcionar ações: as da árvore da própria seção (sem ela mesma), com o pai de cada uma. */
+  const subsecoesDoChefe = async (user) => {
+    const ids = user.secao_id ? (await subarvore(db, user.secao_id)).filter((i) => i !== user.secao_id) : [];
+    if (!ids.length) return [];
+    return q(`select id, pai_id from secoes where tipo = 'subsecao' and ativa = 1 and empresa_id = ? and id in (${marks(ids)})`, empresaAtual(), ...ids);
+  };
+  /** Texto do comentário de origem: o Diretor, ou o chefe (nome e seção) que direcionou. */
+  const origemDaDemanda = async (user, reuniaoId, acrescentada = false) => {
+    if (user.perfil === 'chefe') {
+      const s = user.secao_id ? await q1('select nome, sigla from secoes where id = ? and empresa_id = ?', user.secao_id, empresaAtual()) : null;
+      return `Ação demandada por ${user.nome}${s ? ` (${s.sigla || s.nome})` : ''}${acrescentada ? ' (seção acrescentada ao direcionamento)' : ''}.`;
+    }
+    if (acrescentada) return 'Ação demandada pelo Diretor (seção acrescentada ao direcionamento).';
+    return reuniaoId ? 'Ação demandada pelo Diretor na reunião de acompanhamento.' : 'Ação demandada pelo Diretor.';
+  };
   async function criarDiretriz(user, b, reuniaoId = null) {
     const titulo = texto(b.titulo, 160);
     if (!titulo) throw falha(400, 'Informe o título da ação.');
@@ -322,7 +349,19 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const prioridade = PRIORIDADES.includes(b.prioridade) ? b.prioridade : 'media';
     const destino = b.destino === 'todos' ? 'todos' : 'especificos';
     let alvos;
-    if (destino === 'todos') {
+    if (user.perfil === 'chefe') {
+      // O chefe direciona às subseções da própria árvore. "Todas" = as que ficam diretamente abaixo da seção dele; as dos níveis
+      // seguintes recebem pelo chefe de cada subseção.
+      if (!user.secao_id) throw falha(409, 'Você ainda não está vinculado a uma seção. Peça {topo:ao} para atribuí-lo a uma seção.');
+      const permitidas = await subsecoesDoChefe(user);
+      if (destino === 'todos') alvos = permitidas.filter((s) => s.pai_id === user.secao_id).map((s) => s.id);
+      else {
+        const ids = [...new Set((b.secoes || []).map(Number))];
+        alvos = ids.filter((i) => permitidas.some((s) => s.id === i));
+        if (alvos.length !== ids.length) throw falha(400, 'Escolha só subseções ativas da sua seção.');
+      }
+      if (!alvos.length) throw falha(400, destino === 'todos' ? 'Sua seção não tem subseções ativas para receber a ação.' : 'Escolha ao menos uma subseção para receber a ação.');
+    } else if (destino === 'todos') {
       // "Todos os Centros" vale para as unidades de acompanhamento que não são a Diretoria Adjunta (Centros e Coordenações, onde
       // estiverem na árvore): a Adjunta recebe quando escolhida.
       alvos = (await q("select id from secoes where tipo in ('centro','coordenacao') and ativa = 1 and empresa_id = ?", empresaAtual())).map((r) => r.id);
@@ -336,6 +375,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       if (alvos.length !== ids.length) throw falha(400, `Escolha só unidades de acompanhamento ativas (${tiposDeDestino(await vocabularioAtual())}).`);
     }
     if (!alvos.length) throw falha(400, 'Escolha ao menos uma seção para receber a ação.');
+    const origem = await origemDaDemanda(user, reuniaoId);
     // O Diretor Adjunto (Administrador vinculado à Diretoria Adjunta) não direciona ações para a própria seção:
     // as ações dela ele cria em "Minhas ações".
     if (user.perfil === 'administrador' && user.secao_id && alvos.includes(user.secao_id)) {
@@ -362,30 +402,39 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
         )).lastInsertRowid;
         await run(
           `insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)`,
-          aId, user.id, reuniaoId ? 'Ação demandada pelo Diretor na reunião de acompanhamento.' : 'Ação demandada pelo Diretor.', agoraISO(),
+          aId, user.id, origem, agoraISO(),
         );
+        // Quem direciona dentro da própria árvore já fica ciente: a ação não chega como "nova" para ele.
+        if (user.perfil === 'chefe') await run('insert into acao_vistas (acao_id, usuario_id, vista_em) values (?,?,?)', aId, user.id, quando);
       }
       return { id: d, destino, acoes_criadas: alvos.length };
     });
   }
 
-  app.post('/api/diretrizes', permit('diretor', 'apoio', 'administrador'), h(async (req, res) => {
+  app.post('/api/diretrizes', permit('diretor', 'apoio', 'chefe', 'administrador'), h(async (req, res) => {
     res.status(201);
     return await criarDiretriz(req.user, req.body || {});
   }));
-  app.get('/api/diretrizes', permit('diretor', 'apoio', 'administrador'), h(async () => {
+  app.get('/api/diretrizes', permit('diretor', 'apoio', 'chefe', 'administrador'), h(async (req) => {
+    // O chefe vê os direcionamentos da própria seção (os dele e os do suplente ou do titular); o Diretor e o Apoio, os da gestão
+    // (sem os que os chefes fazem às subseções deles); o Administrador, todos.
+    const filtro = req.user.perfil === 'chefe'
+      ? { sql: `and u.perfil = 'chefe' and u.secao_id = ?`, params: [req.user.secao_id ?? -1] }
+      : req.user.perfil === 'administrador' ? { sql: '', params: [] } : { sql: `and (u.perfil is null or u.perfil != 'chefe')`, params: [] };
     const lista = await q(`select d.*, u.nome as criado_por_nome,
          (select count(*) from acoes a where a.diretriz_id = d.id and a.empresa_id = d.empresa_id) total,
          (select count(*) from acoes a where a.diretriz_id = d.id and a.empresa_id = d.empresa_id and a.status = 'concluida') concluidas
-       from diretrizes d left join usuarios u on u.id = d.criado_por where d.empresa_id = ? order by d.criado_em desc, d.id desc limit 30`, empresaAtual());
+       from diretrizes d left join usuarios u on u.id = d.criado_por where d.empresa_id = ? ${filtro.sql} order by d.criado_em desc, d.id desc limit 30`, empresaAtual(), ...filtro.params);
     if (!lista.length) return lista;
     // Seções que têm hoje a ação de cada diretriz (uma ação redirecionada aparece na seção de destino).
     const ids = lista.map((d) => d.id);
     // Com cada seção, a primeira ciência desde que a ação chegou a ela (recebida_em vazio: ação anterior ao registro).
     const secoes = await q(`select a.diretriz_id, s.id, s.sigla, s.nome, a.recebida_em,
-        (select v.vista_em from acao_vistas v where v.acao_id = a.id and v.vista_em >= a.recebida_em order by v.vista_em limit 1) as vista_em,
+        (select v.vista_em from acao_vistas v where v.acao_id = a.id and v.vista_em >= a.recebida_em
+          and v.usuario_id != coalesce((select dd.criado_por from diretrizes dd where dd.id = a.diretriz_id and dd.empresa_id = a.empresa_id), -1) order by v.vista_em limit 1) as vista_em,
         (select u.nome from acao_vistas v join usuarios u on u.id = v.usuario_id
-          where v.acao_id = a.id and v.vista_em >= a.recebida_em order by v.vista_em limit 1) as vista_por
+          where v.acao_id = a.id and v.vista_em >= a.recebida_em
+            and v.usuario_id != coalesce((select dd.criado_por from diretrizes dd where dd.id = a.diretriz_id and dd.empresa_id = a.empresa_id), -1) order by v.vista_em limit 1) as vista_por
       from acoes a join secoes s on s.id = a.secao_id
       where a.empresa_id = ? and a.diretriz_id in (${marks(ids)}) order by s.ordem, s.id`, empresaAtual(), ...ids);
     return lista.map((d) => ({
@@ -397,7 +446,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
   // Acrescentar seções a um direcionamento já feito: cada seção nova recebe a mesma ação (título, detalhamento,
   // prioridade), ligada à mesma diretriz. As seções que já a receberam não mudam. O prazo é o da diretriz, ou outro
   // informado (necessário quando o da diretriz já passou).
-  app.post('/api/diretrizes/:id/secoes', permit('diretor', 'apoio', 'administrador'), h(async (req, res) => {
+  app.post('/api/diretrizes/:id/secoes', permit('diretor', 'apoio', 'chefe', 'administrador'), h(async (req, res) => {
     const id = Number(req.params.id);
     const b = req.body || {};
     const ids = [...new Set((Array.isArray(b.secoes) ? b.secoes : []).map(Number))];
@@ -405,12 +454,21 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const out = await db.transaction(async () => {
       const d = await q1(`select * from diretrizes where id = ? and empresa_id = ?${db.isPg ? ' for update' : ''}`, id, empresaAtual());
       if (!d) throw falha(404, 'Direcionamento não encontrado.');
+      // O chefe só acrescenta subseções a um direcionamento da própria seção.
+      if (req.user.perfil === 'chefe' && !(await q1(`select 1 from usuarios where id = ? and perfil = 'chefe' and secao_id = ? and empresa_id = ?`, d.criado_por, req.user.secao_id ?? -1, empresaAtual()))) {
+        throw falha(404, 'Direcionamento não encontrado.');
+      }
       const prazo = b.prazo || d.prazo;
       if (!ehISO(prazo)) throw falha(400, 'Informe o prazo da ação.');
       if (prazo < hoje()) throw falha(400, 'O prazo desta ação já passou. Informe um novo prazo para as seções acrescentadas.');
-      for (const s of ids) {
-        if (!(await q1("select 1 from secoes where id = ? and tipo in ('centro','coordenacao','diretoria_adjunta') and ativa = 1 and empresa_id = ?", s, empresaAtual()))) {
-          throw falha(400, `Escolha só unidades de acompanhamento ativas (${tiposDeDestino(await vocabularioAtual())}).`);
+      if (req.user.perfil === 'chefe') {
+        const permitidas = await subsecoesDoChefe(req.user);
+        if (!ids.every((s) => permitidas.some((p) => p.id === s))) throw falha(400, 'Escolha só subseções ativas da sua seção.');
+      } else {
+        for (const s of ids) {
+          if (!(await q1("select 1 from secoes where id = ? and tipo in ('centro','coordenacao','diretoria_adjunta') and ativa = 1 and empresa_id = ?", s, empresaAtual()))) {
+            throw falha(400, `Escolha só unidades de acompanhamento ativas (${tiposDeDestino(await vocabularioAtual())}).`);
+          }
         }
       }
       if (req.user.perfil === 'administrador' && req.user.secao_id && ids.includes(req.user.secao_id)) {
@@ -418,14 +476,15 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       }
       const jaTem = (await q(`select secao_id from acoes where diretriz_id = ? and empresa_id = ? and secao_id in (${marks(ids)})`, id, empresaAtual(), ...ids)).map((r) => r.secao_id);
       if (jaTem.length) throw falha(409, 'Alguma das seções escolhidas já recebeu esta ação. Atualize a tela e escolha outras.');
+      const origem = await origemDaDemanda(req.user, null, true);
       for (const s of ids) {
         const quando = agoraISO();
         const aId = (await run(
           `insert into acoes (diretriz_id, secao_id, titulo, detalhe, prazo, prazo_original, prioridade, criada_em, criado_por, recebida_em, empresa_id) values (?,?,?,?,?,?,?,?,?,?,?)`,
           d.id, s, d.titulo, d.detalhe, prazo, prazo, d.prioridade, quando, req.user.id, quando, empresaAtual(),
         )).lastInsertRowid;
-        await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
-          aId, req.user.id, 'Ação demandada pelo Diretor (seção acrescentada ao direcionamento).', agoraISO());
+        await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', aId, req.user.id, origem, agoraISO());
+        if (req.user.perfil === 'chefe') await run('insert into acao_vistas (acao_id, usuario_id, vista_em) values (?,?,?)', aId, req.user.id, quando);
       }
       // "Todos os Centros" deixa de descrever o destino quando entra uma seção a mais: passa a listar as seções.
       if (d.destino === 'todos') await run("update diretrizes set destino = 'especificos' where id = ? and empresa_id = ?", d.id, empresaAtual());
@@ -560,7 +619,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const a = await acaoVisivel(req.user, Number(req.params.id));
     await chefeGere(req.user, a);
     if (a.diretriz_id && req.user.perfil !== 'administrador') {
-      throw falha(403, 'Ações demandadas {topo:pelo} não podem ser arquivadas pela seção.');
+      throw falha(403, a.demandado_por_perfil === 'chefe'
+        ? 'Ações direcionadas pelo chefe da seção acima não podem ser arquivadas por quem as recebeu.'
+        : 'Ações demandadas {topo:pelo} não podem ser arquivadas pela seção.');
     }
     await run('update acoes set arquivada = 1 where id = ? and empresa_id = ?', a.id, empresaAtual());
     await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)',
@@ -1014,17 +1075,26 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     });
   }));
 
-  // Aceite do Diretor: só das ações demandadas por ele, e depois da validação do chefe quando a ação foi delegada a um
-  // membro. O Administrador age em qualquer etapa.
-  app.post('/api/acoes/:id/encerrar', permit('diretor', 'administrador'), h(async (req) => {
+  // Aceite de quem demandou: o Diretor, as ações demandadas por ele; o chefe, as que direcionou às subseções dele. Vem depois
+  // da validação do chefe da seção quando a ação foi delegada a um membro. O Administrador age em qualquer etapa.
+  app.post('/api/acoes/:id/encerrar', permit('diretor', 'chefe', 'administrador'), h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     if (a.status !== 'concluida') throw falha(409, 'Só é possível encerrar uma ação concluída.');
+    if (req.user.perfil === 'chefe') {
+      if (!demandanteDe(req.user, a)) throw falha(403, 'Só quem demandou a ação pode aceitá-la e encerrá-la.');
+      const v = validacaoDe(a);
+      if (v.aguardando_validacao === 'chefe') throw falha(409, 'Esta ação ainda aguarda a validação do chefe da seção. O seu aceite vem depois.');
+      if (!v.exige_validacao_demandante) throw falha(409, 'Esta ação não aguarda o seu aceite.');
+    }
     if (req.user.perfil === 'diretor') {
       const v = validacaoDe(a);
       if (v.aguardando_validacao === 'chefe') throw falha(409, 'Esta ação ainda aguarda a validação do chefe da seção. O seu aceite vem depois.');
       if (!v.exige_validacao_diretor) throw falha(409, 'Esta ação não foi demandada {topo:pelo}: ela fica pronta ao ser concluída e não precisa do seu aceite.');
     }
     await run('update acoes set encerrada = 1 where id = ? and empresa_id = ?', a.id, empresaAtual());
+    if (req.user.perfil === 'chefe') {
+      await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id, `Aceita e encerrada por ${req.user.nome}.`, agoraISO());
+    }
     return { ok: true };
   }));
   // Validação do chefe: a ação que ele atribuiu a um membro só fica pronta (ou segue para o aceite do Diretor, se for
@@ -1049,7 +1119,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const etapa = validacaoDe(a).aguardando_validacao;
     if (req.user.perfil === 'chefe') {
       await chefeGere(req.user, a);
-      if (etapa !== 'chefe') throw falha(409, 'Só dá para devolver a ação que aguarda a sua validação.');
+      if (etapa === 'demandante') {
+        if (!demandanteDe(req.user, a)) throw falha(403, 'Esta ação aguarda o aceite de quem a demandou. Só essa pessoa a devolve nesta etapa.');
+      } else if (etapa !== 'chefe') throw falha(409, 'Só dá para devolver a ação que aguarda a sua validação.');
     } else if (req.user.perfil === 'diretor' && etapa !== 'diretor') {
       throw falha(409, etapa === 'chefe' ? 'Esta ação ainda aguarda a validação do chefe da seção.' : 'Esta ação não aguarda o aceite {topo:do}.');
     }
