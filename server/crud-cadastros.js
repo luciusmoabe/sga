@@ -75,6 +75,7 @@ export const REFERENCIAS_DE_USUARIO = [
           ['acoes','atribuido_por','ações que atribuiu'],
           ['acoes','validada_chefe_por','validações de ações'],
           ['pontos_atencao','criado_por','pontos de atenção registrados'],
+          ['acao_diario','criado_por','registros do diário de progresso'],
           ['pontos_atencao','situacao_por','pontos de atenção ativados ou inativados'],
           ['atualizacoes_equipe','usuario_id','relatos semanais da equipe'],
           ['avisos','criado_por','avisos'],

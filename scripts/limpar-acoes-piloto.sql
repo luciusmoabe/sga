@@ -23,6 +23,7 @@ truncate table
   public.acao_prazos,
   public.acao_vistas,
   public.pontos_atencao,
+  public.acao_diario,
   public.reuniao_equipe_acoes,
   public.acoes
 continue identity restrict;
@@ -35,6 +36,7 @@ select
   (select count(*) from public.tempo) as tempos_restantes,
   (select count(*) from public.pedidos_prazo) as pedidos_restantes,
   (select count(*) from public.pontos_atencao) as pontos_atencao_restantes,
+  (select count(*) from public.acao_diario) as diario_restante,
   (select count(*) from public.reuniao_equipe_acoes) as vinculos_reuniao_equipe_restantes;
 
 commit;
