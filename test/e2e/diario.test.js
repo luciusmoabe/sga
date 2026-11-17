@@ -142,3 +142,41 @@ test('Celular: o botão e o formulário de registro cabem na tela e têm alvo de
   await pausa(100);
   assert.deepEqual(p.errosDaPagina, []);
 });
+
+test('Chefe: excluir um registro do diário e excluir uma tarefa que tem registros pedem confirmação e avisam o que sai junto', async (t) => {
+  const prep = await preparar(t); if (!prep) return;
+  const { app, acao, t1, t2, axe } = prep;
+  const r1 = (await app.api(CHEFE_COF, 'POST', `/acoes/${acao}/diario`, { texto: 'Primeiro registro da minuta.', tarefa_id: t1 })).dados.registro.id;
+  await app.api(CHEFE_COF, 'POST', `/acoes/${acao}/diario`, { texto: 'Segundo registro da minuta.', tarefa_id: t1 });
+  await app.api(CHEFE_COF, 'POST', `/acoes/${acao}/diario`, { texto: 'Registro do empenho.', tarefa_id: t2 });
+  const p = await app.abrir(CHEFE_COF, `#/minhas-acoes?acao=${acao}`);
+  await p.waitForSelector('dialog[open] #diario-bloco', { timeout: 10000 });
+  const confirmarUltimo = () => p.evaluate(() => [...document.querySelectorAll('dialog[open]')].at(-1).querySelector('button[type="submit"]').click());
+  const textoUltimo = () => p.evaluate(() => [...document.querySelectorAll('dialog[open]')].at(-1).innerText);
+
+  // 1. Excluir um registro: confirma, e só ele sai.
+  await p.click(`[data-excluir-registro="${r1}"]`);
+  await p.waitForFunction(() => document.querySelectorAll('dialog[open]').length === 2);
+  assert.match(await textoUltimo(), /Excluir o registro do diário/);
+  assert.deepEqual(await violacoes(p, axe, 'dialog[open]:last-of-type'), [], 'a confirmação não tem violações de acessibilidade');
+  await confirmarUltimo();
+  await p.waitForFunction(() => !document.querySelector('#diario-bloco')?.innerText.includes('Primeiro registro da minuta'), { timeout: 8000 });
+  assert.equal((await app.api(CHEFE_COF, 'GET', `/acoes/${acao}`)).dados.diario.length, 2);
+
+  // 2. Excluir a tarefa que ainda tem 1 registro: o aviso diz quantos saem junto; cancelar não exclui nada.
+  await p.click(`[data-excluir-check="${t1}"]`);
+  await p.waitForFunction(() => document.querySelectorAll('dialog[open]').length === 2);
+  assert.match(await textoUltimo(), /1 registro no diário de progresso.*esse registro será excluído também/s);
+  await p.evaluate(() => [...document.querySelectorAll('dialog[open]')].at(-1).querySelector('[data-fechar]').click());
+  await p.waitForFunction(() => document.querySelectorAll('dialog[open]').length === 1);
+  assert.equal((await app.api(CHEFE_COF, 'GET', `/acoes/${acao}`)).dados.checklist.length, 2, 'cancelar não exclui a tarefa');
+  await p.click(`[data-excluir-check="${t1}"]`);
+  await p.waitForFunction(() => document.querySelectorAll('dialog[open]').length === 2);
+  await confirmarUltimo();
+  await p.waitForFunction(() => document.querySelectorAll('dialog[open] [data-excluir-check]').length === 1, { timeout: 8000 });
+  const d = (await app.api(CHEFE_COF, 'GET', `/acoes/${acao}`)).dados;
+  assert.deepEqual(d.checklist.map((c) => c.id), [t2]);
+  assert.deepEqual(d.diario.map((x) => x.texto), ['Registro do empenho.']);
+
+  assert.deepEqual(p.errosDaPagina, []);
+});

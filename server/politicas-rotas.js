@@ -26,7 +26,7 @@ const MEMBRO = [
   ['DELETE', /^\/acoes\/\d+$/],
   ['POST', /^\/acoes\/\d+\/(tempo|comentarios|vista|checklist|impedimentos|impedimentos\/\d+\/resolver|pontos-atencao|diario)$/],
   ['PATCH', /^\/acoes\/\d+\/(checklist|pontos-atencao)\/\d+$/],
-  ['DELETE', /^\/acoes\/\d+\/checklist\/\d+$/],
+  ['DELETE', /^\/acoes\/\d+\/(checklist|diario)\/\d+$/],
 ];
 
 export const POLITICAS = {

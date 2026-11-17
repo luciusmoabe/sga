@@ -177,13 +177,35 @@ test('ação encerrada ou arquivada não recebe registros; o diário continua le
   void call;
 });
 
-test('excluir a tarefa mantém o registro, com o nome da tarefa; excluir a ação apaga o diário dela', async (t) => {
+test('excluir a tarefa exclui os registros dela (e só os dela); excluir a ação apaga o diário dela', async (t) => {
   const { db, call, acao, t1, detalhe, registrar } = await demo(t);
   await registrar(BRUNO_COF, { texto: 'Trabalhei na minuta.', tarefa_id: t1 });
-  assert.equal((await call(BRUNO_COF, 'DELETE', `/acoes/${acao}/checklist/${t1}`)).status, 200);
-  const r = (await detalhe(BRUNO_COF)).diario[0];
-  assert.equal(r.tarefa_id, null, 'a tarefa não existe mais');
-  assert.equal(r.tarefa_nome, 'Minuta do ofício', 'mas o registro lembra a que tarefa se referia');
+  await registrar(BRUNO_COF, { texto: 'Trabalhei de novo.', tarefa_id: t1 });
+  await registrar(BRUNO_COF, { texto: 'Registro geral da ação.' });
+  assert.equal((await detalhe(BRUNO_COF)).checklist.find((c) => c.id === t1).diario_total, 2);
+  const r = await call(BRUNO_COF, 'DELETE', `/acoes/${acao}/checklist/${t1}`);
+  assert.equal(r.status, 200);
+  assert.equal(r.data.diario_excluidos, 2);
+  const d = (await detalhe(BRUNO_COF)).diario;
+  assert.deepEqual(d.map((x) => x.texto), ['Registro geral da ação.'], 'o registro geral continua');
   assert.equal((await call(BRUNO_COF, 'DELETE', `/acoes/${acao}`)).status, 200);
   assert.equal((await db.prepare('select count(*) as n from acao_diario where acao_id = ?').get(acao)).n, 0);
+});
+
+test('excluir um registro: quem o fez ou quem executa a ação; os retificadores deixam de apontá-lo; ação encerrada não permite', async (t) => {
+  const { db, call, acao, detalhe, registrar } = await demo(t);
+  const errado = (await registrar(BRUNO_COF, { texto: 'Enviado ao jurídico.' })).data.registro.id;
+  const certo = (await registrar(BRUNO_COF, { texto: 'Correção.', retifica_id: errado })).data.registro.id;
+  const d = await detalhe(BRUNO_COF);
+  assert.equal(d.diario.every((x) => x.pode_excluir), true, 'o chefe pode excluir todos');
+  assert.equal((await detalhe(DIRETOR)).diario.some((x) => x.pode_excluir), false, 'o Diretor lê, não exclui');
+  assert.equal((await call(DIRETOR, 'DELETE', `/acoes/${acao}/diario/${errado}`)).status, 403);
+  assert.equal((await call(OUTRO, 'DELETE', `/acoes/${acao}/diario/${errado}`)).status, 403);
+  assert.equal((await call(BRUNO_COF, 'DELETE', `/acoes/${acao}/diario/999999`)).status, 404);
+  assert.equal((await call(BRUNO_COF, 'DELETE', `/acoes/${acao}/diario/${errado}`)).status, 200);
+  const depois = (await detalhe(BRUNO_COF)).diario;
+  assert.deepEqual(depois.map((x) => x.id), [certo]);
+  assert.equal(depois[0].retifica_id, null);
+  await db.prepare('update acoes set encerrada = 1 where id = ?').run(acao);
+  assert.equal((await call(BRUNO_COF, 'DELETE', `/acoes/${acao}/diario/${certo}`)).status, 409);
 });

@@ -210,11 +210,15 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     left join usuarios uc on uc.id = p.criado_por left join usuarios us on us.id = p.situacao_por`;
   const pontoOut = (p) => ({ ...p, ativo: !!p.ativo });
   // Tarefa (acao_checklist): data de execução e responsável opcionais; atrasada quando a data passou e não foi feita.
-  // Diário de progresso: registro histórico (não se edita nem se exclui; corrigir = registrar de novo, apontando o anterior).
+  // Diário de progresso: registro que não se edita (corrigir = registrar de novo, apontando o anterior); pode ser excluído por quem o fez
+  // ou por quem executa a ação, e sai junto com a tarefa a que se refere.
   const SELECT_DIARIO = `select d.*, u.nome as autor_nome, coalesce(t.texto, d.tarefa_texto) as tarefa_nome,
       exists(select 1 from acao_diario r where r.retifica_id = d.id) as retificado
     from acao_diario d left join usuarios u on u.id = d.criado_por left join acao_checklist t on t.id = d.tarefa_id`;
   const diarioOut = (d) => ({ ...d, retificado: !!d.retificado });
+  // Quem pode excluir um registro do diário: quem o fez ou quem executa a ação; nunca em ação encerrada ou arquivada.
+  const podeExcluirRegistro = (user, a, d) => ['chefe', 'membro', 'administrador'].includes(user.perfil) && !a.encerrada && !a.arquivada
+    && (d.criado_por === user.id || executa(user, a));
   const TIPOS_DIARIO = ['andamento', 'entrega', 'impedimento', 'observacao'];
   const DIAS_PARA_TRAS_DIARIO = 60; // até quantos dias atrás o registro pode datar o trabalho
   const checklistOut = (c) => ({ ...c, concluido: !!c.concluido, atrasada: !!c.data && !c.concluido && c.data < hoje() });
@@ -686,7 +690,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       pedidos,
       impedimentos: impedimentos.map(impedimentoOut),
       pontos_atencao: pontos.map(pontoOut),
-      diario: diario.map(diarioOut),
+      diario: diario.map((d) => ({ ...diarioOut(d), pode_excluir: podeExcluirRegistro(req.user, a, d) })),
       checklist: checklist.map((c) => ({
         ...checklistOut(c),
         diario_total: diario.filter((d) => d.tarefa_id === c.id).length,
@@ -1020,6 +1024,23 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     return out;
   }));
 
+  // Exclui um registro do diário (quem o fez ou quem executa a ação). Os registros que o retificavam deixam de apontá-lo; o tempo
+  // lançado junto com ele continua no total da ação (é um lançamento à parte).
+  app.delete('/api/acoes/:id/diario/:rid', permit('chefe', 'membro', 'administrador'), h(async (req) => {
+    const id = Number(req.params.id);
+    const rid = Number(req.params.rid);
+    return db.transaction(async () => {
+      const a = await acaoVisivel(req.user, id);
+      const d = await q1('select * from acao_diario where id = ? and acao_id = ?', rid, a.id);
+      if (!d) throw falha(404, 'Registro do diário não encontrado.');
+      if (a.encerrada || a.arquivada) throw falha(409, 'Ação arquivada ou encerrada não permite excluir registros do diário.');
+      if (!podeExcluirRegistro(req.user, a, d)) throw falha(403, 'Você exclui os registros que fez; quem executa a ação exclui os de qualquer pessoa.');
+      await run('update acao_diario set retifica_id = null where retifica_id = ?', rid);
+      await run('delete from acao_diario where id = ?', rid);
+      return { ok: true };
+    });
+  }));
+
   // ---------- Tarefas da ação (tabela acao_checklist) ----------
   // Apoio ao chefe: não mudam o status nem afetam a regra de concluir (que continua exigindo tempo registrado).
   // Cada tarefa pode ter data de execução e responsável (da seção da ação); a lista sai ordenada por data, as sem
@@ -1106,9 +1127,16 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const a = await acaoVisivel(req.user, id);
     await chefeGere(req.user, a);
     if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada {topo:pelo}.');
-    const r = await run('delete from acao_checklist where id = ? and acao_id = ?', iid, a.id);
-    if (!r.changes) throw falha(404, 'Tarefa não encontrada.');
-    return { ok: true };
+    // Os registros do diário que apontam a tarefa saem junto com ela (a tela avisa e pede a confirmação antes).
+    return db.transaction(async () => {
+      const { n } = await q1('select count(*) as n from acao_diario where tarefa_id = ? and acao_id = ?', iid, a.id);
+      const ids = 'select id from acao_diario where tarefa_id = ? and acao_id = ?';
+      await run(`update acao_diario set retifica_id = null where retifica_id in (${ids})`, iid, a.id);
+      await run('delete from acao_diario where tarefa_id = ? and acao_id = ?', iid, a.id);
+      const r = await run('delete from acao_checklist where id = ? and acao_id = ?', iid, a.id);
+      if (!r.changes) throw falha(404, 'Tarefa não encontrada.');
+      return { ok: true, diario_excluidos: Number(n) };
+    });
   }));
 
   // ---------- Redirecionar a ação para outra seção ----------

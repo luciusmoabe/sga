@@ -22,7 +22,7 @@ function rotasRegistradas(app) {
 const ESPERADO = {
   consulta: ['GET /api/acoes', 'GET /api/acoes/1', 'GET /api/bootstrap', 'GET /api/tarefas'],
   membro: [
-    'DELETE /api/acoes/1', 'DELETE /api/acoes/1/checklist/1',
+    'DELETE /api/acoes/1', 'DELETE /api/acoes/1/checklist/1', 'DELETE /api/acoes/1/diario/1',
     'GET /api/acoes', 'GET /api/acoes/1', 'GET /api/acoes/1/executores', 'GET /api/acoes/1/responsaveis',
     'GET /api/avisos/atual', 'GET /api/bootstrap', 'GET /api/reunioes-equipe', 'GET /api/reunioes-equipe/1', 'GET /api/secoes', 'GET /api/tarefas',
     'PATCH /api/acoes/1', 'PATCH /api/acoes/1/checklist/1', 'PATCH /api/acoes/1/pontos-atencao/1',

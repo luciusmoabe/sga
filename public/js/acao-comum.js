@@ -153,7 +153,8 @@ const diarioItemHTML = (r, podeRetificar) => `<article class="diario-item tipo-$
   <p class="diario-texto">${esc(r.texto)}</p>
   ${r.referencia ? `<p class="pequeno suave">Referência: ${diarioReferenciaHTML(r.referencia)}</p>` : ''}
   <footer class="pequeno suave">${esc(r.autor_nome || '')} · registrado em ${dataHora(r.criado_em)}${r.retifica_id ? ' · retifica um registro anterior' : ''}
-    ${podeRetificar ? `<button type="button" class="btn btn-fantasma btn-mini" data-retificar="${r.id}">Retificar</button>` : ''}</footer>
+    ${podeRetificar ? `<button type="button" class="btn btn-fantasma btn-mini" data-retificar="${r.id}">Retificar</button>` : ''}
+    ${r.pode_excluir ? `<button type="button" class="btn btn-fantasma btn-mini" data-excluir-registro="${r.id}" aria-label="Excluir o registro de ${esc(dataHora(r.criado_em))}">Excluir</button>` : ''}</footer>
 </article>`;
 /** A linha do tempo do diário, com os filtros por tipo e por tarefa (só o que existe). `filtro` vive no diálogo da ficha. */
 const diarioBlocoHTML = (a, filtro) => {
@@ -639,11 +640,38 @@ export async function abrirAcao(id, aoMudar) {
       on(dlg, 'click', '[data-excluir-check]', async (el) => {
         const id = Number(el.dataset.excluirCheck);
         try {
+          const tarefa = a.checklist.find((x) => x.id === id);
+          const n = tarefa?.diario_total || 0;
+          // Os registros do diário que apontam a tarefa saem junto com ela: avisa e pede a confirmação.
+          if (n && !await confirmar({
+            titulo: 'Excluir a tarefa e os registros do diário',
+            texto: `A tarefa <b>${esc(tarefa.texto)}</b> tem <b>${n} registro${n === 1 ? '' : 's'} no diário de progresso</b>. Se você excluir a tarefa, ${n === 1 ? 'esse registro será excluído' : 'esses registros serão excluídos'} também, e isso não pode ser desfeito. O tempo já lançado continua no total da ação.`,
+            rotulo: 'Excluir tarefa e registros', perigo: true,
+          })) return;
           await del(`/acoes/${a.id}/checklist/${id}`);
           const i = a.checklist.findIndex((x) => x.id === id);
           if (i >= 0) { if (a.checklist[i].concluido) a.checklist_feitos--; a.checklist.splice(i, 1); }
           a.checklist_total--;
+          if (n) {
+            a.diario = (a.diario || []).filter((r) => r.tarefa_id !== id);
+            a.diario_total = Math.max(0, (a.diario_total || 0) - n);
+            dlg.querySelector('#diario-bloco').innerHTML = diarioBlocoHTML(a, diarioFiltro);
+          }
           atualizarChecklist();
+        } catch (e) { toast(e.message, 'erro'); }
+      });
+      on(dlg, 'click', '[data-excluir-registro]', async (el) => {
+        const r = (a.diario || []).find((x) => x.id === Number(el.dataset.excluirRegistro));
+        if (!r) return;
+        if (!await confirmar({
+          titulo: 'Excluir o registro do diário',
+          texto: `Excluir o registro de <b>${esc(dataHora(r.criado_em))}</b>${r.autor_nome ? ` (${esc(r.autor_nome)})` : ''}? Isso não pode ser desfeito.${r.minutos ? ' O tempo lançado nele continua no total da ação.' : ''}`,
+          rotulo: 'Excluir registro', perigo: true,
+        })) return;
+        try {
+          await del(`/acoes/${a.id}/diario/${r.id}`);
+          toast('Registro excluído.');
+          await recarregar();
         } catch (e) { toast(e.message, 'erro'); }
       });
       on(dlg, 'click', '[data-novo-imp]', () => abrirNovoImpedimento(a, recarregar));
