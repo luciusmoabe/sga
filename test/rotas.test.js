@@ -97,6 +97,7 @@ const ESPERADAS = [
   'POST /api/acoes/:id/impedimentos/:iid/resolver',
   'POST /api/acoes/:id/pontos-atencao',
   'POST /api/acoes/:id/diario',
+  'GET /api/diario',
   'DELETE /api/acoes/:id/diario/:rid',
   'PATCH /api/acoes/:id/pontos-atencao/:pid',
   'POST /api/acoes/:id/checklist',

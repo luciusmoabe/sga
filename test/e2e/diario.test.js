@@ -180,3 +180,49 @@ test('Chefe: excluir um registro do diário e excluir uma tarefa que tem registr
 
   assert.deepEqual(p.errosDaPagina, []);
 });
+
+test('Meu diário e Diário da seção: períodos, filtros, abrir a ação, e o membro só tem o dele', async (t) => {
+  const prep = await preparar(t); if (!prep) return;
+  const { app, acao, t1, axe } = prep;
+  const acao2 = (await app.api(CHEFE_COF, 'POST', '/acoes', { titulo: 'Preparar a prestação de contas', prazo: '2026-12-31' })).dados.id;
+  await app.api(CHEFE_COF, 'POST', `/acoes/${acao}/diario`, { texto: 'Minuta enviada ao jurídico.', tarefa_id: t1, tipo: 'entrega', minutos: 45 });
+  await app.api(MARINA, 'POST', `/acoes/${acao}/diario`, { texto: 'Levantei os dados do contrato.' });
+  await app.api(CHEFE_COF, 'POST', `/acoes/${acao2}/diario`, { texto: 'Reuni os comprovantes.', tipo: 'observacao' });
+
+  const p = await app.abrir(CHEFE_COF, '#/diario');
+  await p.waitForSelector('#conteudo .diario-item');
+  assert.equal((await p.$$('#conteudo .diario-item')).length, 2, 'só o que o chefe registrou');
+  assert.doesNotMatch(await texto(p), /Levantei os dados/);
+  assert.match(await texto(p), /Tarefa: Minuta do ofício/);
+  assert.deepEqual(await violacoes(p, axe, '#conteudo'), [], 'Meu diário não tem violações de acessibilidade');
+
+  // Diário da seção: de todos; o filtro por pessoa aparece e filtra.
+  await p.click('[data-escopo="secao"]');
+  await p.waitForFunction(() => document.querySelectorAll('#conteudo .diario-item').length === 3, { timeout: 8000 });
+  assert.match(await texto(p), /Levantei os dados do contrato/);
+  await p.select('#dt-pessoa', String(MARINA));
+  assert.equal((await p.$$('#conteudo .diario-item')).length, 1);
+  await p.select('#dt-pessoa', '');
+  await p.select('#dt-tipo', 'entrega');
+  assert.equal((await p.$$('#conteudo .diario-item')).length, 1);
+  await p.click('#dt-limpar');
+  assert.equal((await p.$$('#conteudo .diario-item')).length, 3);
+  assert.deepEqual(await violacoes(p, axe, '#conteudo'), [], 'Diário da seção não tem violações de acessibilidade');
+
+  // Período livre: pede as datas e recarrega.
+  await p.select('#dt-periodo', 'livre');
+  await p.waitForSelector('#dt-de');
+  assert.equal((await p.$$('#conteudo .diario-item')).length, 3);
+
+  // Abrir a ação pelo registro.
+  await p.click('#conteudo [data-abrir]');
+  await p.waitForSelector('dialog[open] #diario-bloco', { timeout: 10000 });
+  assert.deepEqual(p.errosDaPagina, []);
+
+  // O membro só tem o próprio diário.
+  const m = await app.abrir(MARINA, '#/diario');
+  await m.waitForSelector('#conteudo .diario-item');
+  assert.equal((await m.$$('#conteudo .diario-item')).length, 1);
+  assert.equal(await m.$('[data-escopo]'), null, 'o membro não tem o diário da seção');
+  assert.deepEqual(m.errosDaPagina, []);
+});

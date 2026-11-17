@@ -1636,7 +1636,7 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
 .diario-filtros { display: grid; gap: 8px; margin: 0 0 10px; }
 .diario-filtros .campo { margin: 0; max-width: 340px; }
 .diario-dia { margin: 0 0 12px; }
-.diario-dia h4 { margin: 10px 0 6px; font-size: .86rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.diario-dia-titulo, .diario-dia h4 { margin: 10px 0 6px; font-size: .86rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .diario-item { border: 1px solid var(--line); border-left: 4px solid var(--line-str); border-radius: 8px; background: var(--card); padding: 8px 12px; margin: 0 0 8px; }
 .diario-item.tipo-entrega { border-left-color: var(--verde); }
 .diario-item.tipo-impedimento { border-left-color: var(--vermelho); }
@@ -1647,3 +1647,9 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
 .diario-item footer { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .tarefa-diario { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 @media (max-width: 760px) { .diario-item .btn-mini, .tarefa-diario .btn-mini { min-height: 44px; } }
+
+/* Meu diário / Diário da seção (#/diario) */
+.diario-tela-filtros { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
+.diario-tela-filtros .campo { margin: 0; min-width: 150px; }
+.diario-dia-titulo { margin: 14px 0 6px; font-size: .86rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-family: inherit; }
+@media (max-width: 760px) { .diario-tela-filtros .campo { flex: 1 1 100%; } }

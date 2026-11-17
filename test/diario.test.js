@@ -209,3 +209,30 @@ test('excluir um registro: quem o fez ou quem executa a ação; os retificadores
   await db.prepare('update acoes set encerrada = 1 where id = ?').run(acao);
   assert.equal((await call(BRUNO_COF, 'DELETE', `/acoes/${acao}/diario/${certo}`)).status, 409);
 });
+
+test('GET /diario: "meu" traz o que a pessoa registrou; "secao" traz o de todos na árvore, só para chefe; período validado', async (t) => {
+  const { db, call, acao, t1, registrar } = await demo(t);
+  await registrar(BRUNO_COF, { texto: 'Do chefe.', tarefa_id: t1 });
+  await registrar(MARINA, { texto: 'Da Marina.' });
+  await registrar(BRUNO_COF, { texto: 'Antigo.', data: '2026-09-10' });
+  const meu = (await call(BRUNO_COF, 'GET', '/diario')).data;
+  assert.equal(meu.escopo, 'meu');
+  assert.equal(meu.de, '2026-09-16');
+  assert.equal(meu.ate, '2026-09-22');
+  assert.deepEqual(meu.registros.map((r) => r.texto), ['Do chefe.'], 'só o dele e só os últimos 7 dias');
+  assert.equal(meu.registros[0].acao_titulo, 'Manifestar-se sobre o contrato');
+  assert.equal(meu.registros[0].tarefa_nome, 'Minuta do ofício');
+  const sec = (await call(BRUNO_COF, 'GET', '/diario?escopo=secao')).data;
+  assert.deepEqual(sec.registros.map((r) => r.texto).sort(), ['Da Marina.', 'Do chefe.']);
+  assert.deepEqual((await call(MARINA, 'GET', '/diario')).data.registros.map((r) => r.texto), ['Da Marina.']);
+  assert.equal((await call(MARINA, 'GET', '/diario?escopo=secao')).status, 403, 'o membro não vê o diário da seção');
+  assert.equal((await call(ANA_CPE, 'GET', '/diario?escopo=secao')).data.registros.length, 0, 'o chefe de outra seção não vê');
+  assert.equal((await call(DIRETOR, 'GET', '/diario')).status, 403);
+  assert.equal((await call(APOIO, 'GET', '/diario')).status, 403);
+  const longo = (await call(BRUNO_COF, 'GET', '/diario?de=2026-09-01&ate=2026-09-22')).data;
+  assert.equal(longo.registros.length, 2, 'período maior pega o antigo');
+  assert.equal((await call(BRUNO_COF, 'GET', '/diario?de=2026-09-22&ate=2026-09-01')).status, 400);
+  assert.equal((await call(BRUNO_COF, 'GET', '/diario?de=2026-01-01&ate=2026-09-22')).status, 400, 'mais de 92 dias');
+  assert.equal((await call(BRUNO_COF, 'GET', '/diario?de=xx&ate=2026-09-22')).status, 400);
+  void db;
+});

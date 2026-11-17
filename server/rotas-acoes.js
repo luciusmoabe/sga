@@ -1024,6 +1024,31 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     return out;
   }));
 
+  // Telas "Meu diário" e "Diário da seção": os registros de um período (até 92 dias; 7 por padrão), em ordem do mais recente.
+  // `escopo=meu` (padrão): os que a pessoa fez. `escopo=secao` (chefe e Administrador): os das ações da própria árvore de seções,
+  // de qualquer autor (mesmo escopo de GET /api/acoes). Só leitura; filtra por pessoa, ação e tipo na tela. No máximo 500 registros.
+  const LIMITE_DIARIO = 500;
+  app.get('/api/diario', permit('chefe', 'membro', 'administrador'), h(async (req) => {
+    const ate = req.query.ate || hoje();
+    const de = req.query.de || addDays(ate, -6);
+    if (!ehISO(de) || !ehISO(ate) || de > ate) throw falha(400, 'Informe um período válido: a data inicial não pode ser depois da final.');
+    if (addDays(de, 92) < ate) throw falha(400, 'Escolha um período de até 92 dias.');
+    const escopo = req.query.escopo === 'secao' ? 'secao' : 'meu';
+    if (escopo === 'secao' && req.user.perfil === 'membro') throw falha(403, 'O diário da seção é do chefe da seção.');
+    const v = await visiveisAcoes(req.user);
+    const filtro = escopo === 'secao' ? `(${v.where})` : 'd.criado_por = ?';
+    const params = escopo === 'secao' ? v.params : [req.user.id];
+    const lista = await q(`select d.id, d.acao_id, d.tarefa_id, coalesce(t.texto, d.tarefa_texto) as tarefa_nome, d.tipo, d.texto, d.minutos,
+        d.referencia, d.data, d.criado_em, d.criado_por as autor_id, u.nome as autor_nome, a.titulo as acao_titulo, a.secao_id, s.sigla as secao_sigla,
+        a.encerrada, a.arquivada
+      from acao_diario d join acoes a on a.id = d.acao_id join secoes s on s.id = a.secao_id
+        left join usuarios u on u.id = d.criado_por left join acao_checklist t on t.id = d.tarefa_id
+      where a.empresa_id = ? and d.data >= ? and d.data <= ? and ${filtro}
+      order by d.data desc, d.id desc limit ${LIMITE_DIARIO + 1}`, empresaAtual(), de, ate, ...params);
+    const truncado = lista.length > LIMITE_DIARIO;
+    return { de, ate, escopo, truncado, registros: lista.slice(0, LIMITE_DIARIO).map((d) => ({ ...d, encerrada: !!d.encerrada, arquivada: !!d.arquivada })) };
+  }));
+
   // Exclui um registro do diário (quem o fez ou quem executa a ação). Os registros que o retificavam deixam de apontá-lo; o tempo
   // lançado junto com ele continua no total da ação (é um lançamento à parte).
   app.delete('/api/acoes/:id/diario/:rid', permit('chefe', 'membro', 'administrador'), h(async (req) => {

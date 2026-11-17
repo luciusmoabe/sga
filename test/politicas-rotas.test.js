@@ -24,7 +24,7 @@ const ESPERADO = {
   membro: [
     'DELETE /api/acoes/1', 'DELETE /api/acoes/1/checklist/1', 'DELETE /api/acoes/1/diario/1',
     'GET /api/acoes', 'GET /api/acoes/1', 'GET /api/acoes/1/executores', 'GET /api/acoes/1/responsaveis',
-    'GET /api/avisos/atual', 'GET /api/bootstrap', 'GET /api/reunioes-equipe', 'GET /api/reunioes-equipe/1', 'GET /api/secoes', 'GET /api/tarefas',
+    'GET /api/avisos/atual', 'GET /api/bootstrap', 'GET /api/diario', 'GET /api/reunioes-equipe', 'GET /api/reunioes-equipe/1', 'GET /api/secoes', 'GET /api/tarefas',
     'PATCH /api/acoes/1', 'PATCH /api/acoes/1/checklist/1', 'PATCH /api/acoes/1/pontos-atencao/1',
     'POST /api/acoes', 'POST /api/acoes/1/checklist', 'POST /api/acoes/1/comentarios', 'POST /api/acoes/1/diario', 'POST /api/acoes/1/impedimentos',
     'POST /api/acoes/1/impedimentos/1/resolver', 'POST /api/acoes/1/pontos-atencao', 'POST /api/acoes/1/tempo', 'POST /api/acoes/1/vista',

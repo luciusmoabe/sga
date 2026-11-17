@@ -65,7 +65,7 @@ test('injeção de HTML: texto de usuário aparece como texto em todas as telas'
 
   const visitas = [
     [DIRETOR, ['painel', 'centro/2', 'centro/1', 'direcionar', 'acoes', 'prazos', 'combinados', 'reunioes', `reunioes/${reuniao}`, 'agenda', 'produtividade', 'avisos', 'estrutura', 'reuniao-config', 'configuracao', 'pauta']],
-    [CHEFE_COF, ['inicio', 'minhas-acoes', 'atualizacao', 'equipe', 'historico', 'atas', 'agenda', 'produtividade', 'combinados']],
+    [CHEFE_COF, ['inicio', 'minhas-acoes', 'diario', 'diario?i=secao', 'atualizacao', 'equipe', 'historico', 'atas', 'agenda', 'produtividade', 'combinados']],
     [ADMIN, ['painel', 'acoes', 'estrutura']],
   ];
   const problemas = [];

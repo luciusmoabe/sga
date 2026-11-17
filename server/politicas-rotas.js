@@ -21,6 +21,7 @@ const MEMBRO = [
   ['GET', /^\/reunioes-equipe(\/\d+)?$/], // as atas das reuniões da equipe de que participou
   ['POST', /^\/reunioes-equipe\/\d+\/sugestoes$/], // e a sugestão de revisão dessas atas
   ['GET', /^\/acoes(\/\d+(\/(responsaveis|executores))?)?$/],
+  ['GET', /^\/diario$/], // o diário que ele registrou (o da seção é do chefe: a rota confere)
   ['POST', /^\/acoes$/],
   ['PATCH', /^\/acoes\/\d+$/],
   ['DELETE', /^\/acoes\/\d+$/],

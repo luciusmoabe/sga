@@ -13,7 +13,7 @@ test('menu: grupos por assunto para o Chefe e para o Diretor', async (t) => {
   const c = await app.abrir(CHEFE_COF, '#/inicio');
   assert.deepEqual(await grupos(c), ['Hoje', 'Meu trabalho', 'Acompanhamento', 'Reunião']);
   const itens = await c.$$eval('.menu a', (as) => as.map((a) => a.dataset.rota));
-  assert.deepEqual(itens.slice(0, 6), ['inicio', 'gestao', 'agenda', 'minhas-acoes', 'atualizacao', 'equipe']);
+  assert.deepEqual(itens.slice(0, 6), ['inicio', 'gestao', 'agenda', 'minhas-acoes', 'diario', 'atualizacao']);
   const d = await app.abrir(DIRETOR, '#/painel');
   assert.deepEqual(await grupos(d), ['Acompanhamento', 'Ações', 'Reunião', 'Organização']);
   assert.equal(await d.$eval('.menu a:first-of-type', (a) => a.dataset.rota), 'reuniao', 'Iniciar reunião fica no topo, em destaque');

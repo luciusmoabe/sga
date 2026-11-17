@@ -70,3 +70,48 @@ export function contagens(lista) {
 
 /** Só endereços http(s) viram link; o resto é texto (nº do SEI, por exemplo). */
 export const ehLink = (s) => /^https?:\/\/\S+$/i.test(String(s ?? '').trim());
+
+/**
+ * Filtros da tela "Meu diário" / "Diário da seção", sobre os registros do período: pessoa (id do autor), ação (id) e tipo.
+ * @param {any[]} lista
+ * @param {{ pessoa?: string, acao?: string, tipo?: string }} [filtro]
+ */
+export function filtrarRegistros(lista, { pessoa = '', acao = '', tipo = '' } = {}) {
+  return lista.filter((r) => (!pessoa || String(r.autor_id) === String(pessoa)) && (!acao || String(r.acao_id) === String(acao)) && (!tipo || r.tipo === tipo));
+}
+
+/** As opções de pessoa e de ação que existem nos registros (para os filtros só mostrarem o que há), em ordem alfabética, com a contagem. */
+export function opcoesDosRegistros(lista) {
+  const pessoas = new Map(), acoes = new Map();
+  for (const r of lista) {
+    if (r.autor_id != null) { const p = pessoas.get(r.autor_id) ?? { id: r.autor_id, nome: r.autor_nome || 'Sem nome', n: 0 }; p.n += 1; pessoas.set(r.autor_id, p); }
+    const a = acoes.get(r.acao_id) ?? { id: r.acao_id, nome: r.acao_titulo, n: 0 }; a.n += 1; acoes.set(r.acao_id, a);
+  }
+  const ordem = (x, y) => x.nome.localeCompare(y.nome, 'pt-BR');
+  return { pessoas: [...pessoas.values()].sort(ordem), acoes: [...acoes.values()].sort(ordem) };
+}
+
+const dm = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const horas = (min) => (min >= 60 ? `${Math.floor(min / 60)} h${min % 60 ? ` ${String(min % 60).padStart(2, '0')} min` : ''}` : `${min} min`);
+
+/**
+ * Texto do resumo do período para copiar e colar (relato, e-mail, SEI): um bloco por dia, um item por registro, do dia mais antigo ao mais recente.
+ * @param {any[]} registros  registros já filtrados (mais recente primeiro, como a API devolve)
+ * @param {{ de: string, ate: string, titulo?: string, comAutor?: boolean }} periodo
+ */
+export function resumoParaCopiar(registros, { de, ate, titulo = 'Diário de progresso', comAutor = false }) {
+  const total = registros.reduce((s, r) => s + (r.minutos || 0), 0);
+  const cab = `${titulo} — ${dm(de)} a ${dm(ate)}`;
+  if (!registros.length) return `${cab}\nNenhum registro no período.`;
+  const dias = agruparPorDia([...registros].sort((x, y) => (x.data === y.data ? x.id - y.id : x.data < y.data ? -1 : 1)));
+  const linhas = [cab, `${registros.length} registro${registros.length === 1 ? '' : 's'}${total ? ` · ${horas(total)} lançados` : ''}`];
+  for (const g of dias) {
+    linhas.push('', dm(g.data));
+    for (const r of g.registros) {
+      const onde = `${r.acao_titulo}${r.tarefa_nome ? ` (tarefa: ${r.tarefa_nome})` : ''}`;
+      const extra = [rotuloTipo(r.tipo), comAutor && r.autor_nome ? r.autor_nome : '', r.minutos ? horas(r.minutos) : '', r.referencia ? `ref. ${r.referencia}` : ''].filter(Boolean).join(' · ');
+      linhas.push(`- ${onde}: ${String(r.texto).replace(/\s+/g, ' ').trim()} [${extra}]`);
+    }
+  }
+  return linhas.join('\n');
+}

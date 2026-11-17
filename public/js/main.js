@@ -7,6 +7,7 @@ import { acoes, centro, direcionar, painel, pauta, prazos } from './telas-direto
 import { historico, inicio, minhasAcoes } from './telas-chefe.js';
 import { agenda } from './agenda.js';
 import { gestao } from './gestao.js';
+import { diarioTela } from './diario-tela.js';
 import { combinados } from './combinados.js';
 import { estrutura } from './estrutura.js';
 import { configuracaoAta } from './ata-cabecalho.js';
@@ -59,6 +60,8 @@ const ROTAS = {
   // Link neutro de uma ação (`#/acao/ID`, o que o botão "Copiar link da ação" gera): cada perfil o leva à sua lista, com a ficha aberta.
   acao: { f: (raiz, { id }) => { raiz.innerHTML = '<p class="suave">Abrindo a ação…</p>'; location.replace(`#/${LISTA_DE_ACOES[est.user.perfil] || 'acoes'}?acao=${Number(id) || 0}`); }, perfis: [...TODOS, 'consulta', 'membro'], titulo: 'Ação' },
   agenda: { f: agenda, perfis: [...TODOS, 'consulta', 'membro'], trilho: true, titulo: 'Agenda' },
+  // Meu diário (e, para o chefe, Diário da seção): os registros do diário de progresso por dia, com filtros (só leitura).
+  diario: { f: diarioTela, perfis: ['chefe', 'administrador', 'membro'], titulo: 'Diário' },
   // Leitura das ações de todos os Centros: perfil Consulta e chefe com a permissão (a tela confere a permissão).
   'acoes-centros': { f: acoesDosCentros, perfis: ['consulta', 'chefe'], get titulo() { return `Ações ${dosPlural('centro')}`; } },
   // O Administrador da Diretoria Adjunta envia o relato da própria seção, como um chefe.
@@ -77,6 +80,7 @@ const ROTAS = {
 // `stroke="currentColor"` acompanha a cor do link (normal, hover, selecionado) sem CSS à parte.
 const ICONES = {
   painel: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="2.5" width="6" height="6" rx="1.2"/><rect x="11.5" y="2.5" width="6" height="6" rx="1.2"/><rect x="2.5" y="11.5" width="6" height="6" rx="1.2"/><rect x="11.5" y="11.5" width="6" height="6" rx="1.2"/></svg>',
+  diario: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 2.5h9a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-9z"/><line x1="7.5" y1="2.5" x2="7.5" y2="17.5"/><line x1="10" y1="7" x2="13" y2="7"/><line x1="10" y1="10" x2="13" y2="10"/></svg>',
   agenda: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="4" width="15" height="13" rx="1.5"/><line x1="2.5" y1="8" x2="17.5" y2="8"/><line x1="6" y1="2" x2="6" y2="5.5"/><line x1="14" y1="2" x2="14" y2="5.5"/></svg>',
   reuniao: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3.5" width="16" height="10.5" rx="1.5"/><line x1="7" y1="17.5" x2="13" y2="17.5"/><line x1="10" y1="14" x2="10" y2="17.5"/><path d="M8.3 6.3v5l4.4-2.5-4.4-2.5z" fill="currentColor" stroke="none"/></svg>',
   direcionar: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="10" x2="16" y2="10"/><polyline points="11,5 16,10 11,15"/></svg>',
@@ -124,6 +128,7 @@ const MENU_CHEFE = [
   ['agenda', 'Agenda'],
   ['#Meu trabalho'],
   ['minhas-acoes', 'Minhas ações'],
+  ['diario', 'Diário'],
   ['direcionar', 'Direcionar ação'],
   ['atualizacao', 'Minha atualização'],
   ['equipe', 'Minha equipe'],
@@ -136,7 +141,7 @@ const MENU_CHEFE = [
   ['reuniao-config', 'Configuração da reunião'],
 ];
 // Membro da equipe: lê as ações da sua seção e executa as que o chefe atribuiu a ele (ou que ele criou).
-const MENU_MEMBRO = [['#Minha seção'], ['minhas-acoes', 'Minhas ações'], ['agenda', 'Agenda'], ['atas', 'Atas']];
+const MENU_MEMBRO = [['#Minha seção'], ['minhas-acoes', 'Minhas ações'], ['diario', 'Meu diário'], ['agenda', 'Agenda'], ['atas', 'Atas']];
 // Consulta: só lê as ações dos Centros.
 // Plataforma: cria e administra as empresas.
 const MENU_PLATAFORMA = [['#Plataforma'], ['empresas', 'Empresas']];

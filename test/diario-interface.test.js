@@ -1,7 +1,7 @@
 // Regras puras da interface do diário de progresso (public/js/diario.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TIPOS_DIARIO, agruparPorDia, contagens, ehLink, filtrarDiario, haQuantoTempo, resumir, rotuloDoDia, rotuloTipo } from '../public/js/diario.js';
+import { TIPOS_DIARIO, agruparPorDia, contagens, ehLink, filtrarDiario, filtrarRegistros, haQuantoTempo, opcoesDosRegistros, resumir, resumoParaCopiar, rotuloDoDia, rotuloTipo } from '../public/js/diario.js';
 
 const HOJE = '2026-11-17';
 let n = 0;
@@ -67,4 +67,37 @@ test('só http e https viram link', () => {
   assert.equal(ehLink('SEI 052.3010.2026.0005350-55'), false);
   assert.equal(ehLink('javascript:alert(1)'), false);
   assert.equal(ehLink('https://a b'), false);
+});
+
+const dia = (o = {}) => ({ id: ++n, tipo: 'andamento', texto: 'Texto', data: HOJE, acao_id: 1, acao_titulo: 'Ação A', autor_id: 10, autor_nome: 'Bruno', tarefa_nome: null, minutos: null, referencia: null, ...o });
+
+test('filtrarRegistros: por pessoa, ação e tipo, combinados', () => {
+  const l = [dia({ autor_id: 10 }), dia({ autor_id: 11, acao_id: 2, acao_titulo: 'Ação B' }), dia({ autor_id: 10, acao_id: 2, acao_titulo: 'Ação B', tipo: 'entrega' })];
+  assert.equal(filtrarRegistros(l).length, 3);
+  assert.equal(filtrarRegistros(l, { pessoa: '10' }).length, 2);
+  assert.equal(filtrarRegistros(l, { acao: '2' }).length, 2);
+  assert.equal(filtrarRegistros(l, { pessoa: '10', acao: '2', tipo: 'entrega' }).length, 1);
+  assert.equal(filtrarRegistros(l, { tipo: 'observacao' }).length, 0);
+});
+
+test('opcoesDosRegistros: só pessoas e ações que existem, em ordem alfabética, com a contagem', () => {
+  const l = [dia({ autor_id: 11, autor_nome: 'Zélia', acao_id: 2, acao_titulo: 'Beta' }), dia({ autor_id: 10, autor_nome: 'Ana' }), dia({ autor_id: 10, autor_nome: 'Ana', acao_id: 2, acao_titulo: 'Beta' })];
+  const o = opcoesDosRegistros(l);
+  assert.deepEqual(o.pessoas.map((p) => [p.nome, p.n]), [['Ana', 2], ['Zélia', 1]]);
+  assert.deepEqual(o.acoes.map((a) => [a.nome, a.n]), [['Ação A', 1], ['Beta', 2]]);
+});
+
+test('resumoParaCopiar: cabeçalho, total de tempo, um bloco por dia do mais antigo ao mais recente, e o caso vazio', () => {
+  const l = [
+    dia({ id: 3, data: '2026-11-17', texto: 'Enviei   o ofício.', tarefa_nome: 'Minuta', minutos: 90, referencia: 'SEI 123', tipo: 'entrega' }),
+    dia({ id: 2, data: '2026-11-16', texto: 'Comecei.', autor_nome: 'Marina' }),
+  ];
+  const t = resumoParaCopiar(l, { de: '2026-11-11', ate: '2026-11-17', titulo: 'Meu diário' });
+  assert.equal(t.split('\n')[0], 'Meu diário — 11/11 a 17/11');
+  assert.match(t, /2 registros · 1 h 30 min lançados/);
+  assert.ok(t.indexOf('\n16/11') < t.indexOf('\n17/11'), 'dia mais antigo primeiro');
+  assert.match(t, /- Ação A \(tarefa: Minuta\): Enviei o ofício\. \[Entrega · 1 h 30 min · ref\. SEI 123\]/);
+  assert.doesNotMatch(t, /Marina/, 'sem o autor no "meu diário"');
+  assert.match(resumoParaCopiar(l, { de: '2026-11-11', ate: '2026-11-17', comAutor: true }), /\[Andamento · Marina\]/);
+  assert.match(resumoParaCopiar([], { de: '2026-11-11', ate: '2026-11-17' }), /Nenhum registro no período\./);
 });
