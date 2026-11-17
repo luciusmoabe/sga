@@ -18,7 +18,6 @@ import { aplicarCabecalhoSecao } from './migration-cabecalho-secao.js';
 import { aplicarReuniaoEquipeCompleta } from './migration-reuniao-equipe-completa.js';
 import { aplicarAtualizacaoEquipe } from './migration-atualizacao-equipe.js';
 import { aplicarPontosAtencao } from './migration-pontos-atencao.js';
-import { aplicarDiario } from './migration-diario.js';
 import { aplicarDiretoriaAdjunta } from './migration-diretoria-adjunta.js';
 import { aplicarPrazosEReuniao } from './migration-prazos-reuniao.js';
 import { aplicarMovimentacao } from './migration-movimentacao.js';
@@ -404,13 +403,6 @@ const MIGRACOES = [
     id: 35, nome: 'pontos_atencao',
     async aplicar(db) {
       await aplicarPontosAtencao(db);
-      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
-    },
-  },
-  {
-    id: 36, nome: 'diario',
-    async aplicar(db) {
-      await aplicarDiario(db);
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },

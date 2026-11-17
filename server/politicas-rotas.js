@@ -24,7 +24,7 @@ const MEMBRO = [
   ['POST', /^\/acoes$/],
   ['PATCH', /^\/acoes\/\d+$/],
   ['DELETE', /^\/acoes\/\d+$/],
-  ['POST', /^\/acoes\/\d+\/(tempo|comentarios|vista|checklist|impedimentos|impedimentos\/\d+\/resolver|pontos-atencao|diario)$/],
+  ['POST', /^\/acoes\/\d+\/(tempo|comentarios|vista|checklist|impedimentos|impedimentos\/\d+\/resolver|pontos-atencao)$/],
   ['PATCH', /^\/acoes\/\d+\/(checklist|pontos-atencao)\/\d+$/],
   ['DELETE', /^\/acoes\/\d+\/checklist\/\d+$/],
 ];

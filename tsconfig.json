@@ -18,7 +18,6 @@
     "public/js/gestao-calculo.js",
     "public/js/reuniao-da-acao.js",
     "public/js/filtro-acoes.js",
-    "public/js/diario.js",
     "public/js/vocabulario.js",
     "public/js/ata-marcacao.js"
   ]

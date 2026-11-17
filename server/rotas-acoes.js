@@ -44,7 +44,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
   };
   const SEM_PERMISSOES = {
     pode_editar: false, pode_descrever: false, pode_mudar_prazo: false, pode_mudar_demanda: false, pode_excluir: false,
-    pode_executar: false, pode_comentar: false, pode_atribuir: false, pode_aceitar_demanda: false, pode_registrar_diario: false,
+    pode_executar: false, pode_comentar: false, pode_atribuir: false, pode_aceitar_demanda: false,
   };
   /** Marca `somente_leitura` e tira as permissões das ações que a pessoa só lê. O membro lê toda a árvore da seção,
    *  mas age só nas ações dele; numa ação de outra pessoa, só mexe (e comenta) onde há tarefa atribuída a ele. */
@@ -57,8 +57,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       if (ler.has(a.id)) return { ...a, ...SEM_PERMISSOES, somente_leitura: true };
       if (user.perfil === 'membro' && !a.pode_executar) {
         const tem = comTarefaDele.has(a.id);
-        // O membro com tarefa sua nesta ação registra o andamento dessa tarefa (a tela só oferece as dele).
-        return { ...a, ...SEM_PERMISSOES, pode_comentar: tem, pode_registrar_diario: tem && !a.encerrada && !a.arquivada, somente_leitura: !tem };
+        return { ...a, ...SEM_PERMISSOES, pode_comentar: tem, somente_leitura: !tem };
       }
       return { ...a, somente_leitura: false };
     });
@@ -158,11 +157,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       (select count(*) from impedimentos i where i.acao_id = a.id and i.resolvido_em is null) as impedimentos_abertos,
       exists(select 1 from impedimentos i where i.acao_id = a.id and i.resolvido_em is null and i.critico = 1) as impedimento_critico,
       (select count(*) from acao_checklist c where c.acao_id = a.id) as checklist_total,
-      (select count(*) from acao_checklist c where c.acao_id = a.id and c.concluido = 1) as checklist_feitos,
-      (select count(*) from acao_diario dr where dr.acao_id = a.id) as diario_total,
-      (select dr.criado_em from acao_diario dr where dr.acao_id = a.id order by dr.id desc limit 1) as ultimo_registro_em,
-      (select substr(dr.texto, 1, 160) from acao_diario dr where dr.acao_id = a.id order by dr.id desc limit 1) as ultimo_registro_texto,
-      (select ud2.nome from acao_diario dr join usuarios ud2 on ud2.id = dr.criado_por where dr.acao_id = a.id order by dr.id desc limit 1) as ultimo_registro_por
+      (select count(*) from acao_checklist c where c.acao_id = a.id and c.concluido = 1) as checklist_feitos
     ${FROM_ACAO}`;
   /** Validação de quem delegou, depois de a ação ser concluída. Só ações demandadas pelo Diretor (aceite dele) e as que
    *  o chefe atribuiu a outra pessoa (validação do chefe) têm uma, e também as que um chefe direcionou às subseções dele
@@ -194,7 +189,6 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     pedido_pendente: !!a.pedido_pendente,
     impedimentos_abertos: Number(a.impedimentos_abertos || 0),
     impedimento_critico: !!a.impedimento_critico,
-    diario_total: Number(a.diario_total || 0),
     checklist_total: Number(a.checklist_total || 0),
     checklist_feitos: Number(a.checklist_feitos || 0),
     atrasada: a.status !== 'concluida' && !a.encerrada && !a.arquivada && a.prazo < hoje(),
@@ -210,13 +204,6 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     left join usuarios uc on uc.id = p.criado_por left join usuarios us on us.id = p.situacao_por`;
   const pontoOut = (p) => ({ ...p, ativo: !!p.ativo });
   // Tarefa (acao_checklist): data de execução e responsável opcionais; atrasada quando a data passou e não foi feita.
-  // Diário de progresso: registro histórico (não se edita nem se exclui; corrigir = registrar de novo, apontando o anterior).
-  const SELECT_DIARIO = `select d.*, u.nome as autor_nome, coalesce(t.texto, d.tarefa_texto) as tarefa_nome,
-      exists(select 1 from acao_diario r where r.retifica_id = d.id) as retificado
-    from acao_diario d left join usuarios u on u.id = d.criado_por left join acao_checklist t on t.id = d.tarefa_id`;
-  const diarioOut = (d) => ({ ...d, retificado: !!d.retificado });
-  const TIPOS_DIARIO = ['andamento', 'entrega', 'impedimento', 'observacao'];
-  const DIAS_PARA_TRAS_DIARIO = 60; // até quantos dias atrás o registro pode datar o trabalho
   const checklistOut = (c) => ({ ...c, concluido: !!c.concluido, atrasada: !!c.data && !c.concluido && c.data < hoje() });
   const SELECT_TAREFA = `select c.*, u.nome as responsavel_nome from acao_checklist c left join usuarios u on u.id = c.responsavel_id`;
   const tarefa = async (iid) => checklistOut(await q1(`${SELECT_TAREFA} where c.id = ?`, iid));
@@ -318,7 +305,6 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       pode_mudar_demanda: autor && !a.encerrada && !a.diretriz_id,
       pode_excluir: autor && !a.encerrada && a.status !== 'concluida' && !a.apresentada_em,
       pode_executar: executa(user, a) && !a.encerrada,
-      pode_registrar_diario: executa(user, a) && !a.encerrada && !a.arquivada,
       pode_comentar: user.perfil !== 'consulta' && (user.perfil !== 'membro' || executa(user, a)),
       // Atribuir a ação a alguém da seção: o chefe e o Administrador, enquanto ela está em curso.
       pode_atribuir: (user.perfil === 'administrador' || (user.perfil === 'chefe' && !!user.secao_id)) && emCurso,
@@ -615,7 +601,6 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
         await run('delete from acao_comentarios where acao_id = ?', a.id);
         await run('delete from impedimentos where acao_id = ?', a.id);
         await run('delete from pontos_atencao where acao_id = ?', a.id);
-        await run('delete from acao_diario where acao_id = ?', a.id);
         await run('delete from acao_checklist where acao_id = ?', a.id);
         await run('delete from acao_prazos where acao_id = ?', a.id);
         await run('delete from pedidos_prazo where acao_id = ?', a.id);
@@ -660,7 +645,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const a = await acaoVisivel(req.user, Number(req.params.id), { leitura: true });
     // Consultas independentes: em série custariam uma ida ao banco cada (o maior custo desta tela
     // é a rede, não o SQL). As permissões não consultam nada (ver permissoes).
-    const [comentarios, lancamentos, pedidos, impedimentos, checklist, prazos, vistas, [{ nova }], pontos, diario] = await Promise.all([
+    const [comentarios, lancamentos, pedidos, impedimentos, checklist, prazos, vistas, [{ nova }], pontos] = await Promise.all([
       q(`select c.*, u.nome as usuario_nome from acao_comentarios c left join usuarios u on u.id = c.usuario_id where c.acao_id = ? order by c.id`, a.id),
       q(`select t.*, u.nome as usuario_nome from tempo t left join usuarios u on u.id = t.usuario_id where t.acao_id = ? order by t.data desc, t.id desc`, a.id),
       q('select * from pedidos_prazo where acao_id = ? order by id desc', a.id),
@@ -673,7 +658,6 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       vistasDa(a),
       marcarNovas(req.user, [a]),
       q(`${SELECT_PONTO} where p.acao_id = ? order by p.id desc`, a.id),
-      q(`${SELECT_DIARIO} where d.acao_id = ? order by d.data desc, d.id desc`, a.id),
     ]);
     const [acao] = await marcarLeitura(req.user, [{ ...acaoOut(a), ...permissoes(req.user, a) }]);
     return {
@@ -686,10 +670,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       pedidos,
       impedimentos: impedimentos.map(impedimentoOut),
       pontos_atencao: pontos.map(pontoOut),
-      diario: diario.map(diarioOut),
       checklist: checklist.map((c) => ({
         ...checklistOut(c),
-        diario_total: diario.filter((d) => d.tarefa_id === c.id).length,
         pode_marcar: !a.encerrada && (acao.pode_executar || (req.user.perfil === 'membro' && !acao.somente_leitura && c.responsavel_id === req.user.id)),
       })),
     };
@@ -967,57 +949,6 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       await run('update pontos_atencao set ativo = ?, situacao_em = ?, situacao_por = ? where id = ?', ativo, agoraISO(), req.user.id, p.id);
       return { ponto: pontoOut(await q1(`${SELECT_PONTO} where p.id = ?`, p.id)) };
     });
-  }));
-
-  // ---------- Diário de progresso da ação ----------
-  // Quem executa a ação (o chefe da seção, o Administrador, o membro a quem ela foi atribuída ou que a criou) registra o andamento;
-  // o membro com uma tarefa sua registra sobre ela. O Diretor e o Apoio leem (ações não internas), não registram. O registro pode
-  // apontar uma tarefa da ação, levar tempo (que também entra no tempo da ação) e concluir a tarefa; renova a "última movimentação"
-  // da ação (middleware de /api/acoes/:id) e não muda status nem semáforo.
-  app.post('/api/acoes/:id/diario', permit('chefe', 'membro', 'administrador'), h(async (req, res) => {
-    const id = Number(req.params.id);
-    const b = req.body || {};
-    const t = texto(b.texto, 1000);
-    if (!t) throw falha(400, 'Escreva o que aconteceu.');
-    const tipo = b.tipo === undefined || b.tipo === '' ? 'andamento' : b.tipo;
-    if (!TIPOS_DIARIO.includes(tipo)) throw falha(400, 'Escolha o tipo: andamento, entrega, impedimento ou observação.');
-    const referencia = texto(b.referencia, 200) || null;
-    const data = b.data || hoje();
-    if (!ehISO(data) || data > hoje()) throw falha(400, 'A data do registro não pode ser futura.');
-    if (data < addDays(hoje(), -DIAS_PARA_TRAS_DIARIO)) throw falha(400, `A data do registro não pode ser anterior a ${DIAS_PARA_TRAS_DIARIO} dias.`);
-    let minutos = null;
-    if (b.minutos !== undefined && b.minutos !== null && b.minutos !== '') {
-      minutos = Number(b.minutos);
-      if (!Number.isInteger(minutos) || minutos <= 0 || minutos > 1440) throw falha(400, 'Informe o tempo em minutos inteiros, entre 1 e 1440.');
-    }
-    const out = await db.transaction(async () => {
-      const a = await acaoVisivel(req.user, id);
-      const tarefa = b.tarefa_id ? await q1('select * from acao_checklist where id = ? and acao_id = ?', Number(b.tarefa_id), a.id) : null;
-      if (b.tarefa_id && !tarefa) throw falha(404, 'Tarefa não encontrada nesta ação.');
-      const executor = executa(req.user, a);
-      if (!executor && !(req.user.perfil === 'membro' && tarefa?.responsavel_id === req.user.id)) {
-        throw falha(403, 'Você registra o andamento das ações que executa; quem tem uma tarefa sua nela registra sobre essa tarefa.');
-      }
-      if (a.encerrada || a.arquivada) throw falha(409, 'Ação arquivada ou encerrada não recebe registros no diário.');
-      if (minutos !== null && !executor) throw falha(403, 'O tempo é registrado por quem executa a ação.');
-      if (b.concluir_tarefa) {
-        if (!tarefa) throw falha(400, 'Escolha a tarefa que será concluída.');
-        if (tarefa.concluido) throw falha(409, 'Esta tarefa já está concluída.');
-      }
-      let retifica = null;
-      if (b.retifica_id) {
-        retifica = await q1('select id from acao_diario where id = ? and acao_id = ?', Number(b.retifica_id), a.id);
-        if (!retifica) throw falha(404, 'O registro que você quer retificar não foi encontrado nesta ação.');
-      }
-      const agora = agoraISO();
-      const rid = (await run(`insert into acao_diario (acao_id, tarefa_id, tarefa_texto, tipo, texto, minutos, referencia, data, criado_em, criado_por, retifica_id)
-        values (?,?,?,?,?,?,?,?,?,?,?)`, a.id, tarefa?.id ?? null, tarefa?.texto ?? null, tipo, t, minutos, referencia, data, agora, req.user.id, retifica?.id ?? null)).lastInsertRowid;
-      if (minutos !== null) await run('insert into tempo (acao_id, usuario_id, data, minutos, criado_em) values (?,?,?,?,?)', a.id, req.user.id, data, minutos, agora);
-      if (b.concluir_tarefa) await run('update acao_checklist set concluido = 1, concluido_em = ?, concluido_por = ? where id = ?', agora, req.user.id, tarefa.id);
-      return { registro: diarioOut(await q1(`${SELECT_DIARIO} where d.id = ?`, rid)) };
-    });
-    res.status(201);
-    return out;
   }));
 
   // ---------- Tarefas da ação (tabela acao_checklist) ----------

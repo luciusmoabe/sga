@@ -117,7 +117,6 @@ test('não exclui quem tem tempo, comentário, impedimento, ponto de atenção o
   await caso('Tempo Souza', "insert into tempo (acao_id, usuario_id, minutos, data, criado_em) values (?, ?, 30, '2026-09-18', '2026-09-18T10:00:00')", /lançamentos de tempo/);
   await caso('Comenta Souza', "insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?, ?, 'oi', '2026-09-18T10:00:00')", /comentários/);
   await caso('Impede Souza', "insert into impedimentos (acao_id, descricao, criado_por, criado_em) values (?, 'trava', ?, '2026-09-18T10:00:00')", /impedimentos registrados/);
-  await caso('Diario Souza', "insert into acao_diario (acao_id, texto, data, criado_em, criado_por) values (?, 'registro', '2026-09-18', '2026-09-18T10:00:00', ?)", /registros do diário de progresso/);
   await caso('Ponto Souza', "insert into pontos_atencao (acao_id, descricao, criado_por, criado_em) values (?, 'atenção', ?, '2026-09-18T10:00:00')", /pontos de atenção registrados/);
   await caso('Ativa Souza', "insert into pontos_atencao (acao_id, descricao, situacao_por, criado_em) values (?, 'atenção', ?, '2026-09-18T10:00:00')", /pontos de atenção ativados ou inativados/);
   await caso('Vista Souza', "insert into acao_vistas (acao_id, usuario_id, vista_em) values (?, ?, '2026-09-18T10:00:00')", /ciência de ações recebidas/);
