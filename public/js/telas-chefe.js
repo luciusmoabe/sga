@@ -7,9 +7,10 @@ import { agora, est } from './estado.js';
 import {
   $, abrirForm, addDias, br, brCurto, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, seloNova, STATUS, tempoRestante, textoEtapa, toast, trilho, vazio,
 } from './ui.js';
-import { aceitarAcao, abrirAcao, abrirEditarAcao, abrirNovoImpedimento, aceitaImpedimento, devolverAcao, lerOrigem, ligarOrigem, origemCamposHTML, validarAcao } from './acao-comum.js';
+import { aceitarAcao, abrirAcao, abrirEditarAcao, abrirNovoImpedimento, abrirNovoRegistro, aceitaImpedimento, devolverAcao, lerOrigem, ligarOrigem, origemCamposHTML, validarAcao } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
 import { nomeDaReuniao, reuniaoDaAcao } from './reuniao-da-acao.js';
+import { haQuantoTempo, resumir } from './diario.js';
 import { ATALHOS, FACETAS, FILTRO_VAZIO, ORDENS, ROTULO_FACETA, aplicarFiltros, contarAtalhos, contarAtivos, opcoesDe, ordenar } from './filtro-acoes.js';
 import { dataNoFuso, diasEntre, instante } from './datas.js';
 import { relatoHTML } from './telas-diretor.js';
@@ -367,6 +368,7 @@ export async function minhasAcoes(raiz) {
           <div>
             <h3>${esc(a.titulo)}</h3>
             <div class="acao-meta">Prazo <b class="num">${br(a.prazo)}</b> · ${esc(a.secao_sigla)}${a.interna ? ' · ação interna' : ''}${a.demandada_diretor || a.demandada_chefe ? ` · demandada em ${br(a.demandado_em || a.criada_em)}` : ''}</div>
+            ${a.ultimo_registro_em ? `<div class="acao-ultimo-registro pequeno">Último registro ${haQuantoTempo(a.ultimo_registro_em, est.boot.hoje)}${a.ultimo_registro_por ? ` · ${esc(a.ultimo_registro_por)}` : ''}: “${esc(resumir(a.ultimo_registro_texto, 110))}”</div>` : ''}
           </div>
           <div class="acao-selos">${selosDaAcao(a)}
           </div>
@@ -380,6 +382,7 @@ export async function minhasAcoes(raiz) {
             <button type="button" class="btn btn-sec btn-mini" data-tempo aria-label="Registrar tempo gasto">Registrar</button></div>
         ` : ''}
         <footer class="acao-rodape">
+          ${a.pode_registrar_diario ? '<button type="button" class="btn btn-sec btn-mini" data-registrar>+ Registrar andamento</button>' : ''}
           <button type="button" class="btn btn-fantasma btn-mini" data-detalhe>Detalhes e histórico</button>
           ${!ehMembro && !a.arquivada && a.status !== 'concluida' && !a.pedido_pendente && !a.pode_mudar_prazo ? '<button type="button" class="btn btn-fantasma btn-mini" data-prazo>Pedir novo prazo</button>' : ''}
           ${aceitaImpedimento(a) && a.pode_executar ? '<button type="button" class="btn btn-fantasma btn-mini" data-impedimento>Impedimento</button>' : ''}
@@ -462,6 +465,7 @@ export async function minhasAcoes(raiz) {
   on(raiz, 'click', '[data-devolver]', (el) => devolverAcao(acaoDe(el), recarregar));
 
   on(raiz, 'click', '[data-impedimento]', (el) => abrirNovoImpedimento(acaoDe(el), recarregar));
+  on(raiz, 'click', '[data-registrar]', (el) => abrirNovoRegistro(acaoDe(el), recarregar).catch(erro));
   on(raiz, 'click', '[data-editar]', (el) => abrirEditarAcao(acaoDe(el), recarregar));
 
   on(raiz, 'click', '[data-arquivar]', async (el) => {
