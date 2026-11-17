@@ -7,6 +7,7 @@ import { abrirForm, br, confirmar, dataHora, esc, fmtMin, on, pilulaStatus, PRIO
 /** Avisa a casca que as contagens dos selos do menu mudaram (ex.: ação nova aberta). */
 export const selosMudaram = () => window.dispatchEvent(new Event('sgc:selos'));
 import { ROTULO_ESFORCO, TIPOS_DE_DIRETRIZ_GERAL, porDataDaTarefa } from './regras.js';
+import { TIPOS_DIARIO, agruparPorDia, contagens, ehLink, filtrarDiario, resumir, rotuloDoDia, rotuloTipo } from './diario.js';
 
 // ---------- Impedimentos (formulários usados também pela atualização semanal e por Minhas ações) ----------
 /** Ação em que ainda faz sentido registrar impedimento. */
@@ -85,6 +86,99 @@ const pontoAtencaoHTML = (p, podeAlterar) => `<div class="impedimento ${p.ativo 
   ${p.situacao_em ? `<div class="suave pequeno">${p.ativo ? 'Reativado' : 'Inativado'} em ${dataHora(p.situacao_em)}${p.situacao_por_nome ? ` por ${esc(p.situacao_por_nome)}` : ''}</div>` : ''}
 </div>`;
 
+// ---------- Diário de progresso (registro histórico; aponta a tarefa; não muda status nem semáforo) ----------
+/**
+ * Formulário de um registro no diário. Busca o detalhe da ação quando preciso (a lista não traz as tarefas). `tarefaId` já escolhe a
+ * tarefa (botão "Registrar" da própria tarefa); `retifica` é o registro que o novo corrige (ele continua no diário, marcado como retificado).
+ * Quem só tem uma tarefa na ação registra sobre as tarefas dele; quem a executa também registra "Geral da ação" e o tempo.
+ */
+export async function abrirNovoRegistro(a, aoConcluir, { tarefaId = null, retifica = null } = {}) {
+  const d = a.checklist ? a : await get(`/acoes/${a.id}`);
+  const executa = !!d.pode_executar;
+  const tarefas = (d.checklist || []).filter((c) => !c.concluido && (executa || c.responsavel_id === est.user?.id));
+  const hojeISO = est.boot.hoje;
+  abrirForm({
+    titulo: retifica ? 'Retificar registro' : 'Registrar andamento',
+    corpo: `<p class="suave pequeno">Ação: <b>${esc(d.titulo)}</b></p>
+      ${retifica ? `<div class="info">Você está retificando o registro de ${br(retifica.data)}: “${esc(resumir(retifica.texto, 140))}”. Ele continua no diário, marcado como retificado.</div>` : ''}
+      <div class="campo"><label for="dr-texto">O que aconteceu</label><textarea id="dr-texto" name="texto" required maxlength="1000" placeholder="Ex.: Enviei o ofício ao jurídico e aguardo o parecer."></textarea></div>
+      <div class="dois">
+        <div class="campo"><label for="dr-tarefa">Tarefa</label><select id="dr-tarefa" name="tarefa_id">${executa ? '<option value="">Geral da ação</option>' : ''}${tarefas.map((c) =>
+          `<option value="${c.id}"${c.id === tarefaId ? ' selected' : ''}>${esc(c.texto)}</option>`).join('')}</select></div>
+        <div class="campo"><label for="dr-tipo">Tipo</label><select id="dr-tipo" name="tipo">${TIPOS_DIARIO.map(([v, r]) => `<option value="${v}">${r}</option>`).join('')}</select></div>
+      </div>
+      <p class="suave pequeno oculto" id="dr-dica-imp">Este registro só documenta o impedimento. Para travar a ação de verdade (status Bloqueada, semáforo), use <b>Impedimento</b> no cartão da ação.</p>
+      <div class="dois">
+        ${executa ? '<div class="campo"><label for="dr-min">Tempo gasto (minutos, opcional)</label><input id="dr-min" name="minutos" type="number" min="1" max="1440" step="1" inputmode="numeric"></div>' : ''}
+        <div class="campo"><label for="dr-data">Data do trabalho</label><input id="dr-data" name="data" type="date" max="${hojeISO}" value="${hojeISO}"></div>
+      </div>
+      <div class="campo"><label for="dr-ref">Referência (nº do SEI ou link, opcional)</label><input id="dr-ref" name="referencia" maxlength="200" autocomplete="off"></div>
+      <label class="marcar"><input type="checkbox" id="dr-concluir" name="concluir_tarefa" disabled> Concluir a tarefa escolhida</label>
+      <p class="suave pequeno">A data e a hora do registro e o seu nome entram sozinhos. ${executa ? 'O tempo informado também entra no tempo gasto da ação.' : ''}</p>`,
+    rotulo: retifica ? 'Registrar retificação' : 'Registrar no diário',
+    aoAbrir: (dlg) => {
+      const sel = dlg.querySelector('#dr-tarefa'), caixa = dlg.querySelector('#dr-concluir'), tipo = dlg.querySelector('#dr-tipo');
+      const ajustar = () => {
+        caixa.disabled = !sel.value;
+        if (!sel.value) caixa.checked = false;
+        dlg.querySelector('#dr-dica-imp').classList.toggle('oculto', tipo.value !== 'impedimento');
+      };
+      sel.addEventListener('change', ajustar);
+      tipo.addEventListener('change', ajustar);
+      ajustar();
+    },
+    aoEnviar: async (f) => {
+      const corpo = { texto: f.texto, tipo: f.tipo || 'andamento', data: f.data || hojeISO };
+      if (f.tarefa_id) corpo.tarefa_id = Number(f.tarefa_id);
+      if (f.minutos) corpo.minutos = Number(f.minutos);
+      if (f.referencia?.trim()) corpo.referencia = f.referencia.trim();
+      if (f.concluir_tarefa) corpo.concluir_tarefa = true;
+      if (retifica) corpo.retifica_id = retifica.id;
+      await post(`/acoes/${d.id}/diario`, corpo);
+      toast(f.concluir_tarefa ? 'Registro salvo e tarefa concluída.' : 'Registro salvo no diário.');
+      selosMudaram();
+      await aoConcluir?.();
+    },
+  });
+}
+
+const diarioReferenciaHTML = (ref) => (ehLink(ref) ? `<a href="${esc(ref.trim())}" target="_blank" rel="noopener noreferrer">${esc(ref.trim())}</a>` : esc(ref));
+const diarioItemHTML = (r, podeRetificar) => `<article class="diario-item tipo-${esc(r.tipo)}" data-registro="${r.id}">
+  <header class="diario-cab">
+    <span class="pilula">${esc(rotuloTipo(r.tipo))}</span>
+    ${r.tarefa_nome ? `<span class="pilula diario-tarefa" title="Tarefa a que o registro se refere">Tarefa: ${esc(r.tarefa_nome)}${r.tarefa_id ? '' : ' (excluída)'}</span>` : '<span class="suave pequeno">Geral da ação</span>'}
+    ${r.minutos ? `<span class="pequeno num">${fmtMin(r.minutos)}</span>` : ''}
+    ${r.retificado ? '<span class="pilula" title="Há um registro posterior que corrige este">Retificado</span>' : ''}
+  </header>
+  <p class="diario-texto">${esc(r.texto)}</p>
+  ${r.referencia ? `<p class="pequeno suave">Referência: ${diarioReferenciaHTML(r.referencia)}</p>` : ''}
+  <footer class="pequeno suave">${esc(r.autor_nome || '')} · registrado em ${dataHora(r.criado_em)}${r.retifica_id ? ' · retifica um registro anterior' : ''}
+    ${podeRetificar ? `<button type="button" class="btn btn-fantasma btn-mini" data-retificar="${r.id}">Retificar</button>` : ''}</footer>
+</article>`;
+/** A linha do tempo do diário, com os filtros por tipo e por tarefa (só o que existe). `filtro` vive no diálogo da ficha. */
+const diarioBlocoHTML = (a, filtro) => {
+  const todos = a.diario || [];
+  const pode = !!a.pode_registrar_diario;
+  const c = contagens(todos);
+  const tipos = TIPOS_DIARIO.filter(([v]) => c.porTipo[v]);
+  const temTarefas = c.porTarefa.size > 0 || c.excluidas > 0;
+  const lista = filtrarDiario(todos, filtro);
+  const hoje = est.boot.hoje;
+  return `
+    ${pode ? '<div class="linha" style="margin:2px 0 8px"><button type="button" class="btn btn-sec btn-mini" data-novo-registro>+ Registrar andamento</button></div>' : ''}
+    ${todos.length > 1 && (tipos.length > 1 || temTarefas) ? `<div class="diario-filtros">
+      ${tipos.length > 1 ? `<div class="ma-atalhos" role="group" aria-label="Filtrar o diário por tipo"><button type="button" class="ma-chip" data-diario-tipo="" aria-pressed="${!filtro.tipo}">Tudo <b class="num">${todos.length}</b></button>${tipos.map(([v, r]) =>
+        `<button type="button" class="ma-chip" data-diario-tipo="${v}" aria-pressed="${filtro.tipo === v}">${r} <b class="num">${c.porTipo[v]}</b></button>`).join('')}</div>` : ''}
+      ${temTarefas ? `<div class="campo"><label for="diario-tarefa">Tarefa</label><select id="diario-tarefa"><option value="">Todas as tarefas</option>
+        ${c.geral ? `<option value="geral"${filtro.tarefa === 'geral' ? ' selected' : ''}>Geral da ação (${c.geral})</option>` : ''}
+        ${[...c.porTarefa].map(([id, x]) => `<option value="${id}"${String(filtro.tarefa) === String(id) ? ' selected' : ''}>${esc(x.nome)} (${x.n})</option>`).join('')}
+        ${c.excluidas ? `<option value="excluida"${filtro.tarefa === 'excluida' ? ' selected' : ''}>Tarefas excluídas (${c.excluidas})</option>` : ''}</select></div>` : ''}
+    </div>` : ''}
+    ${lista.length ? agruparPorDia(lista).map((g) => `<section class="diario-dia" aria-label="${esc(rotuloDoDia(g.data, hoje))}">
+      <h4>${esc(rotuloDoDia(g.data, hoje))}</h4>${g.registros.map((r) => diarioItemHTML(r, pode)).join('')}</section>`).join('')
+    : todos.length ? '<p class="suave pequeno">Nenhum registro com esses filtros.</p>' : '<p class="suave pequeno">Nenhum registro no diário ainda.</p>'}`;
+};
+
 // ---------- Tarefas da ação (apoio ao chefe; quem registra tempo e muda status também mexe aqui) ----------
 /** Quem executa a ação (o chefe da seção, o Administrador e o membro a quem ela foi atribuída ou que a criou) cria, edita
  *  e exclui tarefas. Marcar como feita vale também para o membro dono da tarefa: o servidor diz em `pode_marcar`. */
@@ -95,11 +189,13 @@ const opcoesResponsavel = (responsaveis, escolhido) => `<option value="">Sem res
 const tarefaMetaHTML = (it) => `<div class="tarefa-meta">
   ${it.data ? `<span class="${it.atrasada ? 'tarefa-atrasada' : ''}">${it.atrasada ? 'Atrasada · ' : ''}<span class="num">${br(it.data)}</span></span>` : '<span>Sem data</span>'}
   <span aria-hidden="true">·</span><span>${it.responsavel_nome ? esc(it.responsavel_nome) : 'Sem responsável'}</span></div>`;
-const checklistItemHTML = (it, editavel) => `<div class="item previsto tarefa" data-checklist-id="${it.id}">
+const checklistItemHTML = (it, editavel, podeRegistrar = false) => `<div class="item previsto tarefa" data-checklist-id="${it.id}">
   <input type="checkbox" aria-label="${it.concluido ? 'Reabrir' : 'Concluir'} tarefa: ${esc(it.texto)}" data-marcar-check="${it.id}" ${it.concluido ? 'checked' : ''} ${it.pode_marcar ? '' : 'disabled'}>
   <div class="tarefa-corpo">
     ${editavel ? `<button type="button" class="checklist-texto" data-editar-check="${it.id}" title="Editar tarefa" style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</button>` : `<span style="${it.concluido ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(it.texto)}</span>`}
     ${tarefaMetaHTML(it)}
+    ${it.diario_total || podeRegistrar ? `<div class="tarefa-diario">${it.diario_total ? `<button type="button" class="btn btn-fantasma btn-mini" data-ver-diario="${it.id}">${it.diario_total} registro${it.diario_total === 1 ? '' : 's'} no diário</button>` : ''}
+      ${podeRegistrar ? `<button type="button" class="btn btn-fantasma btn-mini" data-registrar-tarefa="${it.id}" aria-label="Registrar andamento da tarefa: ${esc(it.texto)}">+ Registrar</button>` : ''}</div>` : ''}
   </div>
   ${editavel ? `<button type="button" class="btn btn-fantasma btn-mini" data-excluir-check="${it.id}" aria-label="Excluir tarefa: ${esc(it.texto)}">Excluir</button>` : ''}
 </div>`;
@@ -119,7 +215,7 @@ const badgesHTML = (a) => `${pilulaStatus(a)}
   <span class="suave pequeno">${esc(a.secao_sigla)} · ${esc(a.secao_nome)}</span>`;
 const checklistBlocoHTML = (a, responsaveis) => `
   <h3 style="margin:12px 0 6px">Tarefas${a.checklist.length ? ` <span class="suave pequeno">(${a.checklist_feitos}/${a.checklist_total} feitas)</span>` : ''}</h3>
-  ${a.checklist.length ? `<div class="itens">${a.checklist.map((it) => checklistItemHTML(it, gereChecklist(a))).join('')}</div>` : '<p class="suave pequeno">Nenhuma tarefa.</p>'}
+  ${a.checklist.length ? `<div class="itens">${a.checklist.map((it) => checklistItemHTML(it, gereChecklist(a), !!a.pode_registrar_diario && !a.encerrada && !a.arquivada && !it.concluido && (!!a.pode_executar || it.responsavel_id === est.user?.id))).join('')}</div>` : '<p class="suave pequeno">Nenhuma tarefa.</p>'}
   ${gereChecklist(a) ? `<div class="tarefa-form" data-nova-tarefa>${tarefaCamposHTML(responsaveis)}<button type="button" class="btn btn-sec" data-add-check>Adicionar tarefa</button></div>` : ''}`;
 
 // ---------- Ao direcionar: ações já planejadas para o mesmo prazo ----------
@@ -357,6 +453,7 @@ const secaoRecolhivel = (titulo, quantidade, html, aberta) => `
 
 export async function abrirAcao(id, aoMudar) {
   const a = await get(`/acoes/${id}`);
+  const diarioFiltro = { tipo: '', tarefa: '' }; // filtros do diário (só enquanto a ficha está aberta)
   // Quem executa a ação escolhe, na lista de responsáveis possíveis, o responsável de cada tarefa; para os demais, vazia.
   const responsaveis = a.pode_executar ? await get(`/acoes/${id}/responsaveis`).catch(() => []) : [];
   // Ação recebida e ainda não aberta por quem a abre agora: registra a ciência e atualiza a lista e os selos.
@@ -428,6 +525,7 @@ export async function abrirAcao(id, aoMudar) {
     ${a.pedidos.length ? `<h3 style="margin:10px 0 6px">Pedidos de novo prazo</h3>${a.pedidos.map((p) => `<div class="comentario pequeno">
       ${br(p.prazo_atual)} → <b>${br(p.novo_prazo)}</b> · ${esc(p.status)} <br><span class="suave">${esc(p.justificativa)}</span></div>`).join('')}` : ''}
     <div id="acao-checklist-bloco">${checklistBlocoHTML(a, responsaveis)}</div>
+    ${secaoRecolhivel('Diário de progresso', (a.diario || []).length, `<div id="diario-bloco">${diarioBlocoHTML(a, diarioFiltro)}</div>`, (a.diario || []).length > 0)}
     ${secaoRecolhivel('Impedimentos', a.impedimentos.length, `
       ${a.impedimentos.length ? a.impedimentos.map((i) => impedimentoHTML(i, podeImp)).join('') : '<p class="suave pequeno">Nenhum impedimento registrado.</p>'}
       ${aceitaImpedimento(a) && podeImp ? '<button type="button" class="btn btn-sec btn-mini" data-novo-imp>Registrar impedimento</button>' : ''}`,
@@ -575,6 +673,20 @@ export async function abrirAcao(id, aoMudar) {
       // Quem redireciona continua vendo a ação (o chefe só move dentro da própria árvore).
       on(dlg, 'click', '[data-redirecionar]', () => abrirRedirecionar(a, recarregar).catch((e) => toast(e.message, 'erro')));
       on(dlg, 'click', '[data-novo-ponto]', () => abrirNovoPontoAtencao(a, recarregar));
+      // Diário de progresso: registrar (geral ou numa tarefa), retificar, filtrar e, a partir da tarefa, ver só os registros dela.
+      const atualizarDiario = () => { dlg.querySelector('#diario-bloco').innerHTML = diarioBlocoHTML(a, diarioFiltro); };
+      const registrarNovo = (opcoes) => abrirNovoRegistro(a, recarregar, opcoes).catch((e) => toast(e.message, 'erro'));
+      on(dlg, 'click', '[data-novo-registro]', () => registrarNovo());
+      on(dlg, 'click', '[data-registrar-tarefa]', (el) => registrarNovo({ tarefaId: Number(el.dataset.registrarTarefa) }));
+      on(dlg, 'click', '[data-retificar]', (el) => registrarNovo({ retifica: a.diario.find((r) => r.id === Number(el.dataset.retificar)) }));
+      on(dlg, 'click', '[data-diario-tipo]', (el) => { diarioFiltro.tipo = el.dataset.diarioTipo; atualizarDiario(); });
+      on(dlg, 'change', '#diario-tarefa', (el) => { diarioFiltro.tarefa = el.value; atualizarDiario(); });
+      on(dlg, 'click', '[data-ver-diario]', (el) => {
+        diarioFiltro.tipo = ''; diarioFiltro.tarefa = el.dataset.verDiario; atualizarDiario();
+        const secao = dlg.querySelector('#diario-bloco').closest('details');
+        secao.open = true;
+        secao.scrollIntoView({ block: 'start' });
+      });
       on(dlg, 'click', '[data-alternar-ponto]', async (el) => {
         try {
           await patch(`/acoes/${a.id}/pontos-atencao/${el.dataset.alternarPonto}`, { ativo: el.dataset.ativo === '1' });
