@@ -58,6 +58,8 @@ const ROTAS = {
   // Painel de gestão do chefe: radar do dia, fluxo, entregas por semana, carga da equipe e pontos de conversa (só leitura).
   gestao: { f: gestao, perfis: ['chefe'], titulo: 'Painel de gestão' },
   inicio: { f: inicio, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Início' },
+  // Versão nova: a tela Hoje do chefe (o mesmo código do Início, em variante; ver `inicio` em telas-chefe.js).
+  hoje: { f: inicio, perfis: ['chefe'], trilho: true, titulo: 'Hoje' },
   // Link neutro de uma ação (`#/acao/ID`, o que o botão "Copiar link da ação" gera): cada perfil o leva à sua lista, com a ficha aberta.
   acao: { f: (raiz, { id }) => { raiz.innerHTML = '<p class="suave">Abrindo a ação…</p>'; location.replace(`#/${LISTA_DE_ACOES[est.user.perfil] || 'acoes'}?acao=${Number(id) || 0}`); }, perfis: [...TODOS, 'consulta', 'membro'], titulo: 'Ação' },
   agenda: { f: agenda, perfis: [...TODOS, 'consulta', 'membro'], trilho: true, titulo: 'Agenda' },
@@ -107,6 +109,7 @@ for (const area of TODAS_AS_AREAS) ROTAS[area.id] = rotaDeArea(area.id);
 /** Com a versão nova ligada, o endereço de uma tela atual (`#/atualizacao?i=equipe`) leva à mesma tela dentro da sua área (`#/a-semana?t=atualizacao&i=equipe`). */
 function enderecoNaAreaNova(rota, id, q) {
   if (id) return null; // uma reunião, uma ata ou um Centro em particular abre como sempre
+  if (rota === 'inicio' && est.user.perfil === 'chefe') return '#/a-hoje'; // o Início do chefe é a tela Hoje da versão nova
   const area = areasAtuais().find((a) => a.abas.some((b) => b.rota === rota));
   if (!area || !rotaDisponivel(rota)) return null;
   const params = new URLSearchParams(q);
@@ -198,6 +201,7 @@ const rotuloDoPerfil = (u) => (u.suplente ? 'Suplente de seção' : PERFIL[u.per
 const SELOS = { prazos: [['pedidos_pendentes'], 'pedidos de prazo pendentes'], 'minhas-acoes': [['acoes_novas', 'acoes_a_validar'], 'ações novas ou aguardando a sua validação'] };
 // A área Ações da versão nova carrega o selo da tela principal de cada perfil: ações novas do chefe, pedidos de prazo da gestão.
 Object.defineProperty(SELOS, 'a-acoes', { get: () => (est.user?.perfil === 'chefe' ? SELOS['minhas-acoes'] : SELOS.prazos) });
+SELOS['a-meudia'] = SELOS['minhas-acoes'];
 const selo = (rota) => (SELOS[rota] ? `<span class="selo oculto" data-selo="${rota}" title="${SELOS[rota][1]}"></span>` : '');
 const app = document.getElementById('app');
 
@@ -208,7 +212,7 @@ function lerRota() {
   return { rota, id, q: new URLSearchParams(qs || '') };
 }
 // Início da seção também é a tela de entrada do Administrador da Diretoria Adjunta (mesma tela do chefe).
-const casaDe = () => (est.user.perfil === 'plataforma' ? '#/empresas' : est.user.perfil === 'consulta' ? '#/acoes-centros' : est.user.perfil === 'membro' ? '#/minhas-acoes'
+const casaDe = () => (est.user.perfil === 'plataforma' ? '#/empresas' : est.user.perfil === 'consulta' ? '#/acoes-centros' : est.user.perfil === 'membro' ? (novaAtiva() ? casaNovaInterface('membro') : '#/minhas-acoes')
   : novaAtiva() ? casaNovaInterface(est.user.perfil) : est.user.perfil === 'chefe' || (est.user.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA) ? '#/inicio' : '#/painel');
 
 

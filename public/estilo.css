@@ -1667,3 +1667,15 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
 .lt-escolha { display: grid; gap: 8px; }
 .lt-escolha .btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; min-height: 56px; }
 .lt-escolha .btn b { font-weight: 700; }
+
+/* Tela Hoje (versão nova do Início do chefe) */
+.hoje-atualizacao { border-color: var(--green); border-width: 2px; }
+.hoje-atualizacao.urgente { border-color: var(--amarelo); }
+.hoje-atualizacao.encerrado { border-color: var(--vermelho); }
+.hoje-atualizacao.enviada { border-width: 1px; border-color: var(--line); }
+.hoje-reunioes { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.decisao-painel { border-left: 5px solid var(--green); }
+.decisao-painel.pede { border-left-color: var(--vermelho); }
+.decisao-painel ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.decisao-painel li { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: space-between; padding-top: 8px; border-top: 1px solid var(--line); }
+.decisao-painel li:first-child { border-top: 0; padding-top: 0; }

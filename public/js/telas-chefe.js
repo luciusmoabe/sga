@@ -195,6 +195,34 @@ function suaSemanaHTML({ up, semana, abertas, aValidar, atrasadas, ctx }) {
   </section>`;
 }
 
+// ---------- Hoje (versão nova do Início) ----------
+/** O cartão principal da tela Hoje: a atualização da semana, com o prazo e um só botão. */
+function cartaoAtualizacaoHTML({ up, semana }) {
+  const veespera = addDias(semana, -1);
+  const fechamento = instante(`${veespera}T${String(HORA_FECHAMENTO).padStart(2, '0')}:00:00`).getTime();
+  const agoraMs = agora().getTime();
+  const prazo = `${diaSemana(veespera)}, ${br(veespera)}, às ${HORA_FECHAMENTO}h`;
+  if (up.atual) {
+    return `<section class="cartao hoje-atualizacao enviada" aria-labelledby="hoje-at-t"><div class="linha entre" style="align-items:center;gap:12px;flex-wrap:wrap">
+      <div><h2 id="hoje-at-t">Atualização da semana enviada</h2><p class="suave pequeno" style="margin:2px 0 0">Enviada em ${dataHora(up.atual.enviada_em)}${up.atual.usuario_nome && up.atual.usuario_nome !== est.user.nome ? ` por ${esc(up.atual.usuario_nome)}` : ''}.</p></div>
+      <a class="btn btn-sec" href="#/atualizacao">Rever ou corrigir</a></div></section>`;
+  }
+  const classe = agoraMs >= fechamento ? ' encerrado' : fechamento - agoraMs < 24 * 3600000 ? ' urgente' : '';
+  const sub = agoraMs < fechamento ? `Prazo regular: ${prazo}. Faltam ${tempoRestante(fechamento - agoraMs)}.` : `O prazo regular terminou (${prazo}); ainda dá para enviar até a reunião.`;
+  return `<section class="cartao hoje-atualizacao${classe}" aria-labelledby="hoje-at-t"><div class="linha entre" style="align-items:center;gap:12px;flex-wrap:wrap">
+    <div><h2 id="hoje-at-t">Falta enviar a atualização da semana</h2><p class="suave pequeno" style="margin:2px 0 0">${sub}</p></div>
+    <a class="btn btn-primario" href="#/atualizacao">Conferir e enviar</a></div></section>`;
+}
+/** A próxima reunião (da organização e, para quem tem, a da equipe) e quantas ações vencem antes de cada uma. */
+function proximaReuniaoHTML({ abertas, semana, ctx }) {
+  const antes = abertas.filter((a) => !a.atrasada).map((a) => ({ a, r: reuniaoDaAcao(a, ctx) })).filter(({ a, r }) => a.prazo < r.data);
+  const linhas = [['organizacao', semana], ['equipe', ctx.semanaEquipe]].filter(([, data]) => data).map(([tipo, data]) => {
+    const n = antes.filter(({ r }) => r.tipo === tipo).length;
+    return `<li><b>Reunião ${nomeDaReuniao({ tipo })}</b> · ${diaEData(data)}: ${n ? `${plural(n, 'ação vence', 'ações vencem')} antes dela` : 'nada vence antes dela'}</li>`;
+  });
+  return `<section class="cartao" aria-labelledby="hoje-reuniao-t"><h2 id="hoje-reuniao-t">Próxima reunião</h2><ul class="hoje-reunioes">${linhas.join('')}</ul></section>`;
+}
+
 // ---------- Início ----------
 /** Lembrete da atualização para a reunião do chefe da seção acima: enviada (e quando) ou pendente, com o prazo. */
 function relatoEquipeHTML(d) {
@@ -254,7 +282,7 @@ export async function inicio(raiz, { refresh }) {
     ${quadroNovasHTML(abertas)}
     ${quadroValidarHTML(aValidar)}
     <div class="inicio-grade"><div class="inicio-principal">
-    ${suaSemanaHTML({ up, semana, abertas, aValidar, atrasadas, ctx })}
+    ${hoje ? `${cartaoAtualizacaoHTML({ up, semana })}<div class="espaco"></div>${proximaReuniaoHTML({ abertas, semana, ctx })}` : suaSemanaHTML({ up, semana, abertas, aValidar, atrasadas, ctx })}
     ${semRegistro.length ? `<p class="info" role="status" id="lembrete-diario">${plural(semRegistro.length, 'ação em andamento está', 'ações em andamento estão')} sem registro no diário há 7 dias ou mais. <a href="#/minhas-acoes">Ver ações</a> e use <b>+ Registrar andamento</b>.</p>` : ''}
     <div class="espaco"></div>
     ${blocoNumeros}

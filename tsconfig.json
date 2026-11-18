@@ -20,6 +20,7 @@
     "public/js/filtro-acoes.js",
     "public/js/diario.js",
     "public/js/nova-interface.js",
+    "public/js/decisao-painel.js",
     "public/js/vocabulario.js",
     "public/js/ata-marcacao.js"
   ]

@@ -4,7 +4,7 @@
 // Regras puras (sem DOM), com teste em `test/nova-interface.test.js`.
 
 /** Perfis que já têm a versão nova. Os demais seguem com o menu atual até chegar a vez deles. */
-export const PERFIS_NOVA_INTERFACE = ['chefe', 'diretor', 'apoio'];
+export const PERFIS_NOVA_INTERFACE = ['chefe', 'diretor', 'apoio', 'membro'];
 
 const CHAVE = 'agilis:nova-interface';
 export const temNovaInterface = (perfil) => PERFIS_NOVA_INTERFACE.includes(perfil);
@@ -25,7 +25,7 @@ export function definirNovaInterface(ligada) {
 
 /** @type {Area[]} */
 export const AREAS_CHEFE = [
-  { id: 'a-hoje', rotulo: 'Hoje', icone: 'inicio', abas: [{ rota: 'inicio' }] },
+  { id: 'a-hoje', rotulo: 'Hoje', icone: 'inicio', abas: [{ rota: 'hoje' }] },
   { id: 'a-acoes', rotulo: 'Ações', icone: 'minhas-acoes', abas: [
     { rota: 'minhas-acoes', rotulo: 'Minhas ações' }, { rota: 'agenda' }, { rota: 'diario' }, { rota: 'direcionar', rotulo: 'Direcionar' }, { rota: 'acoes-centros' },
   ] },
@@ -49,6 +49,13 @@ export const AREAS_GESTAO = [
   ] },
 ];
 
+/** O membro da equipe: o que ele executa e as atas. A agenda e o diário dele ficam dentro de "Meu dia". */
+/** @type {Area[]} */
+export const AREAS_MEMBRO = [
+  { id: 'a-meudia', rotulo: 'Meu dia', icone: 'minhas-acoes', abas: [{ rota: 'minhas-acoes', rotulo: 'Minhas ações' }, { rota: 'agenda' }, { rota: 'diario', rotulo: 'Meu diário' }] },
+  { id: 'a-atas', rotulo: 'Atas', icone: 'reunioes', abas: [{ rota: 'atas', rotulo: 'Atas' }], extras: ['reunioes-equipe', 'reuniao-equipe'] },
+];
+
 /** A área de Configuração: Diretor, Apoio e o chefe a quem o Diretor deu acesso (Estrutura e Avisos ficam aqui, fora do caminho diário). */
 /** @type {Area} */
 export const AREA_CONFIGURACAO = { id: 'a-config', rotulo: 'Configuração', icone: 'estrutura', abas: [{ rota: 'estrutura', rotulo: 'Estrutura e acessos' }, { rota: 'avisos' }] };
@@ -62,11 +69,12 @@ export const AREA_CONFIGURACAO = { id: 'a-config', rotulo: 'Configuração', ico
 export function areasDoPerfil(perfil, { acessoConfiguracao = false } = {}) {
   if (perfil === 'chefe') return acessoConfiguracao ? [...AREAS_CHEFE, AREA_CONFIGURACAO] : AREAS_CHEFE;
   if (perfil === 'diretor' || perfil === 'apoio') return [...AREAS_GESTAO, AREA_CONFIGURACAO];
+  if (perfil === 'membro') return AREAS_MEMBRO;
   return [];
 }
 
 /** Todas as áreas que existem (para registrar uma rota por área), sem repetir o `id`. */
-export const TODAS_AS_AREAS = [...AREAS_CHEFE, ...AREAS_GESTAO, AREA_CONFIGURACAO].filter((a, i, l) => l.findIndex((b) => b.id === a.id) === i);
+export const TODAS_AS_AREAS = [...AREAS_CHEFE, ...AREAS_GESTAO, ...AREAS_MEMBRO, AREA_CONFIGURACAO].filter((a, i, l) => l.findIndex((b) => b.id === a.id) === i);
 
 /**
  * A área a que uma rota atual pertence (para marcar o menu), ou `null`.
@@ -100,4 +108,4 @@ export function abaAtiva(abas, pedida) {
 export const menuNovaInterface = (areas) => areas.map((a) => (a.destaque ? [a.id, a.rotulo, 'destaque'] : [a.id, a.rotulo]));
 
 /** Para onde a pessoa vai ao entrar na versão nova. */
-export const casaNovaInterface = (perfil) => (perfil === 'chefe' ? '#/a-hoje' : '#/a-painel');
+export const casaNovaInterface = (perfil) => (perfil === 'chefe' ? '#/a-hoje' : perfil === 'membro' ? '#/a-meudia' : '#/a-painel');

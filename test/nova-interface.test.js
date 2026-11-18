@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  AREAS_CHEFE, AREAS_GESTAO, AREA_CONFIGURACAO, PERFIS_NOVA_INTERFACE, TODAS_AS_AREAS, abaAtiva, abasDaArea, areaDaRota, areasDoPerfil, casaNovaInterface, menuNovaInterface, temNovaInterface,
+  AREAS_CHEFE, AREAS_GESTAO, AREAS_MEMBRO, AREA_CONFIGURACAO, PERFIS_NOVA_INTERFACE, TODAS_AS_AREAS, abaAtiva, abasDaArea, areaDaRota, areasDoPerfil, casaNovaInterface, menuNovaInterface, temNovaInterface,
 } from '../public/js/nova-interface.js';
 
 const area = (areas, id) => areas.find((a) => a.id === id);
@@ -12,22 +12,25 @@ test('o menu da versão nova tem quatro áreas por perfil, na ordem da proposta'
   assert.deepEqual(menuNovaInterface(areasDoPerfil('chefe')), [['a-hoje', 'Hoje'], ['a-acoes', 'Ações'], ['a-semana', 'Semana'], ['a-equipe', 'Equipe']]);
   assert.deepEqual(menuNovaInterface(areasDoPerfil('diretor')), [['a-painel', 'Painel'], ['a-acoes', 'Ações'], ['a-reuniao', 'Reunião', 'destaque'], ['a-config', 'Configuração']]);
   assert.deepEqual(menuNovaInterface(areasDoPerfil('apoio')).map((m) => m[0]), ['a-painel', 'a-acoes', 'a-reuniao', 'a-config']);
+  assert.deepEqual(menuNovaInterface(areasDoPerfil('membro')), [['a-meudia', 'Meu dia'], ['a-atas', 'Atas']]);
 });
 
-test('o chefe com acesso à configuração ganha a quinta área; os outros perfis não têm a versão nova ainda', () => {
+test('o chefe com acesso à configuração ganha a quinta área; o membro tem duas; Administrador e Consulta não têm a versão nova ainda', () => {
   assert.deepEqual(areasDoPerfil('chefe', { acessoConfiguracao: true }).map((a) => a.id), ['a-hoje', 'a-acoes', 'a-semana', 'a-equipe', 'a-config']);
-  assert.deepEqual(areasDoPerfil('membro'), []);
+  assert.deepEqual(areasDoPerfil('membro').map((a) => a.id), ['a-meudia', 'a-atas']);
   assert.deepEqual(areasDoPerfil('consulta'), []);
-  assert.deepEqual(PERFIS_NOVA_INTERFACE, ['chefe', 'diretor', 'apoio']);
+  assert.deepEqual(PERFIS_NOVA_INTERFACE, ['chefe', 'diretor', 'apoio', 'membro']);
   assert.equal(temNovaInterface('diretor'), true);
-  assert.equal(temNovaInterface('membro'), false);
+  assert.equal(temNovaInterface('membro'), true);
   assert.equal(temNovaInterface('administrador'), false);
+  assert.equal(temNovaInterface('consulta'), false);
 });
 
 test('onde o perfil entra na versão nova', () => {
   assert.equal(casaNovaInterface('chefe'), '#/a-hoje');
   assert.equal(casaNovaInterface('diretor'), '#/a-painel');
   assert.equal(casaNovaInterface('apoio'), '#/a-painel');
+  assert.equal(casaNovaInterface('membro'), '#/a-meudia');
 });
 
 test('dentro de um perfil, cada tela atual pertence a uma só área; o mesmo id de área não muda de sentido', () => {
@@ -39,11 +42,13 @@ test('dentro de um perfil, cada tela atual pertence a uma só área; o mesmo id 
     }
   }
   assert.equal(new Set(TODAS_AS_AREAS.map((a) => a.id)).size, TODAS_AS_AREAS.length, 'sem id repetido na lista de todas as áreas');
-  assert.deepEqual(TODAS_AS_AREAS.map((a) => a.id).sort(), ['a-acoes', 'a-config', 'a-equipe', 'a-hoje', 'a-painel', 'a-reuniao', 'a-semana']);
+  assert.deepEqual(TODAS_AS_AREAS.map((a) => a.id).sort(), ['a-acoes', 'a-atas', 'a-config', 'a-equipe', 'a-hoje', 'a-meudia', 'a-painel', 'a-reuniao', 'a-semana']);
 });
 
 test('areaDaRota: a área de cada tela atual, por perfil', () => {
-  assert.equal(areaDaRota(AREAS_CHEFE, 'inicio'), 'a-hoje');
+  assert.equal(areaDaRota(AREAS_CHEFE, 'hoje'), 'a-hoje');
+  assert.equal(areaDaRota(AREAS_MEMBRO, 'diario'), 'a-meudia');
+  assert.equal(areaDaRota(AREAS_MEMBRO, 'atas'), 'a-atas');
   assert.equal(areaDaRota(AREAS_CHEFE, 'diario'), 'a-acoes');
   assert.equal(areaDaRota(AREAS_CHEFE, 'atualizacao'), 'a-semana');
   assert.equal(areaDaRota(AREAS_CHEFE, 'reunioes-equipe'), 'a-semana', 'o detalhe de uma reunião da equipe fica na Semana');

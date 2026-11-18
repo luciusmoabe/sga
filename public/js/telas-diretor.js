@@ -10,6 +10,8 @@ import { itensDoRelato, resumoInternas } from './relato-vista.js';
 import { agruparPorDiretriz, partesDoResumo } from './agrupar-acoes.js';
 import { DIAS_SEM_MOVIMENTO, DIRETORIA_ADJUNTA, ehUnidadeDeAcompanhamento } from './regras.js';
 import { parseData } from './datas.js';
+import { pontosParaDecidir } from './decisao-painel.js';
+import { novaInterfaceLigada, temNovaInterface } from './nova-interface.js';
 
 const NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const nomeDiaReuniao = (data) => NOMES_DIA[data ? parseData(data).getUTCDay() : (est.boot?.reuniao_dia ?? 2)]; // a reunião pode ter sido adiada para outro dia
@@ -62,11 +64,19 @@ export async function painel(raiz, { q }) {
   const itens = [...d.itens].sort(porNecessidade);
   const r = d.resumo;
   const pct = (n) => (itens.length ? (n / itens.length) * 100 : 0);
+  // Versão nova: o Modo Reunião a um clique e, no topo, o que pede a decisão do Diretor antes da reunião.
+  const nova = novaInterfaceLigada() && temNovaInterface(est.user.perfil);
+  const pontos = nova ? pontosParaDecidir(itens, semana) : [];
+  const decisaoHTML = nova ? `<section class="cartao decisao-painel${pontos.length ? ' pede' : ''}" aria-labelledby="decisao-t">
+      <h2 id="decisao-t">${pontos.length ? `Reunião de ${nomeDiaReuniao(semana)}: ${plural(pontos.length, 'ponto pede', 'pontos pedem')} a sua decisão` : `Reunião de ${nomeDiaReuniao(semana)}: nada pede a sua decisão agora`}</h2>
+      ${pontos.length ? `<ul>${pontos.map((p) => `<li><span>${p.chave === 'critico' ? `<b>${esc(p.secao)}</b>: ${plural(p.n, 'impedimento crítico aberto', 'impedimentos críticos abertos')}` : `${plural(p.n, 'pedido', 'pedidos')} de novo prazo aguardando resposta`}</span>
+        <a class="btn btn-sec btn-mini" href="${p.href}">${p.rotulo}</a></li>`).join('')}</ul>` : '<p class="suave pequeno">Sem impedimento crítico aberto e sem pedido de prazo pendente.</p>'}</section><div class="espaco"></div>` : '';
   raiz.innerHTML = `
     <div class="cabeca">
       <div><h1>Painel da semana</h1><div class="sub">Reunião de ${nomeDiaReuniao(semana)}, ${br(semana)} · ${plural(itens.length, 'seção', 'seções')} acompanhadas</div></div>
-      <div class="acoes-topo">${navSemana('painel', semana)}<a class="btn btn-sec" href="#/pauta?semana=${semana}">Versão para impressão</a></div>
+      <div class="acoes-topo">${navSemana('painel', semana)}${nova ? '<a class="btn btn-primario" href="#/reuniao">Iniciar reunião</a>' : ''}<a class="btn btn-sec" href="#/pauta?semana=${semana}">Versão para impressão</a></div>
     </div>
+    ${decisaoHTML}
     <div class="cartao">
       <div class="regua" role="img" aria-label="Distribuição do semáforo: ${r.vermelho} críticas, ${r.amarelo} em atenção, ${r.verde} em dia">
         <i class="r-vermelho" style="width:${pct(r.vermelho)}%"></i><i class="r-amarelo" style="width:${pct(r.amarelo)}%"></i><i class="r-verde" style="width:${pct(r.verde)}%"></i></div>

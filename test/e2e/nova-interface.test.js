@@ -24,7 +24,7 @@ async function abrirNova(app, rota = '#/a-hoje', opcoes, uid = CHEFE_COF) {
   return p;
 }
 
-test('Experimentar e voltar: o botão alterna entre o menu atual e o de quatro áreas, e o membro ainda não o tem', async (t) => {
+test('Experimentar e voltar: o botão alterna entre o menu atual e o de quatro áreas, e a Consulta ainda não a tem', async (t) => {
   const app = await subir(t); if (!app) return;
   const p = await app.abrir(CHEFE_COF, '#/inicio');
   await p.waitForSelector('#alternar-interface');
@@ -43,11 +43,11 @@ test('Experimentar e voltar: o botão alterna entre o menu atual e o de quatro �
   await p.waitForSelector('.menu a[data-rota="gestao"]');
   assert.ok((await p.$$('.menu a')).length >= 10, 'voltou ao menu atual');
 
-  // O membro da equipe ainda não tem a versão nova: sem o botão.
-  await app.db.prepare('insert into usuarios (id, nome, email, perfil, secao_id) values (?,?,?,?,?)').run(31, 'Marina Costa', 'marina@exemplo.invalid', 'membro', 2);
-  const m = await app.abrir(31, '#/minhas-acoes');
+  // A Consulta ainda não tem a versão nova: sem o botão.
+  await app.db.prepare('insert into usuarios (id, nome, email, perfil) values (?,?,?,?)').run(32, 'Cida Consulta', 'cida@exemplo.invalid', 'consulta');
+  const m = await app.abrir(32, '#/acoes-centros');
   await m.waitForSelector('.menu a');
-  assert.equal(await m.$('#alternar-interface'), null, 'o membro ainda não tem a versão nova');
+  assert.equal(await m.$('#alternar-interface'), null, 'a Consulta ainda não tem a versão nova');
   const d = await app.abrir(DIRETOR, '#/painel');
   await d.waitForSelector('#alternar-interface');
   assert.equal(await d.$eval('#alternar-interface', (b) => b.textContent), 'Experimentar a versão nova', 'o Diretor tem');
@@ -57,7 +57,7 @@ test('Experimentar e voltar: o botão alterna entre o menu atual e o de quatro �
 test('As quatro áreas abrem as telas de sempre em abas, e o endereço antigo leva à área', async (t) => {
   const app = await subir(t); if (!app) return;
   const p = await abrirNova(app);
-  assert.match(await p.$eval('#conteudo', (e) => e.innerText), /Sua semana/, 'Hoje mostra o início do chefe');
+  assert.match(await p.$eval('#conteudo', (e) => e.innerText), /atualização da semana/, 'Hoje abre com a atualização da semana');
   assert.equal(await p.$('.abas-area'), null, 'Hoje tem uma tela só, sem abas');
 
   await p.click('.menu a[data-rota="a-acoes"]');
@@ -133,6 +133,7 @@ test('Tela Hoje do chefe: o resumo do painel de gestão substitui os quatro núm
   // Versão atual: o Início de sempre.
   const antes = await app.abrir(CHEFE_COF, '#/inicio');
   await antes.waitForSelector('#sua-semana-titulo', { timeout: 10000 });
+  assert.equal(await antes.$('#hoje-at-t'), null, 'a versão atual não tem o cartão novo');
   assert.match(await antes.$eval('#conteudo', (e) => e.innerText), /Próximas ações/);
   assert.equal(await antes.$('#hoje-equipe'), null);
   await antes.close();
@@ -141,7 +142,10 @@ test('Tela Hoje do chefe: o resumo do painel de gestão substitui os quatro núm
   await p.waitForSelector('#hoje-equipe', { timeout: 10000 });
   const texto = await p.$eval('#conteudo', (e) => e.innerText);
   assert.match(texto, /Como está a equipe/);
-  assert.match(texto, /Sua semana/, 'a semana continua no topo');
+  assert.match(texto, /Falta enviar a atualização da semana/, 'o cartão principal é a atualização');
+  assert.match(texto, /Próxima reunião/, 'e a próxima reunião, com o que vence antes dela');
+  assert.doesNotMatch(texto, /Sua semana/, 'o checklist "Sua semana" foi substituído por esses dois cartões');
+  assert.equal(await p.$eval('#hoje-at-t', (e) => e.closest('section').querySelector('a.btn-primario').textContent), 'Conferir e enviar');
   assert.doesNotMatch(texto, /Próximas ações/, 'a lista de ações fica na área Ações');
   assert.equal(await p.$('#hoje-equipe a[href="#/gestao"]') !== null, true, 'leva ao painel de gestão completo');
   // O link do resumo abre o painel de gestão dentro da área Equipe.
@@ -263,5 +267,41 @@ test('Ficha da ação na versão nova: situação, tarefas e uma só linha do te
   await p.evaluate(() => [...document.querySelectorAll('dialog[open]')].at(-1).querySelector('button[type="submit"]').click());
   await p.waitForFunction(() => document.querySelector('dialog[open] #lt-bloco') && document.querySelectorAll('dialog[open] #lt-bloco .diario-item').length === 1, { timeout: 10000 });
   assert.equal((await app.api(CHEFE_COF, 'GET', `/acoes/${acao}`)).dados.diario.length, 1);
+  assert.deepEqual(p.errosDaPagina, []);
+});
+
+test('Painel do Diretor: ele vê o que pede a sua decisão e inicia a reunião a um clique', async (t) => {
+  const app = await subir(t); if (!app) return;
+  const acao = (await app.api(CHEFE_COF, 'POST', '/acoes', { titulo: 'Ação com trava', prazo: '2026-12-31' })).dados.id;
+  await app.api(CHEFE_COF, 'POST', `/acoes/${acao}/impedimentos`, { descricao: 'Falta autorização de acesso.', critico: true });
+  const p = await abrirNova(app, '#/a-painel', undefined, DIRETOR);
+  await p.waitForSelector('#decisao-t', { timeout: 10000 });
+  const bloco = await p.$eval('.decisao-painel', (e) => e.innerText);
+  assert.match(bloco, /pede a sua decisão|pedem a sua decisão/);
+  assert.match(bloco, /impedimento crítico aberto/);
+  assert.equal(await p.$eval('.acoes-topo a.btn-primario', (a) => a.textContent), 'Iniciar reunião');
+  await p.click('.decisao-painel a[href^="#/centro/"]');
+  await p.waitForFunction(() => /#\/centro\/\d+/.test(location.hash), { timeout: 8000 });
+  assert.deepEqual(p.errosDaPagina, []);
+});
+
+test('Membro: a versão nova tem Meu dia (ações, agenda e diário) e Atas', async (t) => {
+  const app = await subir(t); if (!app) return;
+  const axe = fs.readFileSync(app.caminhoAxe, 'utf8');
+  await app.db.prepare('insert into usuarios (id, nome, email, perfil, secao_id) values (?,?,?,?,?)').run(31, 'Marina Costa', 'marina@exemplo.invalid', 'membro', 2);
+  const p = await abrirNova(app, '#/a-meudia', undefined, 31);
+  await p.waitForSelector('.abas-area', { timeout: 10000 });
+  assert.deepEqual(await p.$$eval('.menu a', (as) => as.map((a) => a.dataset.rota)), ['a-meudia', 'a-atas']);
+  assert.deepEqual(await abas(p), ['Minhas ações', 'Agenda', 'Meu diário']);
+  assert.equal(await areaAtiva(p), 'a-meudia');
+  await p.click('.menu a[data-rota="a-atas"]');
+  await p.waitForFunction(() => document.querySelector('.menu a[aria-current="page"]')?.dataset.rota === 'a-atas', { timeout: 10000 });
+  assert.deepEqual(await violacoes(p, axe), [], 'Atas do membro não tem violações de acessibilidade');
+  // O endereço antigo leva à área, e o botão devolve o menu de sempre.
+  await p.evaluate(() => { location.hash = '#/agenda'; });
+  await esperarHash(p, /#\/a-meudia\?.*t=agenda/);
+  await p.click('#alternar-interface');
+  await esperarHash(p, /#\/minhas-acoes/);
+  await p.waitForSelector('.menu a[data-rota="agenda"]');
   assert.deepEqual(p.errosDaPagina, []);
 });
