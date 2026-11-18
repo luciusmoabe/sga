@@ -1694,3 +1694,14 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
 .trilho-pista.dois-niveis { margin-bottom: 70px; }
 .trilho-rotulo.baixo { top: 50px; }
 .trilho-rotulo.baixo::before { content: ""; position: absolute; left: 50%; top: -30px; height: 26px; border-left: 1px dashed var(--line-str); }
+
+/* Menu: a opção de experimentar a versão nova (e de voltar), sempre à vista, no alto, acima das telas */
+.menu-versao { display: flex; align-items: center; width: 100%; margin: -6px 0 0; padding: 9px 12px; min-height: 44px; border: 1px dashed var(--green); border-radius: 8px; background: var(--green-bg); color: var(--green); font: inherit; font-weight: 600; font-size: .9rem; text-align: left; cursor: pointer; }
+.menu-versao .menu-rotulo { display: flex; align-items: center; gap: 10px; }
+.menu-versao:hover { background: var(--pale); }
+.menu-versao:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+@media (min-width: 901px) {
+  .menu-recolhido .menu-versao { justify-content: center; padding: 10px 0; }
+  .menu-recolhido .menu-versao .menu-rotulo { gap: 0; }
+}
+@media (max-width: 760px) { .menu-versao { display: none; } } /* no celular a opção está na folha "Mais" */
