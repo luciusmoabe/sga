@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CHEFE_COF, DIRETOR, subir } from './ajuda.js';
+import { CHEFE_COF, CHEFE_CPE, DIRETOR, subir } from './ajuda.js';
 
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 const violacoes = (p, axe) => p.evaluate(async (js) => { eval(js); return (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } })).violations.map((v) => `${v.id}: ${v.nodes[0].target}`); }, axe);
@@ -304,4 +304,78 @@ test('Membro: a versão nova tem Meu dia (ações, agenda e diário) e Atas', as
   await esperarHash(p, /#\/minhas-acoes/);
   await p.waitForSelector('.menu a[data-rota="agenda"]');
   assert.deepEqual(p.errosDaPagina, []);
+});
+
+test('Nova ação: um só botão nas áreas de ações, que abre o formulário certo para cada perfil', async (t) => {
+  const app = await subir(t); if (!app) return;
+  // Chefe sem subseções: abre direto o formulário da seção. O botão antigo da lista não aparece mais.
+  const p = await abrirNova(app, '#/a-acoes');
+  await p.waitForSelector('#nova-acao-global', { timeout: 10000 });
+  assert.equal(await p.$('#btn-nova-acao'), null, 'a lista não tem mais um segundo botão de nova ação');
+  assert.equal(await p.$eval('#nova-acao-global', (b) => b.textContent), '+ Nova ação');
+  await p.click('#nova-acao-global');
+  await p.waitForSelector('dialog[open] #na-titulo');
+  assert.equal(await p.$eval('dialog[open] h2', (h) => h.textContent), 'Nova ação da seção');
+  await p.type('#na-titulo', 'Ação criada pelo botão único');
+  await p.evaluate(() => document.querySelector('#na-titulo').closest('dialog').querySelector('button[type="submit"]').click());
+  await p.waitForFunction(() => !document.querySelector('dialog[open]'), { timeout: 8000 });
+  await p.waitForFunction(() => document.querySelector('#conteudo')?.innerText.includes('Ação criada pelo botão único'), { timeout: 10000 });
+  assert.equal((await app.api(CHEFE_COF, 'GET', '/acoes')).dados.some((a) => a.titulo === 'Ação criada pelo botão único'), true);
+  // Também em Semana não há o botão (não é uma área de ações).
+  await p.click('.menu a[data-rota="a-semana"]');
+  await p.waitForFunction(() => document.querySelector('.abas-area a[aria-current="page"]')?.textContent.trim() === 'Atualização', { timeout: 10000 });
+  assert.equal(await p.$('#nova-acao-global'), null);
+  await p.close();
+
+  // Chefe com subseções: pergunta para quem é a ação. "Para uma subseção" leva à tela Direcionar.
+  const c = await abrirNova(app, '#/a-acoes', undefined, CHEFE_CPE);
+  await c.waitForSelector('#nova-acao-global', { timeout: 10000 });
+  await c.click('#nova-acao-global');
+  await c.waitForSelector('[data-nova-para="subsecao"]');
+  assert.deepEqual(await c.$$eval('[data-nova-para]', (bs) => bs.map((b) => b.dataset.novaPara)), ['secao', 'subsecao']);
+  await c.click('[data-nova-para="subsecao"]');
+  await esperarHash(c, /#\/a-acoes\?.*t=direcionar/);
+  await c.waitForSelector('#form-dir', { timeout: 10000 });
+  await c.click('#nova-acao-global');
+  await c.waitForSelector('[data-nova-para="secao"]');
+  await c.click('[data-nova-para="secao"]');
+  await c.waitForSelector('dialog[open] #na-titulo');
+  await c.close();
+
+  // Diretor: o botão leva à tela Direcionar, que é o formulário dele.
+  const d = await abrirNova(app, '#/a-acoes', undefined, DIRETOR);
+  await d.waitForSelector('#nova-acao-global', { timeout: 10000 });
+  await d.click('#nova-acao-global');
+  await esperarHash(d, /#\/a-acoes\?.*t=direcionar/);
+  await d.waitForSelector('#form-dir', { timeout: 10000 });
+  assert.deepEqual(d.errosDaPagina, []);
+});
+
+test('Ficha da ação na versão nova: próximo passo sugerido e pedido de novo prazo a partir da Situação', async (t) => {
+  const app = await subir(t); if (!app) return;
+  const acao = (await app.api(CHEFE_COF, 'POST', '/acoes', { titulo: 'Ação sem tarefas', prazo: '2026-12-31' })).dados.id;
+  const demandada = (await app.api(DIRETOR, 'GET', '/acoes')).dados.find((a) => a.demandada_diretor && a.secao_id === 2);
+  const p = await abrirNova(app, `#/a-acoes?t=minhas-acoes&acao=${acao}`);
+  await p.waitForSelector('dialog[open] .situacao-passo', { timeout: 10000 });
+  assert.match(await p.$eval('.situacao-passo', (e) => e.innerText), /Próximo passo:/);
+  assert.ok(await p.$('.situacao-passo [data-registrar-escolher]'), 'o botão Registrar também fica na Situação');
+  assert.equal(await p.$('.situacao-passo [data-pedir-prazo]'), null, 'ação criada pelo chefe: ele altera o prazo, não precisa pedir');
+  assert.match(await p.$eval('.situacao-passo', (e) => e.innerText), /Alterar prazo/);
+  await p.click('.situacao-passo [data-registrar-escolher]');
+  await p.waitForSelector('[data-escolha="registro"]');
+  await p.keyboard.press('Escape');
+
+  // Ação demandada pelo Diretor: o chefe não altera o prazo, pede um novo, pela própria Situação.
+  assert.ok(demandada, 'os dados de exemplo têm uma ação do COF demandada pelo Diretor');
+  await p.close();
+  const q = await abrirNova(app, `#/a-acoes?t=minhas-acoes&acao=${demandada.id}`);
+  await q.waitForSelector('dialog[open] [data-pedir-prazo]', { timeout: 10000 });
+  await q.click('dialog[open] [data-pedir-prazo]');
+  await q.waitForSelector('dialog[open] #np');
+  await q.type('#jp', 'Aguardando o retorno do jurídico.');
+  await q.evaluate(() => document.querySelector('#np').closest('dialog').querySelector('button[type="submit"]').click());
+  await q.waitForFunction(() => document.querySelectorAll('dialog[open]').length === 1 && !document.querySelector('dialog[open] [data-pedir-prazo]'), { timeout: 10000 });
+  assert.equal((await app.api(CHEFE_COF, 'GET', `/acoes/${demandada.id}`)).dados.pedidos.length >= 1, true, 'o pedido foi enviado');
+  assert.match(await q.$eval('.situacao-passo', (e) => e.innerText), /pedido de novo prazo/, 'e o próximo passo passa a falar do pedido');
+  assert.deepEqual(q.errosDaPagina, []);
 });

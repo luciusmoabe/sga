@@ -8,6 +8,7 @@ import { historico, inicio, minhasAcoes } from './telas-chefe.js';
 import { agenda } from './agenda.js';
 import { gestao } from './gestao.js';
 import { diarioTela } from './diario-tela.js';
+import { abrirNovaAcao, podeCriarAcao } from './nova-acao.js';
 import { PERFIS_NOVA_INTERFACE, TODAS_AS_AREAS, abaAtiva, abasDaArea, areaDaRota, areasDoPerfil, casaNovaInterface, definirNovaInterface, menuNovaInterface, novaInterfaceLigada, temNovaInterface } from './nova-interface.js';
 import { combinados } from './combinados.js';
 import { estrutura } from './estrutura.js';
@@ -99,7 +100,11 @@ function rotaDeArea(id) {
       const area = areaDoPerfil(id);
       const abas = abasAtuais(area);
       const ativa = abaAtiva(abas, q.get('t'));
-      raiz.innerHTML = `${abas.length > 1 ? `<nav class="abas-area" aria-label="${esc(area.rotulo)}">${abas.map((b) => `<a href="#/${area.id}?t=${b.rota}" ${b === ativa ? 'aria-current="page"' : ''}>${esc(b.rotulo)}</a>`).join('')}</nav>` : ''}<div id="area-corpo"></div>`;
+      // O botão "Nova ação" fica nas áreas de ações: uma só porta para criar, que pergunta para quem é e abre o formulário certo.
+      const botaoNova = ['a-acoes', 'a-meudia'].includes(id) && podeCriarAcao(est.user.perfil) ? '<button type="button" class="btn btn-primario" id="nova-acao-global">+ Nova ação</button>' : '';
+      const nav = abas.length > 1 ? `<nav class="abas-area" aria-label="${esc(area.rotulo)}">${abas.map((b) => `<a href="#/${area.id}?t=${b.rota}" ${b === ativa ? 'aria-current="page"' : ''}>${esc(b.rotulo)}</a>`).join('')}</nav>` : '';
+      raiz.innerHTML = `${nav || botaoNova ? `<div class="area-cab">${nav}${botaoNova}</div>` : ''}<div id="area-corpo"></div>`;
+      if (botaoNova) on(raiz, 'click', '#nova-acao-global', () => abrirNovaAcao({ aoCriar: refresh }));
       // A tela interna recebe os mesmos parâmetros (`?i=equipe`, `?acao=ID`), sem o `t`, que é só da área.
       await ROTAS[ativa.rota].f($('#area-corpo', raiz), { id: undefined, q, refresh });
     },

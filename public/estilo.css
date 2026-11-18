@@ -1679,3 +1679,9 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
 .decisao-painel ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
 .decisao-painel li { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: space-between; padding-top: 8px; border-top: 1px solid var(--line); }
 .decisao-painel li:first-child { border-top: 0; padding-top: 0; }
+
+/* Nova interface: faixa de abas da área com o botão "Nova ação", e a situação da ficha com o próximo passo */
+.area-cab { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 16px; margin: 0 0 18px; border-bottom: 1px solid var(--line-str); }
+.area-cab .abas-area { margin: 0; border-bottom: 0; flex: 1 1 auto; }
+.area-cab > .btn { margin: 0 0 8px auto; }
+.situacao-passo { background: var(--pale); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }

@@ -1,5 +1,5 @@
 // Telas do chefe de seção: início, atualização semanal, ações e histórico.
-import { aoTopo, doTopo, oTopo, peloTopo } from './vocab.js';
+import { aoTopo, oTopo, peloTopo } from './vocab.js';
 import { del, get, patch, post, put } from './api.js';
 import { abrirAlterarReuniao } from './reuniao-data.js';
 import { agendaComoBoot } from './agenda-equipe.js';
@@ -7,13 +7,13 @@ import { agora, est } from './estado.js';
 import {
   $, abrirForm, addDias, br, brCurto, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, sem, seloNova, STATUS, tempoRestante, textoEtapa, toast, trilho, vazio,
 } from './ui.js';
-import { aceitarAcao, abrirAcao, abrirEditarAcao, abrirNovoImpedimento, abrirNovoRegistro, aceitaImpedimento, devolverAcao, lerOrigem, ligarOrigem, origemCamposHTML, validarAcao } from './acao-comum.js';
+import { abrirNovaAcaoDaSecao, abrirPedirPrazo, aceitarAcao, abrirAcao, abrirEditarAcao, abrirNovoImpedimento, abrirNovoRegistro, aceitaImpedimento, devolverAcao, validarAcao } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
 import { nomeDaReuniao, reuniaoDaAcao } from './reuniao-da-acao.js';
 import { haQuantoTempo, resumir, semRegistroRecente } from './diario.js';
 import { calcularGestao } from './gestao-calculo.js';
 import { radarHTML } from './gestao.js';
-import { novaInterfaceLigada } from './nova-interface.js';
+import { novaInterfaceLigada, temNovaInterface } from './nova-interface.js';
 import { ATALHOS, FACETAS, FILTRO_VAZIO, ORDENS, ROTULO_FACETA, aplicarFiltros, contarAtalhos, contarAtivos, opcoesDe, ordenar } from './filtro-acoes.js';
 import { dataNoFuso, diasEntre, instante } from './datas.js';
 import { relatoHTML } from './telas-diretor.js';
@@ -375,7 +375,7 @@ export async function minhasAcoes(raiz) {
           <h1>Minhas ações</h1>
           <div class="sub">${plural(abertas.length, 'ação aberta', 'ações abertas')}${concl.length ? ` · ${plural(concl.length, 'concluída', 'concluídas')}` : ''}${arq.length ? ` · ${plural(arq.length, 'arquivada', 'arquivadas')}` : ''}</div>
         </div>
-        <button class="btn btn-primario" id="btn-nova-acao">+ Nova ação</button>
+        ${novaInterfaceLigada() && temNovaInterface(est.user.perfil) ? '' : '<button class="btn btn-primario" id="btn-nova-acao">+ Nova ação</button>'}
       </div>
       ${ehMembro ? `<div class="segmento" role="group" aria-label="Quais ações" style="margin-top:10px">
         <button type="button" data-escopo-ac="minhas" aria-pressed="${escopo === 'minhas'}">Minhas</button>
@@ -543,45 +543,7 @@ export async function minhasAcoes(raiz) {
     } catch (e) { erro(e); }
   });
 
-  on(raiz, 'click', '#btn-nova-acao', async () => {
-    // O chefe já cria a ação atribuída a um membro da equipe; o membro cria só para si.
-    const podeAtribuir = ['chefe', 'administrador'].includes(est.user.perfil);
-    const equipe = podeAtribuir ? (await get('/equipe').catch(() => [])).filter((m) => m.ativo) : [];
-    abrirForm({
-      titulo: 'Nova ação da seção',
-      corpo: `
-        <div class="campo"><label for="na-titulo">Título da ação</label><input id="na-titulo" name="titulo" required maxlength="140" placeholder="Ex.: Mapear processos internos"></div>
-        <div class="campo"><label for="na-detalhe">Detalhamento (opcional)</label><textarea id="na-detalhe" name="detalhe" placeholder="Orientações e contexto"></textarea></div>
-        <div class="grade" style="grid-template-columns:1fr 1fr;gap:12px">
-          <div class="campo"><label for="na-prazo">Prazo</label><input id="na-prazo" type="date" name="prazo" required min="${est.boot.hoje}" value="${addDias(est.boot.hoje, 7)}"></div>
-          <div class="campo"><label for="na-prio">Prioridade</label><select id="na-prio" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div>
-        </div>
-        <div class="campo"><label for="na-esf">Esforço estimado (opcional)</label><select id="na-esf" name="esforco"><option value="">Não estimado</option><option value="pequena">Pequeno</option><option value="media">Médio</option><option value="grande">Grande</option></select><div class="dica">Pesa a entrega nos indicadores de produtividade. Sem estimativa, vale médio.</div></div>
-        ${equipe.length ? `<div class="campo"><label for="na-resp">Responsável pela execução</label>
-          <select id="na-resp" name="responsavel_id"><option value="">Eu mesmo (sem delegar)</option>${equipe.map((m) => `<option value="${m.id}">${esc(m.nome)}</option>`).join('')}</select>
-          <div class="dica">Ao concluir, a ação de um membro da equipe aguarda a sua validação.</div></div>` : ''}
-        <div class="campo"><label>De onde veio esta demanda?</label><div class="dica" style="margin-bottom:6px">Deixe em branco se foi uma decisão da própria seção.</div>${origemCamposHTML()}</div>
-        ${est.user.perfil === 'chefe' ? `<div class="escolha" style="margin-top:8px"><label><input type="checkbox" name="interna" value="1"> Ação interna da subseção (não exibida na pauta executiva ${doTopo()})</label></div>` : ''}`,
-      rotulo: 'Criar ação',
-      aoAbrir: (dlg) => ligarOrigem(dlg),
-      aoEnviar: async (d) => {
-        const origem = lerOrigem(d);
-        await post('/acoes', {
-          secao_id: est.user.secao_id, // o chefe e o membro sempre criam na própria seção; o Administrador informa qual
-          titulo: d.titulo,
-          detalhe: d.detalhe,
-          prazo: d.prazo,
-          prioridade: d.prioridade,
-          interna: d.interna === '1',
-          ...(d.esforco ? { esforco: d.esforco } : {}),
-          ...origem,
-          ...(d.responsavel_id ? { responsavel_id: Number(d.responsavel_id) } : {}),
-        });
-        toast('Ação criada com sucesso.');
-        recarregar().catch(erro);
-      },
-    });
-  });
+  on(raiz, 'click', '#btn-nova-acao', () => abrirNovaAcaoDaSecao(() => recarregar().catch(erro)));
 
   on(raiz, 'click', '[data-status]', async (el) => {
     const a = acaoDe(el);
@@ -608,17 +570,7 @@ export async function minhasAcoes(raiz) {
   });
   on(raiz, 'keydown', '[data-min]', (el, ev) => { if (ev.key === 'Enter') $('[data-tempo]', el.closest('[data-id]')).click(); });
   on(raiz, 'click', '[data-detalhe]', (el) => abrirAcao(acaoDe(el).id, recarregar).catch(erro));
-  on(raiz, 'click', '[data-prazo]', (el) => {
-    const a = acaoDe(el);
-    abrirForm({
-      titulo: 'Pedir novo prazo',
-      corpo: `<p class="suave">${esc(a.titulo)}<br>Prazo atual: <b>${br(a.prazo)}</b></p>
-        <div class="campo"><label for="np">Novo prazo</label><input id="np" type="date" name="novo_prazo" min="${addDias(a.prazo, 1)}" value="${addDias(a.prazo, 7)}"></div>
-        <div class="campo"><label for="jp">Motivo</label><textarea id="jp" name="justificativa" placeholder="Explique o que justifica o novo prazo"></textarea></div>`,
-      rotulo: 'Enviar pedido',
-      aoEnviar: async (d) => { await post(`/acoes/${a.id}/pedido-prazo`, d); toast(`Pedido enviado ${aoTopo()}.`); recarregar().catch(erro); },
-    });
-  });
+  on(raiz, 'click', '[data-prazo]', (el) => abrirPedirPrazo(acaoDe(el), () => recarregar().catch(erro)));
 }
 
 // ---------- Histórico ----------

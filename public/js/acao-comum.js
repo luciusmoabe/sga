@@ -2,13 +2,68 @@
 import { aoTopo, doTopo, oTopo, peloTopo } from './vocab.js';
 import { del, get, patch, post } from './api.js';
 import { ehAdmin, ehDiretor, est, podeOperar } from './estado.js';
-import { abrirForm, br, confirmar, dataHora, esc, fmtMin, on, pilulaStatus, PRIO, toast } from './ui.js';
+import { abrirForm, addDias, br, confirmar, dataHora, esc, fmtMin, on, pilulaStatus, PRIO, toast } from './ui.js';
 
 /** Avisa a casca que as contagens dos selos do menu mudaram (ex.: ação nova aberta). */
 export const selosMudaram = () => window.dispatchEvent(new Event('sgc:selos'));
 import { ROTULO_ESFORCO, TIPOS_DE_DIRETRIZ_GERAL, porDataDaTarefa } from './regras.js';
 import { FONTES_DA_LINHA, TIPOS_DIARIO, agruparPorDia, contagemPorFonte, contagens, ehLink, eventosDaLinhaDoTempo, filtrarDiario, filtrarEventos, resumir, rotuloDoDia, rotuloTipo } from './diario.js';
 import { novaInterfaceLigada, temNovaInterface } from './nova-interface.js';
+import { proximoPasso } from './acao-proximo-passo.js';
+
+// ---------- Nova ação da seção e pedido de novo prazo (formulários usados pelas telas e pela ficha) ----------
+/** O chefe cria uma ação para a própria seção (atribuída a alguém da equipe, se quiser); o membro cria só para si. `aoCriar` recarrega a tela de quem chamou. */
+export async function abrirNovaAcaoDaSecao(aoCriar) {
+    // O chefe já cria a ação atribuída a um membro da equipe; o membro cria só para si.
+    const podeAtribuir = ['chefe', 'administrador'].includes(est.user.perfil);
+    const equipe = podeAtribuir ? (await get('/equipe').catch(() => [])).filter((m) => m.ativo) : [];
+    abrirForm({
+      titulo: 'Nova ação da seção',
+      corpo: `
+        <div class="campo"><label for="na-titulo">Título da ação</label><input id="na-titulo" name="titulo" required maxlength="140" placeholder="Ex.: Mapear processos internos"></div>
+        <div class="campo"><label for="na-detalhe">Detalhamento (opcional)</label><textarea id="na-detalhe" name="detalhe" placeholder="Orientações e contexto"></textarea></div>
+        <div class="grade" style="grid-template-columns:1fr 1fr;gap:12px">
+          <div class="campo"><label for="na-prazo">Prazo</label><input id="na-prazo" type="date" name="prazo" required min="${est.boot.hoje}" value="${addDias(est.boot.hoje, 7)}"></div>
+          <div class="campo"><label for="na-prio">Prioridade</label><select id="na-prio" name="prioridade"><option value="alta">Alta</option><option value="media" selected>Média</option><option value="baixa">Baixa</option></select></div>
+        </div>
+        <div class="campo"><label for="na-esf">Esforço estimado (opcional)</label><select id="na-esf" name="esforco"><option value="">Não estimado</option><option value="pequena">Pequeno</option><option value="media">Médio</option><option value="grande">Grande</option></select><div class="dica">Pesa a entrega nos indicadores de produtividade. Sem estimativa, vale médio.</div></div>
+        ${equipe.length ? `<div class="campo"><label for="na-resp">Responsável pela execução</label>
+          <select id="na-resp" name="responsavel_id"><option value="">Eu mesmo (sem delegar)</option>${equipe.map((m) => `<option value="${m.id}">${esc(m.nome)}</option>`).join('')}</select>
+          <div class="dica">Ao concluir, a ação de um membro da equipe aguarda a sua validação.</div></div>` : ''}
+        <div class="campo"><label>De onde veio esta demanda?</label><div class="dica" style="margin-bottom:6px">Deixe em branco se foi uma decisão da própria seção.</div>${origemCamposHTML()}</div>
+        ${est.user.perfil === 'chefe' ? `<div class="escolha" style="margin-top:8px"><label><input type="checkbox" name="interna" value="1"> Ação interna da subseção (não exibida na pauta executiva ${doTopo()})</label></div>` : ''}`,
+      rotulo: 'Criar ação',
+      aoAbrir: (dlg) => ligarOrigem(dlg),
+      aoEnviar: async (d) => {
+        const origem = lerOrigem(d);
+        await post('/acoes', {
+          secao_id: est.user.secao_id, // o chefe e o membro sempre criam na própria seção; o Administrador informa qual
+          titulo: d.titulo,
+          detalhe: d.detalhe,
+          prazo: d.prazo,
+          prioridade: d.prioridade,
+          interna: d.interna === '1',
+          ...(d.esforco ? { esforco: d.esforco } : {}),
+          ...origem,
+          ...(d.responsavel_id ? { responsavel_id: Number(d.responsavel_id) } : {}),
+        });
+        toast('Ação criada com sucesso.');
+        aoCriar?.();
+      },
+    });
+}
+
+/** O chefe pede ao Diretor um novo prazo para uma ação demandada por outra pessoa. `a` precisa de id, titulo e prazo. */
+export function abrirPedirPrazo(a, aoConcluir) {
+    abrirForm({
+      titulo: 'Pedir novo prazo',
+      corpo: `<p class="suave">${esc(a.titulo)}<br>Prazo atual: <b>${br(a.prazo)}</b></p>
+        <div class="campo"><label for="np">Novo prazo</label><input id="np" type="date" name="novo_prazo" min="${addDias(a.prazo, 1)}" value="${addDias(a.prazo, 7)}"></div>
+        <div class="campo"><label for="jp">Motivo</label><textarea id="jp" name="justificativa" placeholder="Explique o que justifica o novo prazo"></textarea></div>`,
+      rotulo: 'Enviar pedido',
+      aoEnviar: async (d) => { await post(`/acoes/${a.id}/pedido-prazo`, d); toast(`Pedido enviado ${aoTopo()}.`); aoConcluir?.(); },
+    });
+}
 
 // ---------- Impedimentos (formulários usados também pela atualização semanal e por Minhas ações) ----------
 /** Ação em que ainda faz sentido registrar impedimento. */
@@ -648,8 +703,16 @@ export async function abrirAcao(id, aoMudar) {
     ${a.pode_excluir ? '<button type="button" class="btn btn-perigo" style="margin-top:12px" data-excluir>Excluir ação</button>' : ''}
 `;
   const novaFicha = temNovaInterface(est.user?.perfil) && novaInterfaceLigada();
+  // Situação (versão nova): o próximo passo sugerido, com os botões do que a pessoa pode fazer agora.
+  const passo = novaFicha ? proximoPasso(a, { leitura, hoje: est.boot.hoje }) : null;
+  const podePedirPrazo = !leitura && ['chefe', 'administrador'].includes(est.user?.perfil) && !a.arquivada && !a.encerrada && a.status !== 'concluida' && !a.pedido_pendente && !a.pode_mudar_prazo;
+  const pSituacao = passo ? `<div class="situacao-passo" role="status"><p style="margin:0"><b>Próximo passo:</b> ${esc(passo.texto)}</p>
+    <div class="linha" style="margin-top:8px;gap:8px;flex-wrap:wrap">
+      ${opcoesDeRegistro(a, { leitura, podeImp }).length ? '<button type="button" class="btn btn-primario btn-mini" data-registrar-escolher>Registrar</button>' : ''}
+      ${podePedirPrazo ? '<button type="button" class="btn btn-sec btn-mini" data-pedir-prazo>Pedir novo prazo</button>' : !leitura && a.pode_mudar_prazo && a.status !== 'concluida' ? '<button type="button" class="btn btn-sec btn-mini" data-editar-acao>Alterar prazo</button>' : ''}
+    </div></div>` : '';
   const corpoAtual = [pCopiar, pInfo, pOrigem, pDesc, pBadges, pResp, pPrio, pCiencia, pPrazo, pHistPrazos, pTempo, pLanc, pPedidos, pCheck, pDiario, pImp, pPontos, pComent, pValid, pRodape].join('\n');
-  const corpoNovo = [pCopiar, pInfo, pOrigem, pDesc, pBadges, pResp, pPrazo, pTempo, pValid,
+  const corpoNovo = [pCopiar, pInfo, pOrigem, pDesc, pBadges, pResp, pSituacao, pPrazo, pTempo, pValid,
     `<details class="secao-rec"${a.pedidos.some((x) => x.status === 'pendente') ? ' open' : ''}><summary><h3>Mais detalhes</h3></summary>${pPrio}${pCiencia}${pHistPrazos}${pLanc}${pPedidos}</details>`,
     pCheck, linhaDoTempoSecaoHTML(a, diarioFiltro, { leitura, podeImp }), pRodape].join('\n');
   const corpo = novaFicha ? corpoNovo : corpoAtual;
@@ -796,6 +859,7 @@ export async function abrirAcao(id, aoMudar) {
       // Quem redireciona continua vendo a ação (o chefe só move dentro da própria árvore).
       on(dlg, 'click', '[data-redirecionar]', () => abrirRedirecionar(a, recarregar).catch((e) => toast(e.message, 'erro')));
       on(dlg, 'click', '[data-novo-ponto]', () => abrirNovoPontoAtencao(a, recarregar));
+      on(dlg, 'click', '[data-pedir-prazo]', () => abrirPedirPrazo(a, recarregar));
       // Diário de progresso: registrar (geral ou numa tarefa), retificar, filtrar e, a partir da tarefa, ver só os registros dela.
       const atualizarDiario = () => {
         if (novaFicha) dlg.querySelector('#lt-bloco').innerHTML = linhaDoTempoListaHTML(a, diarioFiltro, podeImp);
