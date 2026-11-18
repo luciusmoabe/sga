@@ -4,7 +4,7 @@
 // Regras puras (sem DOM), com teste em `test/nova-interface.test.js`.
 
 /** Perfis que já têm a versão nova. Os demais seguem com o menu atual até chegar a vez deles. */
-export const PERFIS_NOVA_INTERFACE = ['chefe', 'diretor', 'apoio', 'membro'];
+export const PERFIS_NOVA_INTERFACE = ['chefe', 'diretor', 'apoio', 'membro', 'administrador'];
 
 const CHAVE = 'agilis:nova-interface';
 export const temNovaInterface = (perfil) => PERFIS_NOVA_INTERFACE.includes(perfil);
@@ -56,6 +56,12 @@ export const AREAS_MEMBRO = [
   { id: 'a-atas', rotulo: 'Atas', icone: 'reunioes', abas: [{ rota: 'atas', rotulo: 'Atas' }], extras: ['reunioes-equipe', 'reuniao-equipe'] },
 ];
 
+/** O Administrador vinculado a uma Diretoria Adjunta trabalha a própria seção como um chefe: Início, ações, equipe e atualização numa área só. */
+/** @type {Area} */
+export const AREA_SECAO = { id: 'a-secao', rotulo: 'Minha seção', icone: 'inicio', abas: [
+  { rota: 'inicio', rotulo: 'Início' }, { rota: 'minhas-acoes', rotulo: 'Minhas ações' }, { rota: 'atualizacao', rotulo: 'Atualização' }, { rota: 'equipe', rotulo: 'Minha equipe' },
+] };
+
 /** A área de Configuração: Diretor, Apoio e o chefe a quem o Diretor deu acesso (Estrutura e Avisos ficam aqui, fora do caminho diário). */
 /** @type {Area} */
 export const AREA_CONFIGURACAO = { id: 'a-config', rotulo: 'Configuração', icone: 'estrutura', abas: [{ rota: 'estrutura', rotulo: 'Estrutura e acessos' }, { rota: 'avisos' }, { rota: 'uso' }] };
@@ -63,18 +69,20 @@ export const AREA_CONFIGURACAO = { id: 'a-config', rotulo: 'Configuração', ico
 /**
  * As áreas do perfil, na ordem do menu. O chefe com acesso à configuração ganha também a área "Configuração".
  * @param {string} perfil
- * @param {{ acessoConfiguracao?: boolean }} [opcoes]
+ * @param {{ acessoConfiguracao?: boolean, daDiretoriaAdjunta?: boolean }} [opcoes]
  * @returns {Area[]}
  */
-export function areasDoPerfil(perfil, { acessoConfiguracao = false } = {}) {
+export function areasDoPerfil(perfil, { acessoConfiguracao = false, daDiretoriaAdjunta = false } = {}) {
   if (perfil === 'chefe') return acessoConfiguracao ? [...AREAS_CHEFE, AREA_CONFIGURACAO] : AREAS_CHEFE;
   if (perfil === 'diretor' || perfil === 'apoio') return [...AREAS_GESTAO, AREA_CONFIGURACAO];
+  // O Administrador tem a gestão inteira e, se está numa Diretoria Adjunta, também a área da própria seção (em segundo lugar, logo depois do Painel).
+  if (perfil === 'administrador') return daDiretoriaAdjunta ? [AREAS_GESTAO[0], AREA_SECAO, ...AREAS_GESTAO.slice(1), AREA_CONFIGURACAO] : [...AREAS_GESTAO, AREA_CONFIGURACAO];
   if (perfil === 'membro') return AREAS_MEMBRO;
   return [];
 }
 
 /** Todas as áreas que existem (para registrar uma rota por área), sem repetir o `id`. */
-export const TODAS_AS_AREAS = [...AREAS_CHEFE, ...AREAS_GESTAO, ...AREAS_MEMBRO, AREA_CONFIGURACAO].filter((a, i, l) => l.findIndex((b) => b.id === a.id) === i);
+export const TODAS_AS_AREAS = [...AREAS_CHEFE, ...AREAS_GESTAO, ...AREAS_MEMBRO, AREA_SECAO, AREA_CONFIGURACAO].filter((a, i, l) => l.findIndex((b) => b.id === a.id) === i);
 
 /**
  * A área a que uma rota atual pertence (para marcar o menu), ou `null`.
@@ -108,4 +116,4 @@ export function abaAtiva(abas, pedida) {
 export const menuNovaInterface = (areas) => areas.map((a) => (a.destaque ? [a.id, a.rotulo, 'destaque'] : [a.id, a.rotulo]));
 
 /** Para onde a pessoa vai ao entrar na versão nova. */
-export const casaNovaInterface = (perfil) => (perfil === 'chefe' ? '#/a-hoje' : perfil === 'membro' ? '#/a-meudia' : '#/a-painel');
+export const casaNovaInterface = (perfil, { daDiretoriaAdjunta = false } = {}) => (perfil === 'chefe' ? '#/a-hoje' : perfil === 'membro' ? '#/a-meudia' : perfil === 'administrador' && daDiretoriaAdjunta ? '#/a-secao' : '#/a-painel');

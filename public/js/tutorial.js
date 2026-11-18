@@ -173,7 +173,7 @@ const caminho = (h) => (h || '').split('?')[0];
 const enderecoNaVersaoNova = (r) => {
   const nome = (r || '').replace(/^#\//, '').split('?')[0].split('/')[0];
   if (nome === 'inicio' && est.user.perfil === 'chefe') return '#/a-hoje';
-  const area = areasDoPerfil(est.user.perfil, { acessoConfiguracao: !!est.user.acesso_configuracao }).find((x) => x.id === nome || x.abas.some((b) => b.rota === nome));
+  const area = areasDoPerfil(est.user.perfil, { acessoConfiguracao: !!est.user.acesso_configuracao, daDiretoriaAdjunta: est.user.perfil === 'administrador' && est.boot?.secao?.tipo === 'diretoria_adjunta' }).find((x) => x.id === nome || x.abas.some((b) => b.rota === nome));
   if (!area) return null;
   return area.id === nome || area.abas.length < 2 ? `#/${area.id}` : `#/${area.id}?t=${nome}`;
 };

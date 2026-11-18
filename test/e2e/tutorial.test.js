@@ -151,7 +151,7 @@ test('tutorial na versão nova: as lições do chefe, do Diretor e do membro des
   const app = await subir(t); if (!app) return;
   await app.db.prepare('insert into usuarios (id, nome, email, perfil, secao_id) values (?,?,?,?,?)').run(31, 'Marina Costa', 'marina@exemplo.invalid', 'membro', 2);
   const antes = JSON.stringify((await app.api(CHEFE_COF, 'GET', '/acoes')).dados.map((a) => [a.id, a.status, a.prazo, a.movimentada_em]));
-  for (const [uid, rota, minimo] of [[CHEFE_COF, '#/a-hoje', 6], [DIRETOR, '#/a-painel', 5], [31, '#/a-meudia', 3]]) {
+  for (const [uid, rota, minimo] of [[CHEFE_COF, '#/a-hoje', 6], [DIRETOR, '#/a-painel', 5], [31, '#/a-meudia', 3], [10, '#/a-painel', 3]]) {
     const p = await app.abrir(uid, rota.startsWith('#/a-p') ? '#/painel' : '#/inicio');
     await p.waitForSelector('.menu a');
     await p.evaluate((id) => { localStorage.setItem('agilis:nova-interface', '1'); localStorage.setItem(`agilis:tutorial:${id}`, JSON.stringify({ convidado: true })); }, uid);

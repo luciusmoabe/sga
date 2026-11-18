@@ -379,3 +379,33 @@ test('Ficha da ação na versão nova: próximo passo sugerido e pedido de novo 
   assert.match(await q.$eval('.situacao-passo', (e) => e.innerText), /pedido de novo prazo/, 'e o próximo passo passa a falar do pedido');
   assert.deepEqual(q.errosDaPagina, []);
 });
+
+test('Administrador: a versão nova tem a gestão inteira; o da Diretoria Adjunta ganha "Minha seção"', async (t) => {
+  const app = await subir(t); if (!app) return;
+  const axe = fs.readFileSync(app.caminhoAxe, 'utf8');
+  // O Administrador geral (sem seção): as quatro áreas da gestão.
+  const a = await abrirNova(app, '#/a-painel', undefined, 10);
+  await a.waitForSelector('.abas-area', { timeout: 10000 });
+  assert.deepEqual(await a.$$eval('.menu a', (as) => as.map((x) => x.dataset.rota)), ['a-painel', 'a-acoes', 'a-reuniao', 'a-config']);
+  await a.click('.menu a[data-rota="a-config"]');
+  await a.waitForFunction(() => document.querySelector('.abas-area a[aria-current="page"]')?.textContent.trim() === 'Estrutura e acessos', { timeout: 10000 });
+  assert.deepEqual(await abas(a), ['Estrutura e acessos', 'Avisos', 'Uso das telas']);
+  await a.click('#alternar-interface');
+  await esperarHash(a, /#\/painel/);
+  await a.waitForSelector('.menu a[data-rota="produtividade"]');
+  await a.close();
+
+  // O Administrador vinculado a uma Diretoria Adjunta: a área da própria seção, como um chefe.
+  await app.db.prepare("insert into secoes (id, nome, sigla, tipo, pai_id, ordem, criada_em) values (20, 'Diretoria de Sistemas e Infraestrutura', 'DSI', 'diretoria_adjunta', null, 9, '2026-01-01T00:00:00')").run();
+  await app.db.prepare('insert into usuarios (id, nome, email, perfil, secao_id) values (?,?,?,?,?)').run(41, 'Adm DSI', 'adm.dsi@exemplo.invalid', 'administrador', 20);
+  const p = await abrirNova(app, '#/a-secao', undefined, 41);
+  await p.waitForSelector('.abas-area', { timeout: 10000 });
+  assert.deepEqual(await p.$$eval('.menu a', (as) => as.map((x) => x.dataset.rota)), ['a-painel', 'a-secao', 'a-acoes', 'a-reuniao', 'a-config']);
+  assert.deepEqual(await abas(p), ['Início', 'Minhas ações', 'Atualização', 'Minha equipe']);
+  assert.equal(await areaAtiva(p), 'a-secao');
+  await p.evaluate(() => { location.hash = '#/atualizacao'; });
+  await esperarHash(p, /#\/a-secao\?.*t=atualizacao/);
+  assert.equal(await ativa(p), 'Atualização');
+  assert.deepEqual(await violacoes(p, axe), [], 'a área da seção do Administrador não tem violações de acessibilidade');
+  assert.deepEqual(p.errosDaPagina, []);
+});

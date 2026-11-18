@@ -15,14 +15,14 @@ test('o menu da versão nova tem quatro áreas por perfil, na ordem da proposta'
   assert.deepEqual(menuNovaInterface(areasDoPerfil('membro')), [['a-meudia', 'Meu dia'], ['a-atas', 'Atas']]);
 });
 
-test('o chefe com acesso à configuração ganha a quinta área; o membro tem duas; Administrador e Consulta não têm a versão nova ainda', () => {
+test('o chefe com acesso à configuração ganha a quinta área; o membro tem duas; só a Consulta não tem a versão nova', () => {
   assert.deepEqual(areasDoPerfil('chefe', { acessoConfiguracao: true }).map((a) => a.id), ['a-hoje', 'a-acoes', 'a-semana', 'a-equipe', 'a-config']);
   assert.deepEqual(areasDoPerfil('membro').map((a) => a.id), ['a-meudia', 'a-atas']);
   assert.deepEqual(areasDoPerfil('consulta'), []);
-  assert.deepEqual(PERFIS_NOVA_INTERFACE, ['chefe', 'diretor', 'apoio', 'membro']);
+  assert.deepEqual(PERFIS_NOVA_INTERFACE, ['chefe', 'diretor', 'apoio', 'membro', 'administrador']);
   assert.equal(temNovaInterface('diretor'), true);
   assert.equal(temNovaInterface('membro'), true);
-  assert.equal(temNovaInterface('administrador'), false);
+  assert.equal(temNovaInterface('administrador'), true);
   assert.equal(temNovaInterface('consulta'), false);
 });
 
@@ -31,10 +31,12 @@ test('onde o perfil entra na versão nova', () => {
   assert.equal(casaNovaInterface('diretor'), '#/a-painel');
   assert.equal(casaNovaInterface('apoio'), '#/a-painel');
   assert.equal(casaNovaInterface('membro'), '#/a-meudia');
+  assert.equal(casaNovaInterface('administrador'), '#/a-painel');
+  assert.equal(casaNovaInterface('administrador', { daDiretoriaAdjunta: true }), '#/a-secao', 'o Administrador da Diretoria Adjunta entra pela própria seção');
 });
 
 test('dentro de um perfil, cada tela atual pertence a uma só área; o mesmo id de área não muda de sentido', () => {
-  for (const [nome, areas] of [['chefe', areasDoPerfil('chefe', { acessoConfiguracao: true })], ['diretor', areasDoPerfil('diretor')]]) {
+  for (const [nome, areas] of [['chefe', areasDoPerfil('chefe', { acessoConfiguracao: true })], ['diretor', areasDoPerfil('diretor')], ['administrador', areasDoPerfil('administrador')], ['administrador da Diretoria Adjunta', areasDoPerfil('administrador', { daDiretoriaAdjunta: true })]]) {
     const vistas = new Map();
     for (const a of areas) for (const b of a.abas) {
       assert.equal(vistas.has(b.rota), false, `${nome}: ${b.rota} está em ${vistas.get(b.rota)} e em ${a.id}`);
@@ -42,7 +44,7 @@ test('dentro de um perfil, cada tela atual pertence a uma só área; o mesmo id 
     }
   }
   assert.equal(new Set(TODAS_AS_AREAS.map((a) => a.id)).size, TODAS_AS_AREAS.length, 'sem id repetido na lista de todas as áreas');
-  assert.deepEqual(TODAS_AS_AREAS.map((a) => a.id).sort(), ['a-acoes', 'a-atas', 'a-config', 'a-equipe', 'a-hoje', 'a-meudia', 'a-painel', 'a-reuniao', 'a-semana']);
+  assert.deepEqual(TODAS_AS_AREAS.map((a) => a.id).sort(), ['a-acoes', 'a-atas', 'a-config', 'a-equipe', 'a-hoje', 'a-meudia', 'a-painel', 'a-reuniao', 'a-secao', 'a-semana']);
 });
 
 test('areaDaRota: a área de cada tela atual, por perfil', () => {
@@ -80,4 +82,28 @@ test('abaAtiva: a pedida se existir; senão a primeira; sem abas, nulo', () => {
   assert.equal(abaAtiva(abas, 'combinados').rota, 'atualizacao', 'aba que não existe cai na primeira');
   assert.equal(abaAtiva(abas, null).rota, 'atualizacao');
   assert.equal(abaAtiva([], 'atas'), null);
+});
+
+test('Administrador: a gestão inteira e, se está numa Diretoria Adjunta, a área "Minha seção" logo depois do Painel', () => {
+  assert.deepEqual(menuNovaInterface(areasDoPerfil('administrador')).map((m) => m[0]), ['a-painel', 'a-acoes', 'a-reuniao', 'a-config']);
+  assert.deepEqual(menuNovaInterface(areasDoPerfil('administrador', { daDiretoriaAdjunta: true })).map((m) => m[0]), ['a-painel', 'a-secao', 'a-acoes', 'a-reuniao', 'a-config']);
+  const minha = areasDoPerfil('administrador', { daDiretoriaAdjunta: true }).find((a) => a.id === 'a-secao');
+  assert.deepEqual(minha.abas.map((b) => b.rota), ['inicio', 'minhas-acoes', 'atualizacao', 'equipe']);
+  assert.equal(areaDaRota(areasDoPerfil('administrador', { daDiretoriaAdjunta: true }), 'atualizacao'), 'a-secao');
+  assert.equal(areaDaRota(areasDoPerfil('administrador'), 'atualizacao'), null, 'sem Diretoria Adjunta, a atualização não é do Administrador');
+});
+
+// A regra de "Nova ação" (public/js/nova-acao.js) importa módulos do navegador; aqui só a parte pura dos caminhos é conferida, copiada da fonte.
+test('Nova ação: os caminhos de criação de cada perfil (a seção, direcionar, ou os dois com pergunta)', async () => {
+  const fonte = await (await import('node:fs/promises')).readFile(new URL('../public/js/nova-acao.js', import.meta.url), 'utf8');
+  const corpo = fonte.slice(fonte.indexOf('export function caminhosDeCriacao'), fonte.indexOf('/** `aoCriar`'));
+  const caminhosDeCriacao = new Function(`${corpo.replace('export function', 'function')}; return caminhosDeCriacao;`)();
+  const c = (perfil, extra = {}, boot = {}) => caminhosDeCriacao({ perfil, ...extra }, boot);
+  assert.deepEqual(c('membro'), { secao: true, direcionar: false });
+  assert.deepEqual(c('chefe'), { secao: true, direcionar: false }, 'chefe sem subseções: só a própria seção');
+  assert.deepEqual(c('chefe', {}, { secao: { tem_subsecoes: true } }), { secao: true, direcionar: true }, 'com subseções: pergunta');
+  assert.deepEqual(c('diretor'), { secao: false, direcionar: true });
+  assert.deepEqual(c('apoio'), { secao: false, direcionar: true });
+  assert.deepEqual(c('administrador'), { secao: false, direcionar: true }, 'o Administrador geral direciona');
+  assert.deepEqual(c('administrador', { secao_id: 20 }), { secao: true, direcionar: true }, 'o da Diretoria Adjunta: pergunta');
 });

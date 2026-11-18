@@ -101,7 +101,8 @@ const novaAtiva = () => !!est.user && temNovaInterface(est.user.perfil) && novaI
 const rotaDisponivel = (rota) => { const d = ROTAS[rota]; return !!d && d.perfis.includes(est.user.perfil) && (!d.exige || !!d.exige()); };
 const abasAtuais = (area) => abasDaArea(area, rotaDisponivel, (r) => ROTAS[r].titulo);
 /** As áreas de quem está usando (o chefe com acesso à configuração ganha a área Configuração). */
-const areasAtuais = () => areasDoPerfil(est.user.perfil, { acessoConfiguracao: !!est.user.acesso_configuracao });
+const daAdjunta = () => est.user?.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA;
+const areasAtuais = () => areasDoPerfil(est.user.perfil, { acessoConfiguracao: !!est.user.acesso_configuracao, daDiretoriaAdjunta: daAdjunta() });
 const areaDoPerfil = (id) => areasAtuais().find((a) => a.id === id);
 function rotaDeArea(id) {
   return {
@@ -115,7 +116,7 @@ function rotaDeArea(id) {
       const abas = abasAtuais(area);
       const ativa = abaAtiva(abas, q.get('t'));
       // O botão "Nova ação" fica nas áreas de ações: uma só porta para criar, que pergunta para quem é e abre o formulário certo.
-      const botaoNova = ['a-acoes', 'a-meudia'].includes(id) && podeCriarAcao(est.user.perfil) ? '<button type="button" class="btn btn-primario" id="nova-acao-global">+ Nova ação</button>' : '';
+      const botaoNova = ['a-acoes', 'a-meudia', 'a-secao'].includes(id) && podeCriarAcao(est.user.perfil) ? '<button type="button" class="btn btn-primario" id="nova-acao-global">+ Nova ação</button>' : '';
       const nav = abas.length > 1 ? `<nav class="abas-area" aria-label="${esc(area.rotulo)}">${abas.map((b) => `<a href="#/${area.id}?t=${b.rota}" ${b === ativa ? 'aria-current="page"' : ''}>${esc(b.rotulo)}</a>`).join('')}</nav>` : '';
       raiz.innerHTML = `${nav || botaoNova ? `<div class="area-cab">${nav}${botaoNova}</div>` : ''}<div id="area-corpo"></div>`;
       if (botaoNova) on(raiz, 'click', '#nova-acao-global', () => abrirNovaAcao({ aoCriar: refresh }));
@@ -224,6 +225,7 @@ const SELOS = { prazos: [['pedidos_pendentes'], 'pedidos de prazo pendentes'], '
 // A área Ações da versão nova carrega o selo da tela principal de cada perfil: ações novas do chefe, pedidos de prazo da gestão.
 Object.defineProperty(SELOS, 'a-acoes', { get: () => (est.user?.perfil === 'chefe' ? SELOS['minhas-acoes'] : SELOS.prazos) });
 SELOS['a-meudia'] = SELOS['minhas-acoes'];
+SELOS['a-secao'] = SELOS['minhas-acoes']; // a área da própria seção (Administrador da Diretoria Adjunta) carrega o selo de Minhas ações
 const selo = (rota) => (SELOS[rota] ? `<span class="selo oculto" data-selo="${rota}" title="${SELOS[rota][1]}"></span>` : '');
 const app = document.getElementById('app');
 
@@ -235,7 +237,7 @@ function lerRota() {
 }
 // Início da seção também é a tela de entrada do Administrador da Diretoria Adjunta (mesma tela do chefe).
 const casaDe = () => (est.user.perfil === 'plataforma' ? '#/empresas' : est.user.perfil === 'consulta' ? '#/acoes-centros' : est.user.perfil === 'membro' ? (novaAtiva() ? casaNovaInterface('membro') : '#/minhas-acoes')
-  : novaAtiva() ? casaNovaInterface(est.user.perfil) : est.user.perfil === 'chefe' || (est.user.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA) ? '#/inicio' : '#/painel');
+  : novaAtiva() ? casaNovaInterface(est.user.perfil, { daDiretoriaAdjunta: daAdjunta() }) : est.user.perfil === 'chefe' || (est.user.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA) ? '#/inicio' : '#/painel');
 
 
 // O bootstrap (usuário, semana, selo) muda pouco: reaproveitá-lo poupa uma ida ao servidor a cada troca de tela.
