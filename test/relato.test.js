@@ -1,4 +1,4 @@
-// Relato semanal montado a partir das ações: janelas, fuso da Bahia, privacidade, cópia congelada e envio.
+// Atualização semanal montado a partir das ações: janelas, fuso da Bahia, privacidade, cópia congelada e envio.
 process.env.SGC_NOW = '2026-09-21T10:00:00'; // segunda-feira; a reunião é na terça 22/09/2026
 
 import test from 'node:test';
@@ -49,7 +49,7 @@ async function montar(t) {
   return { db, call, nova };
 }
 
-test('o relato traz as concluídas, atrasadas e programadas nas janelas certas, no fuso da Bahia', async (t) => {
+test('a atualização traz as concluídas, atrasadas e programadas nas janelas certas, no fuso da Bahia', async (t) => {
   const { call, nova } = await montar(t);
   // Concluídas (o instante é UTC; o dia que vale é o da Bahia, UTC-3)
   await nova(1, 'R-conc-inicio', { prazo: '2026-09-15', status: 'concluida', concluida: '2026-09-15T15:00:00.000Z' });
@@ -80,7 +80,7 @@ test('o relato traz as concluídas, atrasadas e programadas nas janelas certas, 
   assert.equal(data.relato.concluidas.find((a) => a.titulo === 'R-conc-subsecao').secao_sigla, 'IND');
 });
 
-test('enviar congela uma cópia sem ações internas, deriva os campos antigos e avisa quando o relato muda', async (t) => {
+test('enviar congela uma cópia sem ações internas, deriva os campos antigos e avisa quando a atualização muda', async (t) => {
   const { db, call, nova } = await montar(t);
   await nova(1, 'S-publica', { prazo: '2026-09-15' });
   await nova(1, 'S-conc', { prazo: '2026-09-16', status: 'concluida', concluida: '2026-09-16T15:00:00.000Z' });
@@ -109,7 +109,7 @@ test('enviar congela uma cópia sem ações internas, deriva os campos antigos e
   assert.match(envio.data.apoio, /S-publica: Liberar recurso/);
   assert.equal(envio.data.critico, false, 'a marca crítica agora vem dos impedimentos das ações');
 
-  // O Diretor lê o relato sem nada interno; o Administrador também recebe só a cópia (as internas são contagem).
+  // O Diretor lê a atualização sem nada interno; o Administrador também recebe só a cópia (as internas são contagem).
   for (const uid of [DIRETOR, ADMIN]) {
     const detalhe = await call(uid, 'GET', `/secoes/1/detalhe?semana=${SEMANA}`);
     assert.equal(detalhe.status, 200);
@@ -222,7 +222,7 @@ test('o prazo entre hoje e a reunião não é atrasado nem programado: vence ant
   assert.ok(!rel.programadas.some((a) => a.titulo === 'T-prazo-25'));
 });
 
-test('só o Administrador exclui uma versão do relato; qualquer versão do histórico pode ser excluída', async (t) => {
+test('só o Administrador exclui uma versão da atualização; qualquer versão do histórico pode ser excluída', async (t) => {
   const { db, call } = await montar(t);
   // A demonstração já tem uma versão para esta seção/semana; começa do zero para o teste ser exato.
   await db.exec(`delete from atualizacoes where secao_id = 1 and semana = '${SEMANA}'`);

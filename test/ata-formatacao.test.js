@@ -21,7 +21,7 @@ test('editor carrega atas antigas e preserva linhas, parágrafos e formatos exis
 });
 
 test('modelo da ata destaca seções e apenas o rótulo da próxima reunião', () => {
-  for (const titulo of ['Participantes:', 'Decisões:', 'Novas ações:', 'Informações:']) {
+  for (const titulo of ['Participantes:', 'Decisões:', 'Novas ações:', 'Informações:', 'Informes:']) {
     assert.ok(segmentosDaLinhaAta(titulo).every(s => s.negrito));
   }
   const proxima = segmentosDaLinhaAta('Próxima reunião: terça-feira, 13/10/2026, às 16:00.');

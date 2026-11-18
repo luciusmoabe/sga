@@ -84,7 +84,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
 
   // ---------- Atualização semanal do chefe ----------
   // O chefe age na própria seção; o Administrador, em qualquer seção ativa, informada em secao_id. Sem secao_id,
-  // o Administrador da Diretoria Adjunta envia o relato da própria seção (tela "Minha atualização").
+  // o Administrador da Diretoria Adjunta envia a atualização da própria seção (tela "Minha atualização").
   const secaoDaAtualizacao = async (req) => {
     if (req.user.perfil !== 'administrador') {
       if (!req.user.secao_id) throw falha(409, 'Você ainda não está vinculado a uma seção. Peça {topo:ao} para atribuí-lo.');
@@ -99,9 +99,9 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
     const semana = await semanaDe(req);
     const anterior = (await q1(`select semana from atualizacoes where secao_id = ? and semana < ? and empresa_id = ? order by semana desc limit 1`, secaoId, semana, empresaAtual()))?.semana;
     const prev = anterior ? await ultimaAtualizacao(db, secaoId, anterior) : null;
-    const resumo = req.query.resumo === '1'; // o Início só precisa do relato enviado: poupa as consultas do relato ao vivo
+    const resumo = req.query.resumo === '1'; // o Início só precisa da atualização enviada: poupa as consultas da atualização ao vivo
     const [atual, relato] = await Promise.all([ultimaAtualizacao(db, secaoId, semana), resumo ? null : montarRelato(db, secaoId, semana, hoje())]);
-    // Depois de enviado, o relato pode mudar (ação concluída, prazo novo, impedimento resolvido): avisa o chefe.
+    // Depois de enviado, a atualização pode mudar (ação concluída, prazo novo, impedimento resolvido): avisa o chefe.
     const enviado = atual?.feito?.snapshot;
     return {
       semana,
@@ -112,7 +112,7 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
       desatualizada: enviado && relato ? assinatura(paraSnapshot(relato)) !== assinatura(enviado) : null,
     };
   }));
-  // Envio do relato montado a partir das ações: o servidor recalcula os blocos e congela a cópia; o cliente só
+  // Envio da atualização montada a partir das ações: o servidor recalcula os blocos e congela a cópia; o cliente só
   // manda a semana e as observações. Cada envio é uma nova versão; o histórico é mantido.
   const enviarRelato = (req, secaoId, semana, b) => {
     const observacoes = texto(b.observacoes, 600);
@@ -168,8 +168,8 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
   app.get('/api/historico', permit('chefe', 'administrador'), h(async (req) => (
     req.user.perfil === 'administrador' || req.user.secao_id ? await historicoDe(await secaoDaAtualizacao(req)) : [])));
 
-  // Exclui uma versão do relato semanal. Contraria de propósito a regra de que o histórico é mantido
-  // (cada envio normalmente vira uma versão nova, nunca apagada); existe para corrigir um relato de
+  // Exclui uma versão da atualização semanal. Contraria de propósito a regra de que o histórico é mantido
+  // (cada envio normalmente vira uma versão nova, nunca apagada); existe para corrigir uma atualização de
   // teste ou enviado por engano. Sem cascata: nenhuma outra tabela referencia atualizacoes.
   app.delete('/api/atualizacoes/:id', permit('administrador'), h(async (req) => {
     const r = await run('delete from atualizacoes where id = ? and empresa_id = ?', Number(req.params.id), empresaAtual());

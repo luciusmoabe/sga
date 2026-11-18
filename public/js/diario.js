@@ -69,7 +69,7 @@ export function contagens(lista) {
 }
 
 /**
- * Sugestão de texto para as observações do relato semanal, tirada dos registros da semana: primeiro as entregas, depois os impedimentos,
+ * Sugestão de texto para as observações da atualização semanal, tirada dos registros da semana: primeiro as entregas, depois os impedimentos,
  * os andamentos e as observações (em cada grupo, o mais recente antes), uma linha por registro, até caber em `max` caracteres. Registro de ação
  * interna (que não aparece para a gestão) nunca entra. Quem envia revê e edita o texto antes.
  * @param {any[]} registros

@@ -86,7 +86,7 @@ async function detalhe(raiz, { id, refresh }) {
       <div class="cartao"><h2>Participantes</h2>${listaHTML(r.participantes.filter((p) => p.presente), (p) => `${esc(p.nome)}${p.secao_sigla ? ` · ${esc(p.secao_sigla)}` : ''}`)}</div>
       <div class="cartao"><h2>Decisões</h2>${listaHTML(r.decisoes, (d) => `${esc(d.texto)}${d.responsavel_nome ? ` <span class="suave pequeno">· ${esc(d.responsavel_nome)}</span>` : ''}`)}</div>
       <div class="cartao"><h2>Novas ações</h2>${listaHTML(r.novas_acoes, (a) => `${esc(a.titulo)} <span class="suave pequeno">· ${esc(a.responsavel_nome || 'sem responsável')} · prazo ${br(a.prazo)}</span>`)}</div>
-      <div class="cartao"><h2>Informações e comunicados</h2>${listaHTML(r.informacoes, (i) => esc(i.texto))}</div>
+      <div class="cartao"><h2>Informes</h2>${listaHTML(r.informacoes, (i) => esc(i.texto))}</div>
       <div class="cartao"><h2>Pedidos de prazo decididos</h2>${listaHTML(r.pedidos_decididos, (p) => `<b>${esc(p.secao_sigla)}</b> · ${esc(p.acao_titulo)}: ${br(p.novo_prazo)} ${p.status === 'aprovado' ? 'aprovado' : 'recusado'}`)}</div>
       <div class="cartao"><h2>Combinados da reunião</h2>${listaHTML(r.combinados_snapshot, (c) => esc(c.texto))}</div>
     </div>
@@ -152,10 +152,10 @@ export async function viewReuniaoEquipe(raiz, { id: idRota, q }) {
         <button class="btn btn-fantasma" data-a="visao" title="Visão geral">Visão geral</button>
         ${S.cartoes.map((c, i) => `<button class="tv-passo cor-${c.cor} ${S.passo === 'secao' && S.idx === i ? 'atual' : ''}" data-a="secao" data-i="${i}" aria-label="${esc(c.sigla || c.nome)}: ${c.cor}" title="${esc(c.nome)}"></button>`).join('')}
       </div>
-      <div class="linha"><button class="btn btn-sec" data-a="presenca">Presença (${presentes().length})</button><button class="btn btn-sec" data-a="informacao">Registrar informação</button>
+      <div class="linha"><button class="btn btn-sec" data-a="presenca">Presença (${presentes().length})</button><button class="btn btn-sec" data-a="informacao">Registrar informe</button>
         <button class="btn btn-sec" data-a="proxima">${S.reuniao.proxima_em ? `Próxima: ${br(S.reuniao.proxima_em).slice(0, 5)}` : 'Próxima reunião'}</button>
         <button class="btn btn-fantasma" data-a="sair">Sair sem encerrar</button><button class="btn btn-sec" data-a="encerrar">Encerrar reunião</button></div>${registros()}</header>`;
-  const registros = () => (S.reuniao.informacoes.length ? `<details class="tv-cartao tv-informacoes"><summary>Informações e comunicados (${S.reuniao.informacoes.length})</summary>
+  const registros = () => (S.reuniao.informacoes.length ? `<details class="tv-cartao tv-informacoes"><summary>Informes (${S.reuniao.informacoes.length})</summary>
       ${S.reuniao.informacoes.map((i) => `<div class="tv-decisao"><span style="white-space:pre-wrap">${esc(i.texto)}</span><span class="tv-decisao-acoes"><button type="button" class="btn btn-fantasma btn-mini" data-editar-info="${i.id}">Editar</button><button type="button" class="btn btn-fantasma btn-mini" data-excluir-info="${i.id}">Excluir</button></span></div>`).join('')}</details>` : '');
 
   const abertura = () => {
@@ -187,7 +187,7 @@ export async function viewReuniaoEquipe(raiz, { id: idRota, q }) {
         : pedem.length ? `<div class="tv-grade">${pedem.map(({ c, i }) => `<button class="tv-secao cor-${c.cor}" data-a="secao" data-i="${i}">
         <span class="linha" style="justify-content:space-between"><b>${esc(c.nome)}</b>${sem(c.cor)}</span><small>${esc(c.chefe_nome || 'sem chefe')} · ${esc(c.sigla || '')}</small><span>${esc(resumo(c))}</span></button>`).join('')}</div>`
         : '<p class="nada">Nenhuma seção pede atenção.</p>'}
-      ${verdes.length ? `<div class="tv-cartao"><div class="tv-verdes"><span>${sem('verde')} <b>No verde: relato oral é opcional.</b></span>
+      ${verdes.length ? `<div class="tv-cartao"><div class="tv-verdes"><span>${sem('verde')} <b>No verde: apresentação oral é opcional.</b></span>
         ${verdes.map(({ c, i }) => `<button class="btn btn-sec" data-a="secao" data-i="${i}">${esc(c.sigla || c.nome)}</button>`).join('')}</div></div>` : ''}
       ${gerais.length ? `<div class="tv-decisoes">${gerais.map((d) => `<div><b>Geral</b> · ${esc(d.texto)}</div>`).join('')}</div>` : ''}</div>
       <footer class="tv-rodape"><div class="linha"><button class="btn btn-sec" data-a="combinados">Ver combinados</button><button class="btn btn-sec" data-a="acao-nova">Nova ação</button><button class="btn btn-sec" data-a="decisao-geral">Decisão geral</button></div>
@@ -239,12 +239,12 @@ export async function viewReuniaoEquipe(raiz, { id: idRota, q }) {
   const depois = async (msg) => { if (msg) toast(msg); await recarregar(); desenhar(); };
 
   const formInformacao = (info = null) => abrirForm({
-    titulo: info ? 'Editar informação' : 'Informação ou comunicado para a ata',
-    corpo: `<p class="suave pequeno">Registre informes, contexto ou assuntos discutidos. Este texto fará parte da ata.</p><div class="campo"><label for="ri-texto">Informação</label><textarea id="ri-texto" name="texto" maxlength="2000" required>${esc(info?.texto || '')}</textarea></div>`,
+    titulo: info ? 'Editar informe' : 'Informe para a ata',
+    corpo: `<p class="suave pequeno">Registre informes, contexto ou assuntos discutidos. Este texto fará parte da ata.</p><div class="campo"><label for="ri-texto">Informe</label><textarea id="ri-texto" name="texto" maxlength="2000" required>${esc(info?.texto || '')}</textarea></div>`,
     aoEnviar: async (d) => {
       if (info) await patch(`/reunioes-equipe/${S.id}/informacoes/${info.id}`, { texto: d.texto });
       else await post(`/reunioes-equipe/${S.id}/informacoes`, { texto: d.texto });
-      await depois('Informação registrada.');
+      await depois('Informe registrado.');
     },
   });
   const formPresenca = () => abrirForm({
@@ -306,7 +306,7 @@ export async function viewReuniaoEquipe(raiz, { id: idRota, q }) {
   on(raiz, 'click', '[data-editar-dec]', (el) => { const d = S.reuniao.decisoes.find((x) => x.id === Number(el.dataset.editarDec)); if (d) formDecisaoEditar(d); });
   on(raiz, 'click', '[data-editar-info]', (el) => { const i = S.reuniao.informacoes.find((x) => x.id === Number(el.dataset.editarInfo)); if (i) formInformacao(i); });
   on(raiz, 'click', '[data-excluir-info]', async (el) => {
-    if (!(await confirmar({ titulo: 'Excluir informação', texto: 'Esta informação deixará de fazer parte da reunião e da ata.', rotulo: 'Excluir', perigo: true }))) return;
+    if (!(await confirmar({ titulo: 'Excluir informe', texto: 'Este informe deixará de fazer parte da reunião e da ata.', rotulo: 'Excluir', perigo: true }))) return;
     try { await del(`/reunioes-equipe/${S.id}/informacoes/${el.dataset.excluirInfo}`); await depois(); } catch (e) { erro(e); }
   });
   on(raiz, 'click', '[data-excluir-dec]', async (el) => {

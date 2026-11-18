@@ -20,7 +20,7 @@ test('a ordem das regras: validação, impedimento crítico, atraso, pedido de p
   assert.equal(chave({ pedido_pendente: true, impedimentos_abertos: 2 }), 'pedido');
   assert.equal(chave({ impedimentos_abertos: 1 }), 'impedimento');
   assert.equal(chave({ status: 'a_fazer' }), 'comecar');
-  assert.equal(chave({ checklist_total: 3, checklist_feitos: 1, parada: true }), 'parada', 'ação parada com tarefas pendentes: o que importa é voltar a movimentar');
+  assert.equal(chave({ checklist_total: 3, checklist_feitos: 1, parada: true }), 'parada', 'ação sem movimento com tarefas pendentes: o que importa é voltar a movimentar');
 });
 
 test('tarefas: faltam algumas, todas feitas sem tempo, todas feitas com tempo', () => {

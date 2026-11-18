@@ -44,7 +44,7 @@ test('participantes seguem a ordem enviada e registros atualizam a ata sem perde
   const nova = (await api(1, 'GET', `/reunioes/${r.id}`)).data;
   assert.match(nova.ata_texto, /Nota manual preservada/);
   assert.match(nova.ata_texto, /Decisão preservada/);
-  assert.ok(nova.ata_texto.indexOf('Informações:') > nova.ata_texto.indexOf('Novas ações:'));
+  assert.ok(nova.ata_texto.indexOf('Informes:') > nova.ata_texto.indexOf('Novas ações:'));
   assert.equal((await api(1, 'POST', `/reunioes/${r.id}/informacoes`, { texto: 'Base antiga', ata_base: ata, ata_texto: ata })).status, 409);
   assert.equal((await api(1, 'GET', `/reunioes/${r.id}`)).data.informacoes.length, 1, 'rollback da inclusão com base antiga');
   assert.equal((await api(1, 'PUT', `/reunioes/${r.id}/participantes`, { usuarios: [1, 4, 3], ata_base: nova.ata_texto, ata_texto: nova.ata_texto })).status, 200);
@@ -132,13 +132,13 @@ test('informações têm CRUD restrito à gestão e atualizam sua seção na ata
   const excluir = await db.prepare('select max(id) id from reuniao_informacoes').get();
   assert.equal((await api(1, 'DELETE', `/reunioes/${r.id}/informacoes/${excluir.id}`)).status, 200);
   const encerrada = await api(1, 'POST', `/reunioes/${r.id}/encerrar`, {});
-  assert.match(encerrada.data.ata_texto, /Informações:\n- Visita técnica na sexta\./);
+  assert.match(encerrada.data.ata_texto, /Informes:\n- Visita técnica na sexta\./);
   assert.doesNotMatch(encerrada.data.ata_texto, /Apagar/);
   for (const metodo of ['POST', 'PATCH', 'DELETE']) {
     const caminho = `/reunioes/${r.id}/informacoes${metodo === 'POST' ? '' : `/${info.id}`}`;
     assert.equal((await api(1, metodo, caminho, { texto: 'Após encerramento' })).status, metodo === 'POST' ? 201 : 200);
   }
-  assert.match((await api(1, 'GET', `/reunioes/${r.id}`)).data.ata_texto, /Informações:\n- Após encerramento/);
+  assert.match((await api(1, 'GET', `/reunioes/${r.id}`)).data.ata_texto, /Informes:\n- Após encerramento/);
   const outra = await iniciar();
   assert.equal((await api(1, 'PATCH', `/reunioes/${outra.id}/informacoes/${info.id}`, { texto: 'Outra reunião' })).status, 404);
   await api(1, 'DELETE', `/reunioes/${outra.id}/informacoes/${info.id}`);
@@ -199,7 +199,7 @@ test('gestão completa registros de reunião publicada, integra a ata e preserva
   const depois = (await api(1, 'GET', `/reunioes/${r.id}`)).data;
   assert.equal(depois.informacoes[0].texto, 'Comunicado corrigido');
   assert.match(depois.ata_texto, /Participantes:\n- Ana Ribeiro/);
-  assert.match(depois.ata_texto, /Informações:\n- Comunicado corrigido/);
+  assert.match(depois.ata_texto, /Informes:\n- Comunicado corrigido/);
   assert.ok(depois.revisoes.length > antes.revisoes.length);
   assert.ok(depois.revisoes.some(v => v.ata_texto === original));
   assert.equal(depois.status, 'enviada');
@@ -266,7 +266,7 @@ test('cartões incluem conclusões na semana anterior pelo fuso da Bahia, indepe
   for (const id of sim) assert.equal((await db.prepare('select apresentada_em from acoes where id = ?').get(id)).apresentada_em, '2026-09-21');
 });
 
-test('antecipação usa os relatos da data prevista e mantém a próxima reunião no ciclo regular', async (t) => {
+test('antecipação usa as atualizações da data prevista e mantém a próxima reunião no ciclo regular', async (t) => {
   const { db, api, iniciar } = await ambiente(t);
   const r = await iniciar();
   assert.equal(r.data, '2026-09-21');

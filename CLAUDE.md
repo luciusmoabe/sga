@@ -73,6 +73,8 @@ Idioma do produto, dos textos da interface, dos commits e dos comentários: port
 
 ## Convenções
 
+- **Glossário** (`docs/glossario-proposta.md`, aprovado; `test/glossario.test.js` o impõe): um nome para cada coisa. A pessoa lê **atualização** (nunca "relato"), **informe** (não "informações e comunicados"), **notificação** no celular (não "avisos no celular"; "aviso" é só o banner do Diretor), **sem movimento** (não "parada") e **pauta impressa**. Os identificadores de código (`relato`, `reuniao_informacoes`, `parada`) não mudam. Texto novo segue o glossário; o teste reprova o nome antigo.
+
 - Erros de API: `{ erro: 'mensagem em português' }` com o status HTTP adequado (400, 403, 404, 409, 422). A interface mostra `e.message` ao usuário, então escreva mensagens que orientem o que fazer.
 - Toda rota nova valida perfil (`permit`) e propriedade (chefe só mexe na própria seção). Escreva um teste em `test/api.test.js`.
 - Textos da interface: verbos claros ("Direcionar ação", "Enviar aos chefes"), o mesmo nome do botão na confirmação. Sem jargão técnico.

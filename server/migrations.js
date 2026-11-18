@@ -131,7 +131,7 @@ const MIGRACOES = [
   },
   {
     // Impedimentos ligados a ações, com histórico e ciclo aberto → resolvido. Substituem o impedimento em texto
-    // solto do relato semanal (os relatos já enviados continuam legíveis). Nunca são editados nem excluídos.
+    // solto da atualização semanal (as atualizações já enviados continuam legíveis). Nunca são editados nem excluídos.
     id: 9, nome: 'impedimentos_da_acao',
     async aplicar(db) {
       await db.exec(`create table if not exists impedimentos (

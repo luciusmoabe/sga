@@ -1,4 +1,4 @@
-// Minha atualização: o relato semanal é montado pelo servidor a partir das ações da seção e das subseções.
+// Minha atualização: a atualização semanal é montada pelo servidor a partir das ações da seção e das subseções.
 // O chefe confere, resolve o que travou e envia. Ao enviar, o servidor congela uma cópia: o que mudar depois só
 // aparece para a reunião se ele enviar de novo.
 import { aoTopo, oTopo } from './vocab.js';
@@ -59,10 +59,10 @@ export async function atualizacao(raiz, { refresh }, o = {}) {
 
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>${esc(o.titulo || 'Minha atualização')}</h1><div class="sub">${esc(o.destino || 'Para a reunião')} de ${diaSemana(semana)}, ${br(semana)} · prazo regular ${diaSemana(addDias(semana, -1))}, ${br(addDias(semana, -1))}, às ${HORA_FECHAMENTO}h</div></div></div>
-    ${d.desatualizada ? '<div class="info" role="status"><b>O relato mudou desde o último envio</b> (ação concluída, prazo novo ou impedimento). Envie de novo para a reunião ver a versão atual.</div>' : ''}
+    ${d.desatualizada ? '<div class="info" role="status"><b>A atualização mudou desde o último envio</b> (ação concluída, prazo novo ou impedimento). Envie de novo para a reunião ver a versão atual.</div>' : ''}
     ${at && !at.feito.snapshot ? '<div class="info">Esta atualização foi enviada no formato antigo (texto livre). Ao enviar de novo, ela passa a ser montada a partir das suas ações.</div>' : ''}
     ${at && at.feito.snapshot && !d.desatualizada ? `<div class="info">${at.usuario_nome && at.usuario_nome !== est.user.nome ? `${esc(at.usuario_nome)} já enviou` : 'Você já enviou'} esta atualização (versão ${at.versao}). Ao enviar de novo, a nova versão substitui a anterior e o histórico é mantido.</div>` : ''}
-    <div class="info">O relato é montado a partir das suas ações. Para mudar algo, atualize a ação (status, prazo ou impedimento) e volte aqui.</div>
+    <div class="info">A atualização é montada a partir das suas ações. Para mudar algo, atualize a ação (status, prazo ou impedimento) e volte aqui.</div>
     <form id="form-at" novalidate>
       <div class="erro-form oculto" role="alert"></div>
       ${bloco('O que foi feito', `Ações concluídas de ${br(j.concluidas.de)} a ${br(j.concluidas.ate)}`, rel.concluidas.map((a) => linhaAcao(a, { concluida: true })), 'Nenhuma ação concluída neste período.')}

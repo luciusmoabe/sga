@@ -56,7 +56,7 @@ export const REFERENCIAS_DE_USUARIO = [
           ['tempo','usuario_id','lançamentos de tempo'],
           ['pedidos_prazo','usuario_id','pedidos de prazo'],
           ['pedidos_prazo','decidido_por','decisões de prazo'],
-          ['atualizacoes','usuario_id','relatos semanais'],
+          ['atualizacoes','usuario_id','atualizações semanais'],
           ['combinados','criado_por','combinados'],
           ['reunioes','criada_por','reuniões'],
           ['decisoes','criada_por','decisões de reunião'],
@@ -78,7 +78,7 @@ export const REFERENCIAS_DE_USUARIO = [
           ['acao_diario','criado_por','registros do diário de progresso'],
           ['acao_aprovacoes','aprovada_por','aprovações de ações'],
           ['pontos_atencao','situacao_por','pontos de atenção ativados ou inativados'],
-          ['atualizacoes_equipe','usuario_id','relatos semanais da equipe'],
+          ['atualizacoes_equipe','usuario_id','atualizações semanais da equipe'],
           ['avisos','criado_por','avisos'],
           ['secao_combinados','criado_por','combinados da seção'],
           ['secao_cabecalho_ata','alterado_por','cabeçalhos de ata da seção'],
@@ -108,7 +108,7 @@ export async function excluirCadastro(db, tabela, id) {
         // Chefia é uma atribuição atual, não um impedimento histórico.
         // Qualquer falha posterior desfaz também esta liberação.
         await db.prepare('update secoes set chefe_id=null where chefe_id=? and empresa_id=?').run(id, empresaAtual());
-        // Aparelhos com avisos no celular não são histórico: saem junto com a conta.
+        // Aparelhos com notificações no celular não são histórico: saem junto com a conta.
         await db.prepare('delete from push_assinaturas where usuario_id=? and empresa_id=?').run(id, empresaAtual());
         await db.prepare('delete from lembretes_enviados where usuario_id=? and empresa_id=?').run(id, empresaAtual());
         await db.prepare('delete from auth_sessoes_senha where conta_id in (select id from auth_contas where usuario_id=?)').run(id);

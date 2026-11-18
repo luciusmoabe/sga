@@ -126,7 +126,7 @@ export async function seed(db) {
     const insC = db.prepare('insert into combinados (texto,ordem,ativo,arquivado,criado_por,criado_em,alterado_em) values (?,?,?,?,?,?,?)');
     const combinados = [
       'Celulares no silencioso e fora da mesa.',
-      'Seções no verde não precisam de relato oral.',
+      'Seções no verde não precisam de apresentação oral.',
       'Cada fala traz o que foi entregue, o que vem a seguir e o que trava.',
       'Decisões e prazos são registrados aqui, na hora.',
       'Pedidos de apoio são tratados ao final de cada seção.',

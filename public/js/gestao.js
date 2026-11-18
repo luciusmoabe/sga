@@ -10,7 +10,7 @@ import { doTopo } from './vocab.js';
 import { LIMITES, calcularGestao } from './gestao-calculo.js';
 
 const PERIODO_DIAS = 28;
-const ROTULO_SINAL = { atrasada: 'Atrasada', parada: 'Parada', sobrecarga: 'Carga alta' };
+const ROTULO_SINAL = { atrasada: 'Atrasada', parada: 'Sem movimento', sobrecarga: 'Carga alta' };
 
 function textoRadar(r) {
   const n = r.n;
@@ -18,9 +18,9 @@ function textoRadar(r) {
     case 'critico': return [plural(n, 'ação com impedimento crítico aberto', 'ações com impedimento crítico aberto'), 'Deixa a seção em vermelho. Descubra o que destrava e quem pode ajudar; se precisar de apoio de fora, registre no impedimento.'];
     case 'atrasadas': return [plural(n, 'ação atrasada', 'ações atrasadas'), 'Combine com quem executa o que impede a entrega e a nova data. Em ação criada por outra pessoa, o prazo muda por pedido.'];
     case 'validar': return [`${plural(n, 'ação aguarda', 'ações aguardam')} a sua validação`, 'Quem concluiu espera o seu retorno: valide ou devolva com o motivo.'];
-    case 'atualizacao': return ['A atualização semanal ainda não foi enviada', 'O relato é montado pelo sistema; confira e envie até o fechamento.'];
+    case 'atualizacao': return ['A atualização semanal ainda não foi enviada', 'A atualização é montada pelo sistema; confira e envie até o fechamento.'];
     case 'vencem': return [`${plural(n, 'ação vence', 'ações vencem')} em até 7 dias`, 'Confirme que cada uma tem responsável e já começou.'];
-    case 'paradas': return [`${plural(n, 'ação parada', 'ações paradas')} (7 dias ou mais sem movimento)`, 'Pergunte se continua valendo. Registrar o andamento mantém a equipe e quem acompanha informados.'];
+    case 'paradas': return [`${plural(n, 'ação sem movimento', 'ações sem movimento')} (há 7 dias ou mais)`, 'Pergunte se continua valendo. Registrar o andamento mantém a equipe e quem acompanha informados.'];
     case 'sem-responsavel': return [`${plural(n, 'ação em curso sem', 'ações em curso sem')} responsável`, 'Atribua para que cada ação tenha um dono.'];
     case 'pedidos': return [`${plural(n, 'ação com pedido', 'ações com pedido')} de novo prazo em análise`, `Aguardam a decisão ${doTopo()}; nada a fazer agora além de acompanhar.`];
     default: return [r.chave, ''];
@@ -75,9 +75,9 @@ function semanasHTML(g) {
 
 function equipeHTML(g) {
   if (!g.pessoas.length) return vazio('Nenhuma pessoa com ações em curso', 'Quando houver ações atribuídas, a carga de cada pessoa aparece aqui.');
-  return `<div class="tabela-rolagem"><table class="tabela-lista"><thead><tr><th>Pessoa</th><th>Em aberto</th><th>Em andamento</th><th>Atrasadas</th><th>Paradas</th><th>Entregas (${PERIODO_DIAS} d)</th><th>Horas (${PERIODO_DIAS} d)</th><th>Sinais</th></tr></thead><tbody>
+  return `<div class="tabela-rolagem"><table class="tabela-lista"><thead><tr><th>Pessoa</th><th>Em aberto</th><th>Em andamento</th><th>Atrasadas</th><th>Sem movimento</th><th>Entregas (${PERIODO_DIAS} d)</th><th>Horas (${PERIODO_DIAS} d)</th><th>Sinais</th></tr></thead><tbody>
     ${g.pessoas.map((p) => `<tr><td data-rotulo="Pessoa"><b>${esc(p.nome)}</b></td><td data-rotulo="Em aberto" class="num">${p.abertas}</td><td data-rotulo="Em andamento" class="num">${p.emAndamento}</td>
-      <td data-rotulo="Atrasadas" class="num">${p.atrasadas || '—'}</td><td data-rotulo="Paradas" class="num">${p.paradas || '—'}</td>
+      <td data-rotulo="Atrasadas" class="num">${p.atrasadas || '—'}</td><td data-rotulo="Sem movimento" class="num">${p.paradas || '—'}</td>
       <td data-rotulo="Entregas" class="num">${p.id == null ? '—' : p.entregas}</td><td data-rotulo="Horas" class="num">${p.id == null ? '—' : fmtMin(p.minutos)}</td>
       <td data-rotulo="Sinais">${p.sinais.length ? p.sinais.map((s) => `<span class="pilula">${ROTULO_SINAL[s]}</span>`).join(' ') : '<span class="suave">—</span>'}</td></tr>`).join('')}</tbody></table></div>
     <p class="suave pequeno">Carga alta = mais de ${LIMITES.emAndamentoPorPessoa} ações em andamento ou mais de ${LIMITES.abertasPorPessoa} em aberto (sugestão de gestão). Entregas e horas vêm do período de ${PERIODO_DIAS} dias; as horas são de quem lançou. Serve para conversar com a equipe, não para ranquear.</p>`;
@@ -92,8 +92,8 @@ function conversasHTML(g) {
 function secoesHTML(g) {
   if (!g.secoes.length) return '';
   return `<section class="cartao" aria-labelledby="gestao-secoes-t"><h2 id="gestao-secoes-t">Por seção</h2>
-    <div class="tabela-rolagem"><table class="tabela-lista"><thead><tr><th>Seção</th><th>Em aberto</th><th>Atrasadas</th><th>Paradas</th><th>Bloqueadas</th></tr></thead><tbody>
-    ${g.secoes.map((s) => `<tr><td data-rotulo="Seção"><b>${esc(s.nome)}</b></td><td data-rotulo="Em aberto" class="num">${s.abertas}</td><td data-rotulo="Atrasadas" class="num">${s.atrasadas || '—'}</td><td data-rotulo="Paradas" class="num">${s.paradas || '—'}</td><td data-rotulo="Bloqueadas" class="num">${s.bloqueadas || '—'}</td></tr>`).join('')}</tbody></table></div></section>`;
+    <div class="tabela-rolagem"><table class="tabela-lista"><thead><tr><th>Seção</th><th>Em aberto</th><th>Atrasadas</th><th>Sem movimento</th><th>Bloqueadas</th></tr></thead><tbody>
+    ${g.secoes.map((s) => `<tr><td data-rotulo="Seção"><b>${esc(s.nome)}</b></td><td data-rotulo="Em aberto" class="num">${s.abertas}</td><td data-rotulo="Atrasadas" class="num">${s.atrasadas || '—'}</td><td data-rotulo="Sem movimento" class="num">${s.paradas || '—'}</td><td data-rotulo="Bloqueadas" class="num">${s.bloqueadas || '—'}</td></tr>`).join('')}</tbody></table></div></section>`;
 }
 
 export async function gestao(raiz) {

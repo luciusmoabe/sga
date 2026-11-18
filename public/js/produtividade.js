@@ -46,7 +46,7 @@ const AJUDA = {
   retrabalho: 'Ações concluídas no período que já foram devolvidas para ajuste na validação ÷ ações concluídas.',
   ciclo: 'Dias entre a chegada da ação à unidade (atribuição ou criação) e a conclusão. Mediana ao lado da média, que as ações muito longas puxam para cima.',
   dedicacao: 'Tempo que as pessoas registraram nas ações da unidade no período. É declarado por elas: serve para ver tendência, não para cobrar.',
-  carga: 'Foto de hoje: ações em curso, atrasadas, paradas (7 dias ou mais sem movimento) e bloqueadas. Não depende do período.',
+  carga: 'Foto de hoje: ações em curso, atrasadas, sem movimento (há 7 dias ou mais) e bloqueadas. Não depende do período.',
   bloqueios: 'Impedimentos registrados no período e quantos dias, em média, levaram para ser resolvidos.',
 };
 

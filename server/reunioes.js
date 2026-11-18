@@ -309,9 +309,9 @@ export function rotasReunioes(app, { db, q, q1, run, hoje, agoraISO, criarDiretr
       }
     } else linhas.push('- Nenhuma ação nova.');
     linhas.push('');
-    linhas.push('Informações:');
+    linhas.push('Informes:');
     if (informacoes.length) informacoes.forEach(i => linhas.push(`- ${i.texto}`));
-    else linhas.push('- Nenhuma informação registrada.');
+    else linhas.push('- Nenhum informe registrado.');
     linhas.push('');
     const ped = await q(`select p.*, a.titulo, s.sigla from pedidos_prazo p join acoes a on a.id = p.acao_id join secoes s on s.id = a.secao_id where p.reuniao_id = ? and (a.interna = 0 or a.compartilhada = 1) order by p.decidido_em`, r.id);
     if (ped.length) {

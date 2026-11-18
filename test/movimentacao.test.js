@@ -79,7 +79,7 @@ test('tempo, comentário, checklist, impedimento e pedido de prazo contam como m
   assert.equal(await mov(id), '2026-09-10T09:00:00');
 });
 
-test('o Painel conta as ações paradas por seção, sem as internas', async (t) => {
+test('o Painel conta as ações sem movimento por seção, sem as internas', async (t) => {
   const { call, envelhecer } = await demo(t);
   const paradasCPE = async () => (await call(DIRETOR, 'GET', '/painel')).data.itens.find((i) => i.secao.id === CPE).paradas;
   const antes = await paradasCPE();

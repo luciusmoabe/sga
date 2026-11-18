@@ -1,4 +1,4 @@
-// Gera um par de chaves VAPID para os avisos no celular: `npm run push:chaves`.
+// Gera um par de chaves VAPID para os notificações no celular: `npm run push:chaves`.
 // A chave PRIVADA é segredo: vai só para o ambiente do servidor (nunca para o repositório nem para o navegador).
 import { gerarChaves } from './push.js';
 

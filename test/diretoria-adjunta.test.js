@@ -61,7 +61,7 @@ test('o Diretor cadastra uma única Diretoria Adjunta, sem chefe; Centros, Coord
   assert.match(edit.data.erro, /não tem chefe/);
 });
 
-test('o Diretor acompanha a Diretoria Adjunta como as demais seções; o relato vem dos membros', async (t) => {
+test('o Diretor acompanha a Diretoria Adjunta como as demais seções; a atualização vem dos membros', async (t) => {
   const { db, call, criarDA } = await demo(t);
   const da = await criarDA();
 
@@ -84,7 +84,7 @@ test('o Diretor acompanha a Diretoria Adjunta como as demais seções; o relato 
   assert.equal(noPainel.abertas, 3);
   assert.equal(noPainel.enviada, false);
 
-  // Um Administrador da Diretoria Adjunta envia o relato da própria seção sem informar secao_id.
+  // Um Administrador da Diretoria Adjunta envia a atualização da própria seção sem informar secao_id.
   const email = (await db.prepare('select email from usuarios where id = ?').get(ADMIN)).email;
   await definirSecaoAdministrador(db, email, da);
   const semana = (await call(ADMIN, 'GET', '/bootstrap')).data.semana;

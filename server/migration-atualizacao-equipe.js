@@ -1,4 +1,4 @@
-// Implementação da versão 34: atualização semanal das seções subordinadas ao chefe (o relato que antecede a reunião da equipe).
+// Implementação da versão 34: atualização semanal das seções subordinadas ao chefe (a atualização que antecede a reunião da equipe).
 // Alterações futuras exigem uma nova migração.
 //
 // Só cria uma tabela nova (a versão anterior do código continua funcionando). É a versão, em nível de seção, de `atualizacoes`:

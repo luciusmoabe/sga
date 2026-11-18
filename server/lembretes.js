@@ -55,7 +55,7 @@ export function montarMensagem({ tipo, pessoa, unidade, pendentes = [], semana, 
   return {
     assunto: 'Agilis: lembrete da atualização da semana',
     texto: `Olá, ${pessoa}.\n\nA atualização de ${unidade} para a reunião de ${reuniao} ainda não foi enviada. O prazo regular termina ${prazo}. `
-      + `Confira o relato, acrescente as observações e envie.${link}`,
+      + `Confira a atualização, acrescente as observações e envie.${link}`,
   };
 }
 

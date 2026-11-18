@@ -1,4 +1,4 @@
-// Implementação da versão 27: aparelhos que ativaram os avisos no celular (Web Push). Alterações futuras exigem uma nova migração.
+// Implementação da versão 27: aparelhos que ativaram os notificações no celular (Web Push). Alterações futuras exigem uma nova migração.
 //
 // Só cria uma tabela nova (a versão anterior do código continua funcionando). Cada linha é uma assinatura do navegador de um
 // aparelho: o `endpoint` identifica o aparelho no serviço de entrega do navegador e as chaves (`p256dh`, `auth`) cifram a

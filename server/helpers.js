@@ -224,8 +224,8 @@ export async function painelSemana(db, semana, hoje, arvoresPre = null, interval
     const st  = statsMap.get(c.id)   ?? { atrasadas: 0, vencendo: 0, abertas: 0, atrasadas_internas: 0, paradas: 0, prazo_mais_antigo: null };
     const at  = atMap.get(c.id)      ?? null;
     const impedimentosCriticos = criticosMap.get(c.id) ?? 0;
-    // Crítico = impedimento crítico aberto em ação em curso. A marca do relato semanal antigo ainda vale
-    // enquanto o relato da semana a trouxer (transição: some quando a tela do relato deixar de oferecê-la).
+    // Crítico = impedimento crítico aberto em ação em curso. A marca da atualização semanal antigo ainda vale
+    // enquanto a atualização da semana a trouxer (transição: some quando a tela da atualização deixar de oferecê-la).
     const critico = impedimentosCriticos > 0 || arvores.get(c.id).some(id => atMap.get(id)?.critico);
     const pendente = atualizacaoPendente(!!at, semana, now);
     const cor = semaforo({ pendente, atrasadas: st.atrasadas, vencendo: st.vencendo, critico });

@@ -67,7 +67,7 @@ export function refReuniao(now = agora(), { dia = DIA_PADRAO, intervalo = INTERV
   return m;
 }
 
-/** Reunião anterior à de `semana` (início do trilho e das janelas do relato). */
+/** Reunião anterior à de `semana` (início do trilho e das janelas da atualização). */
 export const reuniaoAnterior = (semana, { dia = DIA_PADRAO, intervalo = INTERVALO_PADRAO } = {}) => diaMaisProximo(addDays(semana, -intervalo), dia);
 
 /** Reunião seguinte à de `semana`. */

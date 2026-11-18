@@ -205,7 +205,7 @@ test('mesma estrutura da reunião do Diretor: cartão por seção, informações
   assert.match(ata, new RegExp(`Situação das ações das seções subordinadas:\\n- ${sub.sigla}: \\d+ em aberto`));
   assert.ok(ata.includes(`Decisões:\n- [${sub.sigla}] Priorizar o acesso ao sistema`));
   assert.ok(ata.includes('Novas ações:\n- Nova da reunião [Marta Lima] — prazo 10/10/2026 — prioridade alta'));
-  assert.ok(ata.includes('Informações:\n- Sexta (13/11) é ponto facultativo.'));
+  assert.ok(ata.includes('Informes:\n- Sexta (13/11) é ponto facultativo.'));
   assert.ok(ata.includes(`Impedimentos críticos em aberto:\n- [${sub.sigla}] "Atrasada da subseção": Sem acesso ao sistema (apoio solicitado: TI)`));
   assert.ok(ata.includes('Próxima reunião: terça-feira, 06/10/2026, às 10:00.'));
   assert.equal((await call(ANA_CPE, 'POST', `/reunioes-equipe/${id}/informacoes`, { texto: 'Tarde' })).status, 409, 'encerrada');
@@ -435,7 +435,7 @@ test('o chefe decide ao vivo os pedidos de prazo das ações que ele criou; os d
   assert.equal((await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.pedidos_decididos.length, 1);
 });
 
-test('atualização semanal das seções subordinadas ao chefe: relato montado pelo servidor, versionado e apresentado no cartão da seção', async (t) => {
+test('atualização semanal das seções subordinadas ao chefe: atualização montada pelo servidor, versionado e apresentado no cartão da seção', async (t) => {
   const { db, call } = await demo(t);
   const sub = (await db.prepare("select id from secoes where tipo = 'subsecao' and pai_id = ?").get(CPE)).id;
   const chefeSub = (await db.prepare("select id from usuarios where perfil = 'chefe' and secao_id = ?").get(sub)).id;
@@ -475,7 +475,7 @@ test('atualização semanal das seções subordinadas ao chefe: relato montado p
   const depois = (await call(chefeSub, 'GET', '/reunioes-equipe/atualizacao')).data;
   assert.equal(depois.atual.versao, 2);
   assert.equal(depois.desatualizada, false);
-  // O relato enviado aparece no cartão, na reunião.
+  // A atualização enviada aparece no cartão, na reunião.
   const cartao = (await call(ANA_CPE, 'GET', `/reunioes-equipe/${id}`)).data.cartoes.find((c) => c.secao_id === sub);
   assert.equal(cartao.atualizacao.versao, 2);
   assert.equal(cartao.atualizacao.feito.snapshot.concluidas[0].titulo, 'Concluída pela subseção');

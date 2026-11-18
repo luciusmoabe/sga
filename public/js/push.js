@@ -1,4 +1,4 @@
-// Avisos no celular (Web Push): ativar neste aparelho, desativar e testar. O servidor está em server/push.js.
+// Notificações no celular (Web Push): ativar neste aparelho, desativar e testar. O servidor está em server/push.js.
 //
 // Regras do navegador que a tela precisa respeitar:
 //   - o pedido de permissão só funciona a partir de um toque do usuário (por isso é um botão, nunca automático);
@@ -29,7 +29,7 @@ const registro = () => navigator.serviceWorker.ready;
 const assinaturaAtual = async () => (await registro()).pushManager.getSubscription();
 
 /**
- * Situação dos avisos neste aparelho:
+ * Situação das notificações neste aparelho:
  *  nao-suportado | instalar (iPhone sem o app instalado) | indisponivel (servidor sem chaves) | bloqueado | pronto | ativo
  */
 export async function estadoAvisos() {
@@ -62,7 +62,7 @@ export async function ativarAvisos(chave, usuarioId) {
   lembrar(usuarioId);
 }
 
-/** Desliga os avisos neste aparelho (o servidor esquece o aparelho e o navegador cancela a assinatura). */
+/** Desliga as notificações neste aparelho (o servidor esquece o aparelho e o navegador cancela a assinatura). */
 export async function desativarAvisos() {
   lembrar(null);
   if (!suportado()) return;
@@ -84,7 +84,7 @@ export async function esquecerAvisosAoSair() {
   } catch { /* sair não pode falhar por causa disso */ }
 }
 
-/** Ao entrar: se esta pessoa já ativou os avisos neste aparelho, religa em silêncio (sem pedir nada). */
+/** Ao entrar: se esta pessoa já ativou as notificações neste aparelho, religa em silêncio (sem pedir nada). */
 export async function restaurarAvisos(usuarioId) {
   try {
     if (!suportado() || Notification.permission !== 'granted' || lembrado() !== String(usuarioId)) return;
@@ -92,22 +92,22 @@ export async function restaurarAvisos(usuarioId) {
     if (!sub) return;
     const cfg = await get(`/push/config?endpoint=${encodeURIComponent(sub.endpoint)}`);
     if (cfg.disponivel && !cfg.ativo) await post('/push/assinar', { assinatura: sub.toJSON() });
-  } catch { /* é um favor: se falhar, o botão "Avisos no celular" continua disponível */ }
+  } catch { /* é um favor: se falhar, o botão "Notificações no celular" continua disponível */ }
 }
 
 const TEXTOS = {
-  'nao-suportado': 'Este navegador não permite avisos no celular. Tente o Chrome (Android) ou o Safari (iPhone) atualizados.',
+  'nao-suportado': 'Este navegador não permite notificações no celular. Tente o Chrome (Android) ou o Safari (iPhone) atualizados.',
   instalar: 'No iPhone e no iPad os avisos só funcionam com o Agilis instalado: toque em Compartilhar, depois em "Adicionar à Tela de Início", e abra o Agilis pelo ícone novo. Depois volte aqui.',
-  indisponivel: 'Os avisos no celular ainda não foram ativados neste sistema. Fale com quem administra o Agilis.',
+  indisponivel: 'As notificações no celular ainda não foram ativadas neste sistema. Fale com quem administra o Agilis.',
   bloqueado: 'Os avisos estão bloqueados neste aparelho. Para usá-los, libere as notificações do Agilis nas configurações do navegador (ou do aparelho) e volte aqui.',
   pronto: 'Receba no celular o lembrete de enviar a atualização da semana (sexta 15h e segunda 12h) e, para quem conduz a reunião, o resumo de quem não enviou (segunda 18h). Nenhum dado das ações vai na mensagem.',
   ativo: 'Os avisos estão ativos neste aparelho. Use o teste para conferir que chegam.',
 };
 
-/** Tela "Avisos no celular": mostra a situação deste aparelho e o botão certo para ela. */
+/** Tela "Notificações no celular": mostra a situação deste aparelho e o botão certo para ela. */
 export async function abrirAvisosNoCelular(usuarioId) {
   const dlg = abrirForm({
-    titulo: 'Avisos no celular',
+    titulo: 'Notificações no celular',
     corpo: '<div id="avisos-conteudo" aria-live="polite"><p class="suave">Verificando este aparelho…</p></div>',
     semEnvio: true, cancelar: 'Fechar',
   });
@@ -115,7 +115,7 @@ export async function abrirAvisosNoCelular(usuarioId) {
   const pintar = async () => {
     let e;
     try { e = await estadoAvisos(); } catch (ex) { e = { estado: 'indisponivel' }; }
-    const botoes = e.estado === 'pronto' ? '<button type="button" class="btn btn-primario" data-avisos="ativar">Ativar avisos neste aparelho</button>'
+    const botoes = e.estado === 'pronto' ? '<button type="button" class="btn btn-primario" data-avisos="ativar">Ativar notificações neste aparelho</button>'
       : e.estado === 'ativo' ? '<button type="button" class="btn btn-sec" data-avisos="testar">Enviar um aviso de teste</button> <button type="button" class="btn btn-fantasma" data-avisos="desativar">Desativar neste aparelho</button>' : '';
     area.innerHTML = `<p>${esc(TEXTOS[e.estado])}</p><div class="linha" style="margin-top:12px;flex-wrap:wrap;gap:8px">${botoes}</div>`;
     area.dataset.chave = e.chave || '';

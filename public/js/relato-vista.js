@@ -1,10 +1,10 @@
-// Como o relato semanal enviado é exibido ao Diretor, ao Apoio e ao Administrador: a cópia do formato 2
+// Como a atualização semanal enviada é exibida ao Diretor, ao Apoio e ao Administrador: a cópia do formato 2
 // (blocos montados das ações) ou o formato antigo (listas de texto). As telas leem a mesma forma nos dois casos.
 import { br, dataHora } from './ui.js';
 
 const dia = (iso) => dataHora(iso).slice(0, 10);
 
-/** Itens do relato para exibição. `impedimentosVivos` (opcional) troca os impedimentos da cópia pelos que estão
+/** Itens da atualização para exibição. `impedimentosVivos` (opcional) troca os impedimentos da cópia pelos que estão
  *  abertos agora: o quadro da reunião mostra o estado de hoje, e feito/próximo continuam como foram reportados.
  *  Devolve null quando não há relato. */
 export function itensDoRelato(at, impedimentosVivos = null) {

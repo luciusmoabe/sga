@@ -9,7 +9,7 @@ Para consulta depois do treino, use o [Guia do usuário](guia-do-usuario.md) (re
 ## Como treinar sem risco
 
 - Se houver um **ambiente de demonstração**, treine nele: os dados são fictícios e nada vale de verdade. Quem mantém o sistema o abre com `npm run demo` (endereço `http://127.0.0.1:3222`; `npm run demo -- --zerar` recomeça do zero).
-- No sistema de verdade, as lições marcadas com ⚠️ **gravam dados reais** (criam ações, enviam relato). Faça-as só quando for a hora, ou peça a quem administra uma ação de teste.
+- No sistema de verdade, as lições marcadas com ⚠️ **gravam dados reais** (criam ações, enviam atualização). Faça-as só quando for a hora, ou peça a quem administra uma ação de teste.
 - Dica geral: nada se perde ao fechar uma janela de formulário sem salvar.
 
 ## O que todos precisam saber (5 minutos)
@@ -36,7 +36,7 @@ Para consulta depois do treino, use o [Guia do usuário](guia-do-usuario.md) (re
 3. Olhe o **menu à esquerda** (no celular, as abas de baixo e o botão **Mais**). Ele mostra só o que o seu perfil pode usar, em grupos por assunto. No computador, a setinha ao lado da logo **recolhe** o menu para uma coluna de ícones; o sistema lembra a sua escolha. Embaixo ficam o seu nome e o seu perfil (quem é suplente aparece como **Suplente de seção** e vê os mesmos dados do titular).
 4. No alto, a **linha do tempo da semana** mostra a reunião, o lembrete e o fechamento.
 5. Abra a **Agenda**: o calendário mostra ações (círculo) e tarefas (quadrado). Clique num dia para ver o que vence nele. Vermelho = atrasado.
-6. (Opcional) Abra **Avisos no celular** e toque em **Ativar avisos neste aparelho**. No iPhone, só funciona com o Agilis instalado na tela inicial.
+6. (Opcional) Abra **Notificações no celular** e toque em **Ativar notificações neste aparelho**. No iPhone, só funciona com o Agilis instalado na tela inicial.
 
 ✅ Você aprendeu quando consegue entrar, achar a Agenda e dizer o que a cor vermelha significa.
 
@@ -63,7 +63,7 @@ Se você ligou a **versão nova** (botão **Experimentar a versão nova**, na ba
 
 ### Lição A2: trabalhar uma ação
 
-1. Abra **Minhas ações**. As abas separam Todas ativas, Abertas, Concluídas e Arquivadas (em **Arquivadas** está o que foi arquivado; **Desarquivar**, no cartão, traz a ação de volta). Use a **busca**, os **atalhos de atenção** (com a contagem de atrasadas, que vencem em 7 dias, paradas, com impedimento…) o botão **Filtros** (Responsável, Origem, Seção, Prazo até a reunião, Status e Prioridade, cada opção com a contagem) e **Ordenar** para achar o que precisa de você. Use **+ Registrar andamento** para anotar no **diário de progresso** o que aconteceu, apontando a tarefa (ou "Geral da ação"), com tempo e referência opcionais; a ficha mostra a linha do tempo, com filtros por tipo e por tarefa. Em **Diário** (menu), **Meu diário** reúne o que você registrou por dia e **Diário da seção** (chefe) o de toda a equipe, com filtros por pessoa, ação e tipo, período e **Copiar resumo**.
+1. Abra **Minhas ações**. As abas separam Todas ativas, Abertas, Concluídas e Arquivadas (em **Arquivadas** está o que foi arquivado; **Desarquivar**, no cartão, traz a ação de volta). Use a **busca**, os **atalhos de atenção** (com a contagem de atrasadas, que vencem em 7 dias, sem movimento, com impedimento…) o botão **Filtros** (Responsável, Origem, Seção, Prazo até a reunião, Status e Prioridade, cada opção com a contagem) e **Ordenar** para achar o que precisa de você. Use **+ Registrar andamento** para anotar no **diário de progresso** o que aconteceu, apontando a tarefa (ou "Geral da ação"), com tempo e referência opcionais; a ficha mostra a linha do tempo, com filtros por tipo e por tarefa. Em **Diário** (menu), **Meu diário** reúne o que você registrou por dia e **Diário da seção** (chefe) o de toda a equipe, com filtros por pessoa, ação e tipo, período e **Copiar resumo**.
 2. Abra uma ação **nova** (traz o selo "nova"; abrir avisa quem direcionou que você viu).
 3. Mude o status para **Em andamento**.
 4. Registre o **tempo em minutos** (ex.: 90).
@@ -97,8 +97,8 @@ Impedimentos são histórico: não se editam nem se apagam. Para corrigir, resol
 ### Lição A5: a atualização semanal ⚠️ (o passo mais importante)
 
 1. A partir de **sexta, 15h**, uma **faixa amarela** lembra a atualização (vermelha depois do prazo).
-2. Abra **Minha atualização**. O relato já vem **montado pelo sistema** com o que foi feito, está atrasado, está programado e trava.
-3. Algo errado? Corrija na própria ação (status, prazo, impedimento) e volte: o relato se refaz.
+2. Abra **Minha atualização**. A atualização já vem **montado pelo sistema** com o que foi feito, está atrasado, está programado e trava.
+3. Algo errado? Corrija na própria ação (status, prazo, impedimento) e volte: a atualização se refaz.
 4. Escreva as **observações** (o botão **Sugerir destaques do diário** traz os registros da semana para o campo, e você revê o texto) e **envie** até **segunda, 18h**. A faixa some.
 5. Se algo mudar depois, a tela avisa "desatualizada": envie de novo (cria nova versão; o histórico fica em **Histórico**).
 
@@ -107,7 +107,7 @@ Impedimentos são histórico: não se editam nem se apagam. Para corrigir, resol
 ### Lição A6: Painel de gestão
 
 1. Abra **Painel de gestão** (grupo "Hoje"). É só leitura: nada ali grava dados.
-2. Leia o **radar** "O que precisa de você hoje": impedimento crítico, atrasos, validações, prazos chegando e ações paradas, por gravidade. Clique numa ação para abrir a ficha.
+2. Leia o **radar** "O que precisa de você hoje": impedimento crítico, atrasos, validações, prazos chegando e ações sem movimento, por gravidade. Clique numa ação para abrir a ficha.
 3. Veja o **fluxo** (a fazer, em andamento, bloqueadas) e os **prazos** das ações em curso.
 4. Olhe as **entregas por semana** (8 semanas) e a **carga da equipe**: serve para distribuir melhor e conversar, não para ranquear.
 5. Em **Conversas que valem a pena**, veja sugestões para apoiar, alinhar e reconhecer.
@@ -154,7 +154,7 @@ Abra a **Agenda**, filtre **De quem → Só o que é meu** e veja suas tarefas e
 
 ✅ Você aprendeu quando concluiu uma ação com tempo e ela foi para a validação do chefe.
 
-Não estão disponíveis ao membro: relato semanal, reuniões, estrutura e contas. As **Atas** da equipe, enviadas, você lê se esteve presente.
+Não estão disponíveis ao membro: atualização semanal, reuniões, estrutura e contas. As **Atas** da equipe, enviadas, você lê se esteve presente.
 
 ---
 
@@ -177,8 +177,8 @@ Não estão disponíveis ao membro: relato semanal, reuniões, estrutura e conta
 ### Lição D1: ler o Painel
 
 1. Abra **Painel da semana**. Cada unidade é um cartão, em **ordem de necessidade** (críticas primeiro).
-2. Leia o **motivo principal** do cartão e os quatro números fixos: atrasadas, vencem em 2 dias, pedidos de prazo, paradas há 7+ dias.
-3. Clique no cartão para ver o relato e as ações da unidade. Navegue entre semanas pelas setas e use **Versão para impressão** como plano B.
+2. Leia o **motivo principal** do cartão e os quatro números fixos: atrasadas, vencem em 2 dias, pedidos de prazo, sem movimento há 7+ dias.
+3. Clique no cartão para ver a atualização e as ações da unidade. Navegue entre semanas pelas setas e use **Pauta impressa** como plano B.
 
 Ações internas de subseções aparecem só como contagem.
 
@@ -211,10 +211,10 @@ Antes: conecte o notebook à TV por HDMI.
 1. Menu **Iniciar reunião**. A conferência mostra seções sem atualização, pedidos de prazo e combinados. Resolva o que der.
 2. Clique **Iniciar reunião** (recarregar a página não abre outra; reunião em andamento volta como **Retomar reunião**).
 3. Navegue com **→ e ←**: combinados → visão geral → uma tela por seção.
-4. Em cada seção: leia o relato, edite ações, **decida pedidos de prazo**, **registre decisões**, crie **novas ações**, anote **informações** e marque a **presença**.
+4. Em cada seção: leia a atualização, edite ações, **decida pedidos de prazo**, **registre decisões**, crie **novas ações**, anote **informes** e marque a **presença**.
 5. **Encerrar reunião** gera a **ata em rascunho**.
 6. Em **Reuniões e atas**: revise com a barra de formatação, **Baixar PDF** se quiser, e **Enviar ata**.
-7. Plano B: **Versão para impressão** da pauta.
+7. Plano B: **Pauta impressa** da pauta.
 
 ✅ Você aprendeu quando encerrou uma reunião e enviou a ata aos chefes.
 
@@ -242,4 +242,4 @@ Antes: conecte o notebook à TV por HDMI.
 | A faixa amarela não some | Enviar em **Minha atualização** |
 | Esqueci a senha | Peça ao chefe (membro) ou ao Diretor/Administrador |
 | Quero compartilhar uma ação | **Copiar link da ação**, na ficha |
-| Não recebo avisos | Reative em **Avisos no celular**; no iPhone, só com o app instalado |
+| Não recebo avisos | Reative em **Notificações no celular**; no iPhone, só com o app instalado |

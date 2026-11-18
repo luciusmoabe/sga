@@ -1,5 +1,5 @@
 // Em qual reunião cada ação do chefe será tratada: a da organização (a do Diretor) ou a da equipe dele. Só orienta os alertas do
-// Início do chefe ("Precisa de atenção" e "Sua semana"); o relato semanal ao Diretor continua levando todas as ações da unidade,
+// Início do chefe ("Precisa de atenção" e "Sua semana"); a atualização semanal ao Diretor continua levando todas as ações da unidade,
 // na data da organização. Regra pura (sem DOM nem rede), com teste em `test/reuniao-da-acao.test.js`.
 //
 // O critério é a ORIGEM da cobrança, não a pessoa responsável:

@@ -18,7 +18,7 @@ const nomeDiaReuniao = (data) => NOMES_DIA[data ? parseData(data).getUTCDay() : 
 const horaReuniao = () => est.boot?.reuniao_hora || '10:00';
 
 /** Relato de uma atualização semanal (feito, próximo, impedimentos, apoio).
- *  `permitirExcluir`: só o Administrador vê o botão — exclusão de versão do relato é exceção
+ *  `permitirExcluir`: só o Administrador vê o botão — exclusão de versão da atualização é exceção
  *  deliberada à regra de que o histórico é mantido (server/rotas-semana.js explica o porquê). */
 export function relatoHTML(at, { permitirExcluir = false } = {}) {
   if (!at) return '<p class="suave">Nenhuma atualização enviada para esta semana.</p>';
@@ -74,7 +74,7 @@ export async function painel(raiz, { q }) {
   raiz.innerHTML = `
     <div class="cabeca">
       <div><h1>Painel da semana</h1><div class="sub">Reunião de ${nomeDiaReuniao(semana)}, ${br(semana)} · ${plural(itens.length, 'seção', 'seções')} acompanhadas</div></div>
-      <div class="acoes-topo">${navSemana('painel', semana)}${nova ? '<a class="btn btn-primario" href="#/reuniao">Iniciar reunião</a>' : ''}<a class="btn btn-sec" href="#/pauta?semana=${semana}">Versão para impressão</a></div>
+      <div class="acoes-topo">${navSemana('painel', semana)}${nova ? '<a class="btn btn-primario" href="#/reuniao">Iniciar reunião</a>' : ''}<a class="btn btn-sec" href="#/pauta?semana=${semana}">Pauta impressa</a></div>
     </div>
     ${decisaoHTML}
     <div class="cartao">
@@ -105,7 +105,7 @@ export async function painel(raiz, { q }) {
         <p class="motivo ${motivo.classe}">${motivo.texto}</p>
         <dl class="numeros" aria-label="Números da unidade">${numero('Atrasadas', i.atrasadas, 'ruim')}${numero('Vencem em 2 dias', i.vencendo, 'atencao')}${numero(i.pedidos_pendentes === 1 ? 'Pedido de prazo' : 'Pedidos de prazo', i.pedidos_pendentes, 'atencao')}${numero(`Paradas ${DIAS_SEM_MOVIMENTO}+ dias`, i.paradas, 'atencao')}</dl>
         <div class="fatos">${detalhes}</div>
-        <div><a class="btn btn-sec btn-mini ver-detalhe" href="#/centro/${i.secao.id}?semana=${semana}">Ver relato e ações</a></div>
+        <div><a class="btn btn-sec btn-mini ver-detalhe" href="#/centro/${i.secao.id}?semana=${semana}">Ver atualização e ações</a></div>
       </article>`;
     }).join('')}</div>`;
 }
@@ -139,14 +139,14 @@ export async function centro(raiz, { id, q, refresh }) {
   on(raiz, 'click', 'tr[data-acao]', abrir);
   on(raiz, 'click', '[data-excluir-relato]', async (el) => {
     const ok = await confirmar({
-      titulo: 'Excluir esta versão do relato',
-      texto: 'Isso apaga permanentemente esta versão do relato semanal. Se houver uma versão anterior, ela passa a valer; senão, a seção volta a aparecer como pendente. Ações, tempo e impedimentos da seção não são afetados.',
+      titulo: 'Excluir esta versão da atualização',
+      texto: 'Isso apaga permanentemente esta versão da atualização semanal. Se houver uma versão anterior, ela passa a valer; senão, a seção volta a aparecer como pendente. Ações, tempo e impedimentos da seção não são afetados.',
       rotulo: 'Excluir versão', perigo: true,
     });
     if (!ok) return;
     try {
       await del(`/atualizacoes/${el.dataset.excluirRelato}`);
-      toast('Versão do relato excluída.');
+      toast('Versão da atualização excluída.');
       refresh();
     } catch (e) { toast(e.message, 'erro'); }
   });
@@ -352,7 +352,7 @@ export async function pauta(raiz, { q }) {
   const rotulo = (x) => (x.detalhe ? `${x.texto} (${x.detalhe})` : x.texto);
   raiz.innerHTML = `
     <div class="cabeca"><div><a href="#/painel?semana=${semana}" class="pequeno nao-imprimir">← Painel da semana</a>
-      <h1>Pauta da reunião de ${diaSemana(semana)}, ${br(semana)}</h1><div class="sub">Versão para impressão, em ordem de necessidade. Tempo registrado e ações internas não constam.</div></div>
+      <h1>Pauta da reunião de ${diaSemana(semana)}, ${br(semana)}</h1><div class="sub">Pauta impressa, em ordem de necessidade. Tempo registrado e ações internas não constam.</div></div>
       <div class="acoes-topo"><button class="btn btn-primario" id="imprimir">Imprimir</button></div></div>
     <div class="pauta">${d.cartoes.map((c) => {
       const at = c.atualizacao;

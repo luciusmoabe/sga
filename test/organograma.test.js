@@ -16,7 +16,7 @@ const DIRETOR = 1, ANA_CPE = 3;
 // seed: CPE 1, COF 2, CGP 3, CIG 4, CCP 5, CPR 6 (Coordenação), IND 7 (sob CPE), MAP 8 (sob CGP), PNL 9 (sob IND)
 const CPE = 1, COF = 2, IND = 7, PNL = 9, CPR = 6;
 const PRAZO = '2026-12-31';
-const PROXIMA = '2026-09-23'; // dentro da janela do relato da reunião de 22/09
+const PROXIMA = '2026-09-23'; // dentro da janela da atualização da reunião de 22/09
 
 async function demo(t) {
   const db = openDb(':memory:');
@@ -57,7 +57,7 @@ test('o Painel traz um cartão por unidade de acompanhamento, na ordem da árvor
   assert.equal(itens.find((i) => i.secao.id === da).subsecoes, 0, 'a Adjunta não soma os Centros: cada um tem o seu cartão');
 });
 
-test('a reunião, o relato e a visibilidade seguem o cartão: a Adjunta não herda as ações dos Centros abaixo dela', async (t) => {
+test('a reunião, a atualização e a visibilidade seguem o cartão: a Adjunta não herda as ações dos Centros abaixo dela', async (t) => {
   const { db, call, da, coord, adjunto } = await deplan(t);
   await call(adjunto, 'POST', '/acoes', { titulo: 'Da Adjunta', prazo: PROXIMA, secao_id: da });
   const dela = (await db.prepare("select id from acoes where titulo = 'Da Adjunta'").get()).id;
@@ -70,7 +70,7 @@ test('a reunião, o relato e a visibilidade seguem o cartão: a Adjunta não her
   assert.ok(cartaoDa && cartaoCpe && cartoes.some((c) => c.secao.id === coord), 'a Adjunta, o Centro e a Coordenação são cartões');
   assert.ok(cartaoDa.acoes.some((a) => a.id === dela) && !cartaoDa.acoes.some((a) => a.id === doCpe));
   assert.ok(cartaoCpe.acoes.some((a) => a.id === doCpe) && !cartaoCpe.acoes.some((a) => a.id === dela));
-  // O relato da Adjunta só traz as ações dela.
+  // A atualização da Adjunta só traz as ações dela.
   const relato = (await call(adjunto, 'GET', '/atualizacao')).data.relato;
   const titulos = [...relato.atrasadas, ...relato.vencemAntes, ...relato.programadas, ...relato.concluidas].map((a) => a.titulo);
   assert.ok(titulos.includes('Da Adjunta') && !titulos.includes('Do CPE'), JSON.stringify(titulos));

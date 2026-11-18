@@ -79,7 +79,7 @@ test('Diretor cadastra um suplente para o CPE: o titular continua, os dois respo
   assert.equal(lista.find((u) => u.id === criado.data.id).suplente, true);
   assert.equal(lista.find((u) => u.id === CPE_TITULAR).suplente, false);
 
-  // O suplente age como um chefe de verdade: cria ação, registra tempo, envia o relato da seção.
+  // O suplente age como um chefe de verdade: cria ação, registra tempo, envia a atualização da seção.
   const sup = api(await entrar('suplente.cpe@orgao.gov.br', 'Senha-inicial-123'));
   const troca = await sup('POST', '/auth/trocar-senha', { senha_atual: 'Senha-inicial-123', senha_nova: 'Senha-do-suplente-nova' });
   assert.equal(troca.status, 200);

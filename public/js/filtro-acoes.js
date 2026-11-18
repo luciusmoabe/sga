@@ -18,7 +18,7 @@ export const diaEData = (data) => { const [, m, d] = data.split('-'); return `${
 export const ATALHOS = [
   { id: 'atrasadas', rotulo: 'Atrasadas', vale: (a) => !!a.atrasada },
   { id: 'vencem', rotulo: 'Vencem em 7 dias', vale: (a, { hoje }) => emCurso(a) && a.prazo >= hoje && a.prazo <= somarDias(hoje, 7) },
-  { id: 'paradas', rotulo: 'Paradas há 7+ dias', vale: (a) => !!a.parada },
+  { id: 'paradas', rotulo: 'Sem movimento há 7+ dias', vale: (a) => !!a.parada },
   { id: 'impedimento', rotulo: 'Com impedimento', vale: (a) => Number(a.impedimentos_abertos) > 0 },
   { id: 'validar', rotulo: 'Aguardando validação', vale: (a) => !!a.aguardando_validacao },
   { id: 'novas', rotulo: 'Novas', vale: (a) => !!a.nova },

@@ -69,7 +69,7 @@ const ROTAS = {
   diario: { f: diarioTela, perfis: ['chefe', 'administrador', 'membro'], titulo: 'Diário' },
   // Leitura das ações de todos os Centros: perfil Consulta e chefe com a permissão (a tela confere a permissão).
   'acoes-centros': { f: acoesDosCentros, perfis: ['consulta', 'chefe'], get titulo() { return `Ações ${dosPlural('centro')}`; } },
-  // O Administrador da Diretoria Adjunta envia o relato da própria seção, como um chefe.
+  // O Administrador da Diretoria Adjunta envia a atualização da própria seção, como um chefe.
   atualizacao: { f: atualizacaoUnica, perfis: ['chefe', 'administrador'], trilho: true, titulo: 'Minha atualização' },
   'minhas-acoes': { f: minhasAcoes, perfis: ['chefe', 'administrador', 'membro'], trilho: true, titulo: 'Minhas ações' },
   // O chefe (e o Administrador vinculado a uma seção) cadastra e desativa os membros da equipe da própria seção.
@@ -380,7 +380,7 @@ on(app, 'click', '#instalar-app', async () => {
 
 function casca() {
   const u = est.user;
-  // Quem é da Diretoria Adjunta (Administrador vinculado a ela) cria e acompanha as ações da seção e envia o relato semanal.
+  // Quem é da Diretoria Adjunta (Administrador vinculado a ela) cria e acompanha as ações da seção e envia a atualização semanal.
   const daDiretoriaAdjunta = u.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA;
   // O chefe com a permissão do Diretor ganha "Ações dos Centros", logo abaixo das próprias ações.
   const chefe = lePorTodosOsCentros() ? MENU_CHEFE.flatMap((m) => (m[0] === 'minhas-acoes' ? [m, ['acoes-centros', `Ações ${dosPlural('centro')}`]] : [m])) : MENU_CHEFE;
@@ -394,7 +394,7 @@ function casca() {
     <nav class="menu" id="menu-principal" aria-label="Principal">${menu.map((m) => m[0].startsWith('#')
       ? `<div class="grupo"><b>${esc(m[0].slice(1))}</b></div>`
       : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}"><span class="menu-rotulo">${ICONES[m[0]] || ''}<span class="menu-texto">${esc(m[1])}</span></span>${selo(m[0])}</a>`).join('')}</nav>
-    <div class="usuario"><button type="button" class="usuario-mini" id="usuario-mini" aria-label="${esc(iniciais(u.nome))}, expandir o menu para ver a conta" title="Expandir o menu">${esc(iniciais(u.nome))}</button><div class="usuario-detalhe"><b>${esc(u.nome)}</b>${rotuloDoPerfil(u)}${est.boot?.secao?.tipo === DIRETORIA_ADJUNTA ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}<br><span class="usuario-acoes">${temTutorial(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="tutorial-guiado">Tutorial</button>' : ''}${recebeAvisos(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="avisos-celular">Avisos no celular</button>' : ''}${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}${temNovaInterface(u.perfil) ? `<button class="btn btn-fantasma btn-mini" id="alternar-interface">${novaAtiva() ? 'Voltar à versão atual' : 'Experimentar a versão nova'}</button>` : ''}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
+    <div class="usuario"><button type="button" class="usuario-mini" id="usuario-mini" aria-label="${esc(iniciais(u.nome))}, expandir o menu para ver a conta" title="Expandir o menu">${esc(iniciais(u.nome))}</button><div class="usuario-detalhe"><b>${esc(u.nome)}</b>${rotuloDoPerfil(u)}${est.boot?.secao?.tipo === DIRETORIA_ADJUNTA ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}<br><span class="usuario-acoes">${temTutorial(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="tutorial-guiado">Tutorial</button>' : ''}${recebeAvisos(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="avisos-celular">Notificações no celular</button>' : ''}${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}${temNovaInterface(u.perfil) ? `<button class="btn btn-fantasma btn-mini" id="alternar-interface">${novaAtiva() ? 'Voltar à versão atual' : 'Experimentar a versão nova'}</button>` : ''}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
       <button class="btn btn-fantasma btn-mini oculto" id="instalar-app" style="margin-top:6px">Instalar aplicativo</button></div></div></aside>
     <main class="principal"><div id="trilho"></div><div id="conteudo"></div></main>
     ${cascaMovel(u, menu)}</div>`;
@@ -455,7 +455,7 @@ function cascaMovel(u, menu) {
       <div class="folha-acoes">
         ${sessao.modo === 'demo' ? '' : '<button type="button" class="btn btn-sec" data-conta="senha">Alterar senha</button>'}
         ${temTutorial(u.perfil) ? '<button type="button" class="btn btn-sec" data-conta="tutorial">Tutorial guiado</button>' : ''}
-        ${recebeAvisos(u.perfil) ? '<button type="button" class="btn btn-sec" data-conta="avisos">Avisos no celular</button>' : ''}
+        ${recebeAvisos(u.perfil) ? '<button type="button" class="btn btn-sec" data-conta="avisos">Notificações no celular</button>' : ''}
         ${temNovaInterface(u.perfil) ? `<button type="button" class="btn btn-sec" data-conta="interface">${novaAtiva() ? 'Voltar à versão atual' : 'Experimentar a versão nova'}</button>` : ''}
         <button type="button" class="btn btn-sec oculto" data-conta="instalar">Instalar aplicativo</button>
         <button type="button" class="btn btn-sec" data-conta="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button>

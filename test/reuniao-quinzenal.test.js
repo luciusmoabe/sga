@@ -51,7 +51,7 @@ test('regras puras: semanal por padrão; quinzenal conta da data marcada; reuni�
   assert.equal(reuniaoAnterior('2026-10-06', { dia: 2, intervalo: 14 }), '2026-09-22');
   assert.equal(reuniaoSeguinte('2026-09-22', { dia: 2, intervalo: 14 }), '2026-10-06');
   assert.equal(reuniaoAnterior('2026-09-23', { dia: 2, intervalo: 7 }), '2026-09-15', 'depois de uma reunião adiada, a anterior é a prevista na terça');
-  // Janelas do relato acompanham a periodicidade.
+  // Janelas da atualização acompanham a periodicidade.
   assert.equal(janelasDoRelato('2026-10-06', '2026-10-01').concluidas.de, '2026-09-29');
   assert.equal(janelasDoRelato('2026-10-06', '2026-10-01', 14).concluidas.de, '2026-09-22');
   assert.equal(janelasDoRelato('2026-10-06', '2026-10-01', 14).programadas.ate, '2026-10-20');
@@ -85,7 +85,7 @@ test('configuração: semanal é o padrão; quinzenal e a data da próxima reuni
   assert.equal(m.fechamento, '2026-09-23T18:00:00', 'o fechamento acompanha a nova data');
   assert.equal(m.reuniao_intervalo, 14, 'a periodicidade não muda ao mudar a data');
 
-  // O relato aceita a semana alterada, mesmo fora do dia configurado.
+  // A atualização aceita a semana alterada, mesmo fora do dia configurado.
   assert.equal((await call(CPE, 'GET', '/atualizacao?semana=2026-09-24')).status, 200);
   assert.equal((await call(CPE, 'GET', '/atualizacao?semana=2026-09-25')).status, 400, 'outra data fora do dia configurado segue recusada');
 

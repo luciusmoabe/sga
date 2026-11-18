@@ -1,6 +1,6 @@
-# Glossário do Agilis (proposta para aprovação)
+# Glossário do Agilis (aprovado)
 
-Princípio: **um nome para cada coisa, em toda a interface**. Esta proposta lista cada conceito, o nome que sugiro, o que ele significa e os nomes que passariam a ser evitados. **Nada foi renomeado ainda.** Depois da aprovação (conceito por conceito), a troca é feita de uma vez, com teste que procura os nomes antigos nos textos da interface.
+Princípio: **um nome para cada coisa, em toda a interface**. Esta proposta lista cada conceito, o nome que sugiro, o que ele significa e os nomes que passariam a ser evitados. **Aprovado e aplicado:** a troca foi feita de uma vez na interface, nos textos do servidor, no tutorial e no guia, e `test/glossario.test.js` reprova se um nome antigo reaparecer. Os nomes de código (`relatoHTML`, `itensDoRelato`, `relato.js`, `reuniao_informacoes`) continuam como estão. As atas antigas, com o título "Informações", continuam sendo lidas; as novas saem com "Informes".
 
 Os nomes de tipo de unidade e do topo ("Diretor", "Centro") continuam vindo do vocabulário de cada empresa e não entram aqui.
 
@@ -42,12 +42,10 @@ Os nomes de tipo de unidade e do topo ("Diretor", "Centro") continuam vindo do v
 | **Comentário** | Conversa sobre a ação. | "recado" | Sem mudança. |
 | **Tempo gasto** | Minutos trabalhados na ação, em soma. | "esforço" (que é a **estimativa**) | "Esforço" fica só para a estimativa (pequeno, médio, grande). |
 
-## Pontos de decisão (preciso da sua palavra)
+## Pontos de decisão (todos aprovados)
 
-1. **"Relato" some da interface?** Hoje aparece em mensagens e textos. Proponho trocar por "atualização" em todo texto visível.
-2. **"Informe" no lugar de "Informações e comunicados".** É a mudança mais visível na reunião.
-3. **"Notificação" no lugar de "Avisos no celular".** Acompanha o nome do botão e do guia.
-4. **"Sem movimento" no lugar de "parada".** Aparece no radar, nos filtros e no semáforo explicado no guia.
-5. **"Pauta impressa" no lugar de "Versão para impressão".**
-
-Aprovando, eu faço a troca de uma vez, atualizo o guia e o tutorial e crio um teste que reprova se um nome antigo reaparecer nos textos da interface.
+1. "Relato" some da interface e vira "atualização".
+2. "Informe" no lugar de "Informações e comunicados".
+3. "Notificação" no lugar de "Avisos no celular".
+4. "Sem movimento" no lugar de "parada".
+5. "Pauta impressa" no lugar de "Versão para impressão".

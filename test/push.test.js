@@ -1,4 +1,4 @@
-// Avisos no celular (Web Push): configuração, assinatura do aparelho, aviso de teste e canal de envio. O serviço de entrega
+// Notificações no celular (Web Push): configuração, assinatura do aparelho, aviso de teste e canal de envio. O serviço de entrega
 // do navegador é substituído por um emissor falso: nada sai da máquina.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -107,7 +107,7 @@ test('teste: envia aos aparelhos da própria pessoa com as chaves VAPID; sem apa
   const { call, emissor } = await montar(t);
   const sem = await call(CHEFE_CPE, 'POST', '/push/teste');
   assert.equal(sem.status, 409);
-  assert.match(sem.data.erro, /Ative os avisos/);
+  assert.match(sem.data.erro, /Ative as notificações/);
   await call(CHEFE_CPE, 'POST', '/push/assinar', { assinatura: aparelho(1) });
   await call(CHEFE_COF, 'POST', '/push/assinar', { assinatura: aparelho(2) });
   const r = await call(CHEFE_CPE, 'POST', '/push/teste');

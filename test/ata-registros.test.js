@@ -10,8 +10,8 @@ test('registros entram em ata antiga com seções em negrito sem apagar a próxi
   const infos = [{ texto: 'Primeira informação' }, { texto: 'Segunda informação' }];
   const nova = integrarRegistrosAta(original, pessoas, infos);
   assert.match(nova, /Participantes:\n- Zeta \(Centro\)\n- Alfa/);
-  assert.ok(nova.indexOf('Informações:') > nova.indexOf('**Novas ações:**'));
-  assert.ok(nova.indexOf('Informações:') < nova.indexOf('**Próxima reunião:**'));
+  assert.ok(nova.indexOf('Informes:') > nova.indexOf('**Novas ações:**'));
+  assert.ok(nova.indexOf('Informes:') < nova.indexOf('**Próxima reunião:**'));
   assert.match(nova, /Decisão original/);
   assert.match(nova, /Ação original/);
   assert.equal(integrarRegistrosAta(nova, pessoas, infos), nova);
@@ -22,7 +22,8 @@ test('seções sem dois-pontos e com negrito fora do dois-pontos não são dupli
   const nova = integrarRegistrosAta(antiga, [{ nome: 'Novo' }], [{ texto: 'Nova' }]);
   assert.doesNotMatch(nova, /Antigo|Antiga/);
   assert.equal(nova.match(/Participantes/g).length, 1);
-  assert.equal(nova.match(/Informações/g).length, 1);
+  assert.equal(nova.match(/Informes/g).length, 1);
+  assert.doesNotMatch(nova, /Informações/, 'o título de antes sai: a ata antiga passa a ter só o título novo');
   assert.match(nova, /\*\*Próxima reunião:\*\* amanhã/);
 });
 

@@ -73,7 +73,7 @@ Marca a ação demandada por entidade fora da subordinação ao Diretor (órgão
 | Apoio | O mesmo, exceto Estrutura; decide prazos só em reunião em andamento |
 | Chefe | Age na própria seção e subordinadas; envia a atualização; cadastra a equipe; pode ter um suplente com os mesmos poderes |
 | Membro | Lê a seção; age no que é atribuído a ele ou criado por ele; não atribui, não arquiva, não redireciona, não pede prazo |
-| Consulta | Só lê ações (e tarefas) de todos os Centros, sem as internas e sem relatos |
+| Consulta | Só lê ações (e tarefas) de todos os Centros, sem as internas e sem atualizações |
 | Administrador | Tudo dentro da empresa, inclusive ações internas e contas |
 | Plataforma | Cria e gerencia empresas; não lê dados de negócio |
 
@@ -83,8 +83,8 @@ O chefe com `ver_outros_centros` (ligado pelo Diretor ou Administrador) lê as a
 
 ## Atualização semanal
 
-- Versionada (`secao_id` + `semana` + `versao`): enviar de novo cria nova versão; o histórico é mantido. O Administrador pode excluir uma versão (para corrigir um relato de teste ou enviado por engano).
-- O relato é montado pelo servidor a partir das ações e impedimentos da seção e subseções. Concluídas: 7 dias antes da reunião até a véspera. Programadas: do dia da reunião a 7 dias depois. Atrasadas: prazo anterior a hoje e não concluídas. Impedimentos: os abertos em ações em curso.
+- Versionada (`secao_id` + `semana` + `versao`): enviar de novo cria nova versão; o histórico é mantido. O Administrador pode excluir uma versão (para corrigir uma atualização de teste ou enviado por engano).
+- A atualização é montada pelo servidor a partir das ações e impedimentos da seção e subseções. Concluídas: 7 dias antes da reunião até a véspera. Programadas: do dia da reunião a 7 dias depois. Atrasadas: prazo anterior a hoje e não concluídas. Impedimentos: os abertos em ações em curso.
 - O envio recalcula no servidor e congela uma cópia que **nunca contém ações internas, só contagens**.
 - Não há trava automática após segunda 18h: o chefe ainda consegue enviar correção.
 

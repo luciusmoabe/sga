@@ -32,7 +32,7 @@ const resumoHTML = (boot) => {
   return `<div class="estrutura-resumo" aria-label="Situação atual da reunião">
     <div><strong>${br(boot.semana).slice(0, 5)}</strong><span>Próxima reunião · ${DIAS[diaDe(boot.semana)]}, ${esc(boot.reuniao_hora || '10:00')}</span></div>
     <div><strong>${intervalo === 14 ? 'Quinzenal' : 'Semanal'}</strong><span>Periodicidade</span></div>
-    <div><strong>${br(veespera).slice(0, 5)}</strong><span>Fim do prazo dos relatos · ${HORA_FECHAMENTO}h</span></div>
+    <div><strong>${br(veespera).slice(0, 5)}</strong><span>Fim do prazo das atualizações · ${HORA_FECHAMENTO}h</span></div>
   </div>`;
 };
 
@@ -42,7 +42,7 @@ const itemHTML = (data, i, { dia, hora, alterada }) => {
   return `<li class="reuniao-item${i === 0 ? ' proxima' : ''}">
     <span class="reuniao-data" aria-hidden="true"><b>${Number(d)}</b>${MESES[Number(m) - 1]}</span>
     <span class="reuniao-texto"><strong>${maiuscula(DIAS[diaDe(data)])}, ${br(data)}</strong>
-      <span class="suave">${esc(hora)} · relatos até ${br(veespera).slice(0, 5)}, ${HORA_FECHAMENTO}h</span></span>
+      <span class="suave">${esc(hora)} · atualizações até ${br(veespera).slice(0, 5)}, ${HORA_FECHAMENTO}h</span></span>
     ${i === 0 ? '<span class="estrutura-selo">Próxima</span>' : ''}${i === 0 && alterada ? '<span class="estrutura-selo" title="Fora do dia da semana configurado">Data alterada</span>' : ''}
   </li>`;
 };
@@ -81,7 +81,7 @@ export function painelReuniao(config, boot, { visivel = false, titulo = 'Reuniã
       </form>
       <aside class="reuniao-cartao" aria-labelledby="titulo-previa">
         <h3 id="titulo-previa">Próximas reuniões</h3>
-        <p class="suave pequeno" id="previa-nota">O prazo dos relatos termina no dia anterior, às ${HORA_FECHAMENTO}h.</p>
+        <p class="suave pequeno" id="previa-nota">O prazo das atualizações termina no dia anterior, às ${HORA_FECHAMENTO}h.</p>
         <ol class="reuniao-lista" id="previa-lista"></ol>
       </aside>
     </div>

@@ -88,7 +88,7 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje, cfg }
       id: a.id, titulo: a.titulo, prazo: a.prazo, status: a.status, secao_sigla: a.secao_sigla, responsavel_nome: a.responsavel_nome || null,
       situacao: a.prazo < dia ? 'atrasada' : a.prazo <= ate2 ? 'vence' : a.movimento < limiteParada ? 'parada' : 'normal',
     });
-    // Como o Diretor vê os Centros: o relato enviado por cada seção para esta reunião e, passado o fechamento, quem não enviou.
+    // Como o Diretor vê os Centros: a atualização enviada por cada seção para esta reunião e, passado o fechamento, quem não enviou.
     const semanaRef = r.semana || r.data;
     const enviados = new Map();
     for (const f of filhas) enviados.set(f.id, await relato.ultima(f.id, semanaRef));
@@ -128,7 +128,7 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje, cfg }
 
   // Agenda, combinados e revisão da ata da seção (registrados antes das rotas `/:id`).
   const ex = extrasReuniaoEquipe(app, { db, q, q1, run, agoraISO, hoje, cfg, reuniaoDe, comReuniao, travar });
-  // Atualização semanal das seções subordinadas (o relato que antecede a reunião).
+  // Atualização semanal das seções subordinadas (a atualização que antecede a reunião).
   const relato = relatoReuniaoEquipe(app, { db, q, q1, run, agoraISO, hoje, agendaDe: ex.agendaDe });
 
   /** O cabeçalho próprio da ata da seção, ou null (a tela usa então o da instituição). */
@@ -361,9 +361,9 @@ export function rotasReunioesEquipe(app, { db, q, q1, run, agoraISO, hoje, cfg }
     else linhas.push('- Nenhuma ação nova.');
     linhas.push('');
     const infos = await informacoesDe(r.id);
-    linhas.push('Informações:');
+    linhas.push('Informes:');
     if (infos.length) infos.forEach((i) => linhas.push(`- ${i.texto}`));
-    else linhas.push('- Nenhuma informação registrada.');
+    else linhas.push('- Nenhum informe registrado.');
     linhas.push('');
     // Impedimentos críticos ainda abertos ficam registrados para a próxima reunião.
     const criticos = cartoes.flatMap((c) => c.impedimentos.filter((i) => i.critico));

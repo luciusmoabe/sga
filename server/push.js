@@ -1,4 +1,4 @@
-// Avisos no celular (Web Push): o usuário ativa no aparelho e o servidor envia direto ao navegador, sem e-mail.
+// Notificações no celular (Web Push): o usuário ativa no aparelho e o servidor envia direto ao navegador, sem e-mail.
 //
 // Como funciona: o navegador do aparelho cria uma "assinatura" (endpoint + chaves) e a entrega aqui; para avisar, o servidor
 // cifra a mensagem com essas chaves e a entrega ao serviço do navegador (FCM, Apple, Mozilla), que a leva ao aparelho. As
@@ -33,8 +33,8 @@ export function validarAssinatura(s) {
   const endpoint = s?.endpoint;
   let url;
   try { url = new URL(endpoint); } catch { /* cai na recusa abaixo */ }
-  if (!url || url.protocol !== 'https:' || String(endpoint).length > 1000) throw falha(400, 'Assinatura de aviso inválida: endereço do aparelho ausente ou inseguro.');
-  if (!base64url(s?.keys?.p256dh, 200) || !base64url(s?.keys?.auth, 100)) throw falha(400, 'Assinatura de aviso inválida: chaves ausentes.');
+  if (!url || url.protocol !== 'https:' || String(endpoint).length > 1000) throw falha(400, 'Assinatura de notificação inválida: endereço do aparelho ausente ou inseguro.');
+  if (!base64url(s?.keys?.p256dh, 200) || !base64url(s?.keys?.auth, 100)) throw falha(400, 'Assinatura de notificação inválida: chaves ausentes.');
   return { endpoint, p256dh: s.keys.p256dh, auth: s.keys.auth };
 }
 
@@ -84,7 +84,7 @@ export function rotasPush(app, { db, emissor } = {}) {
   }));
 
   app.post('/api/push/assinar', permit(...PERFIS_COM_AVISO), h(async (req, res) => {
-    if (!config().ativo) throw falha(409, 'Os avisos no celular ainda não foram configurados neste sistema.');
+    if (!config().ativo) throw falha(409, 'Os notificações no celular ainda não foram configurados neste sistema.');
     const s = validarAssinatura(req.body?.assinatura);
     const agente = String(req.get('user-agent') || '').slice(0, 200);
     await db.transaction(async () => {
@@ -114,11 +114,11 @@ export function rotasPush(app, { db, emissor } = {}) {
   // Aviso de teste para os aparelhos da própria pessoa: confirma que tudo chega antes de confiar nos lembretes.
   app.post('/api/push/teste', permit(...PERFIS_COM_AVISO), h(async (req) => {
     const c = config();
-    if (!c.ativo) throw falha(409, 'Os avisos no celular ainda não foram configurados neste sistema.');
+    if (!c.ativo) throw falha(409, 'Os notificações no celular ainda não foram configurados neste sistema.');
     const entregues = await canalPush(db, c, { emissor }).enviar({
-      usuario: req.user.id, titulo: 'Agilis', corpo: 'Teste: os avisos estão funcionando neste aparelho.', url: '/',
+      usuario: req.user.id, titulo: 'Agilis', corpo: 'Teste: as notificações estão funcionando neste aparelho.', url: '/',
     });
-    if (!entregues) throw falha(409, 'Nenhum aparelho seu está com os avisos ativados. Ative os avisos neste aparelho e tente de novo.');
+    if (!entregues) throw falha(409, 'Nenhum aparelho seu está com as notificações ativadas. Ative as notificações neste aparelho e tente de novo.');
     return { ok: true, entregues };
   }));
 }

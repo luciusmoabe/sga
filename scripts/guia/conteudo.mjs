@@ -19,7 +19,7 @@ export function conteudo(dirImagens) {
   <table><tr><th style="width:24%">Quando</th><th>O que acontece</th><th style="width:22%">Quem</th></tr>
   <tr><td>Durante a semana</td><td>Ações são direcionadas às seções e executadas: status, tempo, tarefas e impedimentos são atualizados.</td><td>Diretor, Apoio e chefes</td></tr>
   <tr><td>Sexta, 15h</td><td>Começa o aviso da atualização semanal: faixa no sistema e, para quem ativou, notificação no celular.</td><td>Chefes</td></tr>
-  <tr><td>Até segunda, 18h</td><td>Cada chefe confere o relato montado pelo sistema e o envia (<i>atualização semanal</i>).</td><td>Chefes</td></tr>
+  <tr><td>Até segunda, 18h</td><td>Cada chefe confere a atualização montada pelo sistema e o envia (<i>atualização semanal</i>).</td><td>Chefes</td></tr>
   <tr><td>Terça, 10h</td><td>Reunião conduzida no <b>Modo Reunião</b>, na TV da sala.</td><td>Diretor ou Apoio</td></tr>
   <tr><td>Ao encerrar</td><td>O sistema gera a ata em rascunho, que é revisada e enviada.</td><td>Diretor ou Apoio</td></tr></table>
   <h2>O semáforo</h2>
@@ -60,10 +60,10 @@ export function conteudo(dirImagens) {
   <p>O botão <b>Tutorial</b> (na barra lateral; no celular, em <b>Mais</b>) abre lições curtas para o seu perfil. O sistema leva você de tela em tela, <b>destaca</b> cada parte da interface e explica, passo a passo. Ele <b>só ensina</b>: nada do que você vê ali altera dados, então pode clicar sem medo.</p>
   ${passos('Na primeira vez, o sistema oferece o tutorial. Clique em <b>Começar</b> (ou em <b>Agora não</b>: o botão <b>Tutorial</b> continua disponível).', 'Escolha uma lição na lista. As já concluídas ficam marcadas.', 'Use <b>Próximo</b> e <b>Voltar</b>; <b>Esc</b> ou <b>Sair</b> fecham o tutorial quando quiser.')}
   ${fig('35-tutorial', 'Uma lição do tutorial: a parte da tela é destacada e o painel explica.')}
-  <h2>Avisos no celular</h2>
-  <p>Para receber no próprio celular o lembrete da atualização semanal, use <b>Avisos no celular</b> (no menu lateral ou em <b>Mais</b>, no celular). Quem recebe: Diretor, Apoio, Chefe e Administrador.</p>
-  ${passos('Toque em <b>Avisos no celular</b> e depois em <b>Ativar avisos neste aparelho</b>.', 'Permita as notificações quando o navegador perguntar.', 'Toque em <b>Enviar um aviso de teste</b> para conferir que chega.')}
-  ${fig('29-avisos-celular', 'Ativando os avisos neste aparelho.')}
+  <h2>Notificações no celular</h2>
+  <p>Para receber no próprio celular o lembrete da atualização semanal, use <b>Notificações no celular</b> (no menu lateral ou em <b>Mais</b>, no celular). Quem recebe: Diretor, Apoio, Chefe e Administrador.</p>
+  ${passos('Toque em <b>Notificações no celular</b> e depois em <b>Ativar notificações neste aparelho</b>.', 'Permita as notificações quando o navegador perguntar.', 'Toque em <b>Enviar um aviso de teste</b> para conferir que chega.')}
+  ${fig('29-avisos-celular', 'Ativando as notificações neste aparelho.')}
   <ul><li>Os avisos chegam na <b>sexta, 15h</b> (lembrete) e na <b>segunda, 12h</b> (últimas horas); o Diretor recebe na <b>segunda, 18h</b> o resumo de quem não enviou.</li>
   <li>A mensagem nunca traz dados das ações, só o texto do lembrete. Tocar nela abre a tela certa.</li>
   <li>No <b>iPhone</b>, os avisos só funcionam com o Agilis instalado: toque em Compartilhar, depois em "Adicionar à Tela de Início", e abra o Agilis pelo ícone novo.</li>
@@ -81,23 +81,23 @@ export function conteudo(dirImagens) {
   <ul><li><b>Atualização:</b> enviar a atualização da semana (com o prazo e quanto falta).</li><li><b>Atrasadas:</b> ações atrasadas para resolver.</li><li><b>Novas:</b> ações que chegaram e você ainda não abriu (quem direcionou fica sabendo que você viu).</li><li><b>Validações:</b> ações concluídas pela sua equipe, para você validar.</li><li><b>Vencem antes da reunião:</b> ações com prazo antes da reunião.</li></ul>
   <p>O título mostra quantos itens já estão em dia. O cartão ganha uma borda amarela quando faltam menos de 24 horas para o fechamento e vermelha depois do prazo regular. Abaixo, os quadros <i>Chegaram para você</i> e <i>Precisa de atenção</i> (atrasadas, sem andamento há 7 dias ou com prazo até a reunião, com botões rápidos de status e tempo) e o aviso vigente do Diretor, quando houver.</p>
   ${fig('20-chefe-inicio', 'Início do chefe de seção, com o cartão "Sua semana".')}
-  <p>O prazo de cada ação é comparado com a <b>reunião em que ela será tratada</b>, e o alerta diz qual e quando (por exemplo, "até a reunião da equipe (terça, 17/11)"). O que o Diretor demandou vale para a <b>reunião da organização</b>, quem quer que execute; o que você trata com a sua equipe (ações internas, atribuídas a outra pessoa, de uma subseção ou direcionadas às subseções) vale para a <b>reunião da equipe</b>; a demanda do Diretor delegada à equipe vale para a que vier primeiro. O relato semanal ao Diretor não muda: leva todas as ações da seção.</p>
+  <p>O prazo de cada ação é comparado com a <b>reunião em que ela será tratada</b>, e o alerta diz qual e quando (por exemplo, "até a reunião da equipe (terça, 17/11)"). O que o Diretor demandou vale para a <b>reunião da organização</b>, quem quer que execute; o que você trata com a sua equipe (ações internas, atribuídas a outra pessoa, de uma subseção ou direcionadas às subseções) vale para a <b>reunião da equipe</b>; a demanda do Diretor delegada à equipe vale para a que vier primeiro. A atualização semanal ao Diretor não muda: leva todas as ações da seção.</p>
   <h3>A faixa de aviso</h3>
   <p>Enquanto a atualização da sua seção não for enviada, uma <b>faixa amarela</b> aparece no alto das telas de trabalho, da sexta, às 15h, até a reunião. Depois do prazo regular ela fica <b>vermelha</b>. Tem o botão para registrar a atualização e some assim que você envia.</p>
   ${fig('21-chefe-faixa', 'Faixa de aviso no alto de "Minhas ações".')}
   <h2>Painel de gestão</h2>
   <p>É o painel para <b>liderar a equipe da semana</b>, só de leitura (nada ali grava dados). Responde, nesta ordem: o que precisa de você hoje, como anda o fluxo, se a equipe está entregando, como está a carga de cada pessoa e que conversas valem a pena.</p>
-  <ul><li>O <b>radar</b> reúne, por gravidade, impedimento crítico, atrasos, validações, atualização pendente, prazos chegando, ações paradas, ações sem responsável e pedidos de prazo. Clique numa ação para abrir a ficha.</li>
+  <ul><li>O <b>radar</b> reúne, por gravidade, impedimento crítico, atrasos, validações, atualização pendente, prazos chegando, ações sem movimento, ações sem responsável e pedidos de prazo. Clique numa ação para abrir a ficha.</li>
   <li>O <b>fluxo</b> mostra quantas ações estão a fazer, em andamento e bloqueadas; os <b>prazos</b> mostram como as ações em curso se distribuem.</li>
   <li>As <b>entregas por semana</b> cobrem as últimas 8 semanas, com as que saíram no prazo.</li>
-  <li>A <b>carga da equipe</b> mostra, por pessoa, o que está em aberto, atrasado e parado, as entregas e as horas dos últimos 28 dias, com sinais em texto (atrasada, parada, carga alta).</li>
+  <li>A <b>carga da equipe</b> mostra, por pessoa, o que está em aberto, atrasado e sem movimento, as entregas e as horas dos últimos 28 dias, com sinais em texto (atrasada, sem movimento, carga alta).</li>
   <li>Em <b>Conversas que valem a pena</b>, o sistema sugere <b>apoiar</b> quem está travado, <b>alinhar</b> prioridades e <b>reconhecer</b> boas entregas.</li></ul>
   ${aviso('A carga alta (mais de 3 ações em andamento ou mais de 6 em aberto) é uma sugestão de gestão, não uma regra. Os números servem para conversar com a equipe, <b>não para ranquear</b>.')}
   ${fig('32-chefe-gestao', 'Painel de gestão: radar do dia, fluxo, prazos, entregas por semana, carga da equipe e conversas.')}
   <h2>Minhas ações</h2>
   <p>Lista as ações da seção, com abas <i>Todas ativas</i>, <i>Abertas</i>, <i>Concluídas</i> e <i>Arquivadas</i> (em <i>Arquivadas</i> está o que foi arquivado; <b>Desarquivar</b>, no cartão, traz a ação de volta). Em cada cartão você muda o <b>status</b>, registra o <b>tempo</b> e acessa os detalhes. Os selos mostram o que mais importa (atrasada, nova, aguardando validação, prioridade, demandada pelo Diretor…); quando há mais de quatro, o resto fica atrás de um "+N".</p>
   <h3>Achar uma ação: busca, atalhos e ordem</h3>
-  <p>Acima da lista, a <b>busca</b> procura nas palavras do título, do detalhe, do responsável e da seção (sem diferenciar acentos nem maiúsculas; várias palavras refinam). Os <b>atalhos de atenção</b> mostram, com a contagem, quantas ações estão <i>atrasadas</i>, <i>vencem em 7 dias</i>, <i>paradas há 7+ dias</i>, <i>com impedimento</i>, <i>aguardando validação</i>, <i>novas</i> ou <i>com pedido de prazo</i>; só aparecem os que têm ações, e marcando mais de um você vê as que tenham <b>qualquer um</b> deles. <b>Ordenar</b> muda a ordem (padrão, prazo, prioridade, mais tempo sem movimento ou mais recentes) e fica lembrada neste navegador. O botão <b>Filtros</b> abre o painel com <b>Responsável</b> (comigo, sem responsável ou uma pessoa), <b>Origem</b> (o que o Diretor demandou, entidade externa, chefe acima, o que você direcionou às subseções, internas, criadas por você), <b>Seção</b> (quando há subseções), <b>Prazo</b> (hoje, <i>até a reunião da equipe</i> ou <i>da organização</i>, neste mês ou entre duas datas), <b>Status</b> e <b>Prioridade</b>. Cada opção mostra <b>quantas ações teria</b>, considerando os outros filtros, e opção sem ação some. O que estiver ativo vira uma <b>etiqueta</b> com ✕, e o número no botão conta os filtros. As abas passam a mostrar a contagem do que está filtrado, e <b>Limpar filtros</b> volta à lista inteira. No celular, a busca e os atalhos ficam à vista; a ordenação e os filtros ficam atrás do botão <b>Filtros</b>.</p>
+  <p>Acima da lista, a <b>busca</b> procura nas palavras do título, do detalhe, do responsável e da seção (sem diferenciar acentos nem maiúsculas; várias palavras refinam). Os <b>atalhos de atenção</b> mostram, com a contagem, quantas ações estão <i>atrasadas</i>, <i>vencem em 7 dias</i>, <i>sem movimento há 7+ dias</i>, <i>com impedimento</i>, <i>aguardando validação</i>, <i>novas</i> ou <i>com pedido de prazo</i>; só aparecem os que têm ações, e marcando mais de um você vê as que tenham <b>qualquer um</b> deles. <b>Ordenar</b> muda a ordem (padrão, prazo, prioridade, mais tempo sem movimento ou mais recentes) e fica lembrada neste navegador. O botão <b>Filtros</b> abre o painel com <b>Responsável</b> (comigo, sem responsável ou uma pessoa), <b>Origem</b> (o que o Diretor demandou, entidade externa, chefe acima, o que você direcionou às subseções, internas, criadas por você), <b>Seção</b> (quando há subseções), <b>Prazo</b> (hoje, <i>até a reunião da equipe</i> ou <i>da organização</i>, neste mês ou entre duas datas), <b>Status</b> e <b>Prioridade</b>. Cada opção mostra <b>quantas ações teria</b>, considerando os outros filtros, e opção sem ação some. O que estiver ativo vira uma <b>etiqueta</b> com ✕, e o número no botão conta os filtros. As abas passam a mostrar a contagem do que está filtrado, e <b>Limpar filtros</b> volta à lista inteira. No celular, a busca e os atalhos ficam à vista; a ordenação e os filtros ficam atrás do botão <b>Filtros</b>.</p>
   <h3>Diário de progresso</h3>
   <p>Em cada ação, <b>+ Registrar andamento</b> abre o diário, onde você anota o que aconteceu <b>apontando a tarefa</b> a que o registro se refere.</p>
   ${passos('Clique em <b>+ Registrar andamento</b> (no cartão, na ficha ou na própria tarefa, que já vem escolhida).', 'Escreva o que aconteceu e escolha a <b>tarefa</b> (ou "Geral da ação") e o <b>tipo</b>: andamento, entrega, impedimento ou observação.', 'Se quiser, informe o <b>tempo gasto</b> (ele também entra no tempo da ação), a <b>data do trabalho</b>, uma <b>referência</b> (nº do SEI ou link) e marque <b>Concluir a tarefa escolhida</b>.', 'Clique em <b>Registrar no diário</b>. A data, a hora e o seu nome entram sozinhos.')}
@@ -127,11 +127,11 @@ export function conteudo(dirImagens) {
   <p>À direita, <b>Últimas ações direcionadas</b> mostram o andamento e <b>quais subseções já abriram a ação</b>; <b>Acrescentar seções</b> inclui outra subseção no mesmo direcionamento. A ação chega à subseção como <b>nova</b>.</p>
   <h3>Aceite ao concluir</h3>
   <p>Quando a subseção conclui, a ação volta a você, no Início, em <b>Aguardando sua validação</b>: <b>Aceitar e encerrar</b> ou <b>Devolver para ajuste</b>, dizendo o que falta (a ação volta a "em andamento"). Se a subseção atribuiu a ação a um membro, o chefe dela valida primeiro e só depois você aceita. O Diretor não aceita essas ações. Quem recebeu não edita nem arquiva a ação; para mudar o prazo, pede novo prazo.</p>
-  <h2>Minha atualização (relato semanal)</h2>
-  <p>O relato é <b>montado pelo sistema</b> a partir das suas ações e impedimentos: o que foi feito, o que está atrasado, o que está programado e o que trava. Você confere, acrescenta observações e envia até a <b>segunda, 18h</b>.</p>
-  ${fig('22-chefe-atualizacao', 'Minha atualização: o relato montado automaticamente e o campo de observações.')}
+  <h2>Minha atualização semanal</h2>
+  <p>A atualização é <b>montado pelo sistema</b> a partir das suas ações e impedimentos: o que foi feito, o que está atrasado, o que está programado e o que trava. Você confere, acrescenta observações e envia até a <b>segunda, 18h</b>.</p>
+  ${fig('22-chefe-atualizacao', 'Minha atualização: a atualização montada automaticamente e o campo de observações.')}
   ${passos('Abra <b>Minha atualização</b>.', 'Confira cada bloco; se algo estiver errado, corrija na ação (status, prazo, impedimento) e volte.', 'Escreva as observações (o botão <b>Sugerir destaques do diário</b> traz os registros da semana, entregas primeiro e sem ações internas; revise o texto) e envie a atualização. Você volta ao Início.')}
-  ${dica('Se algo mudar depois do envio, a tela avisa que o relato está <b>desatualizado</b>. Enviar de novo cria uma nova versão; o histórico é mantido. O relato enviado nunca mostra o detalhe de ações internas, apenas contagens.')}
+  ${dica('Se algo mudar depois do envio, a tela avisa que a atualização está <b>desatualizado</b>. Enviar de novo cria uma nova versão; o histórico é mantido. A atualização enviada nunca mostra o detalhe de ações internas, apenas contagens.')}
   <h2>Minha equipe</h2>
   <p>Cadastre os membros da seção, desative ou reative e redefina senhas. Ações atribuídas a quem for desativado continuam com o nome da pessoa, para você reatribuir.</p>
   <p><b>Excluir</b> serve para um cadastro feito por engano: só vale para quem <b>nunca deixou histórico</b>. Quem já tem ações, tarefas, tempo ou comentários não é excluído, e o sistema orienta a usar <b>Desativar</b>, que preserva o nome nos registros. Suplentes e chefes de subseção também saem por Desativar.</p>
@@ -147,7 +147,7 @@ export function conteudo(dirImagens) {
   cap('membro', 'Guia do Membro da equipe', `
   <p>O membro enxerga todas as ações e tarefas da sua seção, mas <b>age apenas no que é dele</b>: ações atribuídas a ele ou criadas por ele.</p>
   <table><tr><th style="width:50%">Você pode</th><th>Você não pode</th></tr>
-  <tr><td>Mudar status, prioridade e tempo das suas ações<br>Criar, editar e marcar tarefas<br>Registrar impedimentos e comentar<br>Criar ações para si<br>Marcar como feita a tarefa que é sua em ação de outra pessoa</td><td>Atribuir, arquivar ou redirecionar ações<br>Pedir novo prazo<br>Validar ou excluir o que não criou<br>Acessar relatos, reuniões, atas, estrutura e contas<br>Receber os avisos no celular</td></tr></table>
+  <tr><td>Mudar status, prioridade e tempo das suas ações<br>Criar, editar e marcar tarefas<br>Registrar impedimentos e comentar<br>Criar ações para si<br>Marcar como feita a tarefa que é sua em ação de outra pessoa</td><td>Atribuir, arquivar ou redirecionar ações<br>Pedir novo prazo<br>Validar ou excluir o que não criou<br>Acessar relatos, reuniões, atas, estrutura e contas<br>Receber os notificações no celular</td></tr></table>
   <p>Em <b>Minhas ações</b> há duas abas: <b>Minhas</b> e <b>Da seção, só leitura</b>. A <b>Agenda</b> mostra suas tarefas e as ações que você executa (use o filtro <i>Só o que é meu</i>). Quando o chefe atribui uma ação, ela chega marcada como <b>nova</b>, mesmo que a ação seja de uma seção acima da sua.</p>
   ${aviso('Se a ação passa por validação, ao concluí-la ela aguarda o chefe. Se o chefe devolver, o motivo aparece nos comentários.')}`),
 
@@ -155,9 +155,9 @@ export function conteudo(dirImagens) {
   <h2>Painel da semana</h2>
   <p>Mostra uma ficha por unidade, em <b>ordem de necessidade</b> (críticas primeiro). Em cada ficha:</p>
   <ul><li>o <b>motivo principal</b> da situação, em destaque, na ordem de gravidade: impedimento crítico, ação atrasada (com <i>há quantos dias está a pior</i>), atualização pendente, prazo chegando ou "Sem pendências";</li>
-  <li><b>quatro números</b> sempre no mesmo lugar: atrasadas, vencem em 2 dias, pedidos de prazo e paradas há 7 dias ou mais (zero fica apagado; acima de zero ganha cor e continua com o rótulo escrito);</li>
+  <li><b>quatro números</b> sempre no mesmo lugar: atrasadas, vencem em 2 dias, pedidos de prazo e sem movimento há 7 dias ou mais (zero fica apagado; acima de zero ganha cor e continua com o rótulo escrito);</li>
   <li>em letra pequena, o horário da atualização e o tempo registrado na semana.</li></ul>
-  <p>A barra no topo soma o total por situação. Use <b>Semana atual</b> e as setas para navegar entre semanas e <b>Versão para impressão</b> como plano B. O cartão inteiro é clicável.</p>
+  <p>A barra no topo soma o total por situação. Use <b>Semana atual</b> e as setas para navegar entre semanas e <b>Pauta impressa</b> como plano B. O cartão inteiro é clicável.</p>
   ${fig('02b-painel-sem-menu', 'Painel da semana.')}
   <p>Ao abrir uma unidade você vê o detalhe: relato, ações abertas e recentes, tempo registrado e semanas anteriores.</p>
   ${fig('03-detalhe-secao', 'Detalhe de uma unidade.')}
@@ -201,17 +201,17 @@ export function conteudo(dirImagens) {
   <p>A tela usa letras grandes e navega pelas <b>setas do teclado</b> (→ avança, ← volta). A sequência é: combinados, <b>visão geral</b> das seções em ordem de necessidade e <b>uma tela por seção</b>.</p>
   ${fig('41-reuniao-visao-geral', 'Visão geral: uma ficha por seção, da mais crítica para a mais tranquila.')}
   <p>Na tela de cada seção você vê o <b>relato</b> (feito, próximo, impedimentos, apoio necessário) e, ao lado, as <b>ações e decisões</b>. Tudo é editado ao vivo, sem sair da reunião:</p>
-  <ul><li>abra uma ação para ver ou alterar o detalhe;</li><li><b>Registrar decisão</b> e <b>Nova ação</b>, direto no cartão da seção;</li><li><b>Presença</b>: marque quem participou (titulares e suplentes); a ordem da seleção é guardada;</li><li><b>Registrar informação</b>: comunicados e contexto que não são ação nem decisão;</li><li>aprove ou recuse pedidos de prazo na hora.</li></ul>
+  <ul><li>abra uma ação para ver ou alterar o detalhe;</li><li><b>Registrar decisão</b> e <b>Nova ação</b>, direto no cartão da seção;</li><li><b>Presença</b>: marque quem participou (titulares e suplentes); a ordem da seleção é guardada;</li><li><b>Registrar informe</b>: comunicados e contexto que não são ação nem decisão;</li><li>aprove ou recuse pedidos de prazo na hora.</li></ul>
   ${fig('42-reuniao-secao', 'Tela de uma seção durante a reunião.')}
   <h2>Encerrando e publicando a ata</h2>
   ${passos('Clique em <b>Encerrar reunião</b>. O sistema gera a <b>ata em rascunho</b> e marca as ações apresentadas.', 'Em <b>Reuniões e atas</b>, abra a reunião e revise o texto com a barra de formatação (negrito, itálico, listas).', 'Clique em <b>Baixar PDF</b> se quiser uma cópia (papel A4).', 'Clique em <b>Enviar ata</b> para liberar a leitura aos chefes.')}
   ${fig('08-reunioes', 'Reuniões e atas.')}
   ${dica('Depois de enviada, a ata ainda pode ser editada pela gestão. <b>Reabrir</b> a reunião só é possível enquanto a ata é rascunho. A ata não lista combinados no texto: eles ficam guardados à parte na reunião.')}
-  <p>Plano B: se a TV falhar, use a <b>Versão para impressão</b> da pauta, no Painel.</p>`),
+  <p>Plano B: se a TV falhar, use a <b>Pauta impressa</b> da pauta, no Painel.</p>`),
 
   cap('outros', 'Consulta, Administrador e Plataforma', `
   <h2>Perfil Consulta</h2>
-  <p>Em <b>Ações dos Centros</b> você lê as ações de todos os Centros (sem as internas e sem relatos) e usa a <b>Agenda</b>. Nenhum botão de alteração aparece. Chefes também podem receber essa permissão do Diretor ou do Administrador.</p>
+  <p>Em <b>Ações dos Centros</b> você lê as ações de todos os Centros (sem as internas e sem atualizações) e usa a <b>Agenda</b>. Nenhum botão de alteração aparece. Chefes também podem receber essa permissão do Diretor ou do Administrador.</p>
   <h2>Administrador</h2>
   <p>Faz tudo o que Diretor, Apoio e Chefe fazem, em qualquer seção, e gerencia contas, perfis e estrutura. Pode excluir uma versão do histórico de atualizações (para corrigir um envio de teste ou por engano). A exclusão de contas segue a mesma regra do Diretor: só quem nunca deixou histórico; as demais, Desativar. O Administrador vinculado à <b>Diretoria Adjunta</b> usa a tela <b>Início da seção</b>, como um chefe.</p>
   <h2>Plataforma</h2>
@@ -224,7 +224,7 @@ export function conteudo(dirImagens) {
   <tr><td>Enviei a atualização e algo mudou.</td><td>Envie novamente: cria nova versão e o histórico é mantido.</td></tr>
   <tr><td>Passou das 18h de segunda.</td><td>Ainda é possível enviar correção, mas a unidade pode ter aparecido como pendente.</td></tr>
   <tr><td>A faixa amarela não some.</td><td>Ela some quando a atualização da sua seção é enviada. Envie pela tela <i>Minha atualização</i>.</td></tr>
-  <tr><td>Não recebo os avisos no celular.</td><td>Confira se ativou em <i>Avisos no celular</i> neste aparelho, se as notificações não estão bloqueadas e, no iPhone, se abriu o Agilis pelo ícone instalado. Sair da conta desliga os avisos do aparelho.</td></tr>
+  <tr><td>Não recebo os notificações no celular.</td><td>Confira se ativou em <i>Notificações no celular</i> neste aparelho, se as notificações não estão bloqueadas e, no iPhone, se abriu o Agilis pelo ícone instalado. Sair da conta desliga os avisos do aparelho.</td></tr>
   <tr><td>Perdi o tempo registrado.</td><td>Voltar a ação para <i>A fazer</i> apaga o tempo registrado e deixa um comentário com o total excluído.</td></tr>
   <tr><td>Por que não vejo as ações de outra seção?</td><td>O chefe só vê a própria árvore. Chefes com permissão e o perfil Consulta leem as ações dos Centros, apenas em leitura.</td></tr>
   <tr><td>Como vejo as ações arquivadas?</td><td>O chefe abre <i>Minhas ações</i> e a aba <b>Arquivadas</b>; <b>Desarquivar</b> traz a ação de volta. O Diretor e o Apoio ainda não têm essa aba.</td></tr>

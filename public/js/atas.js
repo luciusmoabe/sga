@@ -32,7 +32,7 @@ export async function reunioes(raiz) {
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>Reuniões e atas</h1><div class="sub">Histórico das reuniões semanais. A ata guarda os combinados que estavam valendo naquela data.</div></div>
       ${podeOperar() ? '<div class="acoes-topo"><a class="btn btn-primario" href="#/reuniao">Iniciar ou retomar reunião</a></div>' : ''}</div>
-    <div class="cartao">${lista.length ? `<table class="tabela-lista"><thead><tr><th>Data</th><th>Situação</th><th>Decisões</th><th>Novas ações</th><th>Informações</th><th>Participantes</th></tr></thead><tbody>
+    <div class="cartao">${lista.length ? `<table class="tabela-lista"><thead><tr><th>Data</th><th>Situação</th><th>Decisões</th><th>Novas ações</th><th>Informes</th><th>Participantes</th></tr></thead><tbody>
       ${lista.map((r) => `<tr class="clicavel" data-id="${r.id}" tabindex="0"><td><b>${br(r.data)}</b> <span class="suave pequeno">${diaSemana(r.data)}</span></td>
         <td data-rotulo="Situação"><span class="pilula ${cls[r.status]}">${ST[r.status]}</span></td><td class="num" data-rotulo="Decisões">${r.decisoes}</td><td class="num" data-rotulo="Novas ações">${r.novas_acoes}</td><td class="num" data-rotulo="Informações">${r.informacoes}</td><td class="num" data-rotulo="Participantes">${r.participantes}</td></tr>`).join('')}</tbody></table>`
       : vazio('Nenhuma reunião registrada', 'Use "Iniciar reunião" no dia agendado.')}</div>`;
@@ -55,7 +55,7 @@ export async function reuniaoDetalhe(raiz, { id, refresh }) {
       <div class="cartao"><h2>Decisões</h2>${lista(r.decisoes, (d) => `<b>${esc(d.secao_sigla || 'Geral')}</b> · ${esc(d.texto)}`)}</div>
       <div class="cartao"><h2>Novas ações</h2>${lista(r.novas_acoes, (g) => `${esc(g.titulo)} <span class="suave pequeno">· ${g.destino === 'todos' ? todasAs('centro', true) : plural(g.total_acoes, 'seção', 'seções')} · prazo ${br(g.prazo)}</span>`)}</div>
       <div class="cartao"><h2>Pedidos de prazo decididos</h2>${lista(r.pedidos_decididos, (p) => `<b>${esc(p.secao_sigla)}</b> · ${esc(p.acao_titulo)}: ${br(p.novo_prazo)} ${p.status}`)}</div>
-      <div class="cartao" data-informacoes-historicas><h2>Informações e comunicados</h2>${lista(r.informacoes, (i) => esc(i.texto))}</div>
+      <div class="cartao" data-informacoes-historicas><h2>Informes</h2>${lista(r.informacoes, (i) => esc(i.texto))}</div>
     </div>
     <div class="espaco nao-imprimir"></div>
     <div class="cartao">
