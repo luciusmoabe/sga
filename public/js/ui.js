@@ -36,7 +36,7 @@ export const PRIO = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 export const COR = { verde: 'Em dia', amarelo: 'Atenção', vermelho: 'Crítico' };
 
 /** Quem a ação concluída espera: o chefe da seção (validação), quem a demandou (chefe que direcionou) ou o Diretor (aceite). */
-export const textoEtapa = (a) => (a.aguardando_validacao === 'chefe' ? 'Aguardando validação do chefe'
+export const textoEtapa = (a) => (a.aguardando_validacao === 'chefe' ? (a.cadeia_aprovacao ? `Aguardando aprovação do chefe de ${a.aprovacao_secao_sigla || a.aprovacao_secao_nome}` : 'Aguardando validação do chefe')
   : a.aguardando_validacao === 'demandante' ? `Aguardando aceite de ${a.demandado_por_nome || 'quem demandou'}` : `Aguardando aceite ${doTopo()}`);
 
 export const sem = (cor) => `<span class="sem sem-${cor}">${COR[cor]}</span>`;

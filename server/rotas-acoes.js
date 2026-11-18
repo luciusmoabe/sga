@@ -21,6 +21,10 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const ids = user.secao_id ? await subarvore(db, user.secao_id) : [-1];
     // Além da árvore da própria seção, a ação atribuída à pessoa é sempre dela: o responsável pode vir de uma subseção
     // (`executoresDa`) e a ação ficar na seção-mãe, fora da árvore dele. Sem isto ele não a veria nem a executaria.
+    // O chefe chamado a aprovar uma ação concluída (aprovação em cadeia, abaixo) também a enxerga, mesmo que ela esteja numa seção acima da dele.
+    if (user.perfil === 'chefe' && user.secao_id) {
+      return { inner: `(a.secao_id in (${marks(ids)}) or a.responsavel_id = ? or exists (select 1 from acao_aprovacoes ap where ap.acao_id = a.id and ap.secao_id = ?))`, params: [...ids, user.id, user.secao_id] };
+    }
     return { inner: `(a.secao_id in (${marks(ids)}) or a.responsavel_id = ?)`, params: [...ids, user.id] };
   };
   const daEmpresa = (inner, params) => ({ where: `a.empresa_id = ? and (${inner})`, params: [empresaAtual(), ...params] });
@@ -44,7 +48,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
   };
   const SEM_PERMISSOES = {
     pode_editar: false, pode_descrever: false, pode_mudar_prazo: false, pode_mudar_demanda: false, pode_excluir: false,
-    pode_executar: false, pode_comentar: false, pode_atribuir: false, pode_aceitar_demanda: false, pode_registrar_diario: false,
+    pode_executar: false, pode_comentar: false, pode_atribuir: false, pode_aceitar_demanda: false, pode_registrar_diario: false, pode_validar_etapa: false,
   };
   /** Marca `somente_leitura` e tira as permissões das ações que a pessoa só lê. O membro lê toda a árvore da seção,
    *  mas age só nas ações dele; numa ação de outra pessoa, só mexe (e comenta) onde há tarefa atribuída a ele. */
@@ -145,6 +149,11 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       ur.perfil as responsavel_perfil,
       uat.nome as atribuido_por_nome,
       uvc.nome as validada_chefe_por_nome,
+      (select count(*) from acao_aprovacoes ap where ap.acao_id = a.id) as aprovacoes_total,
+      (select count(*) from acao_aprovacoes ap where ap.acao_id = a.id and ap.aprovada_em is null) as aprovacoes_pendentes,
+      (select ap.secao_id from acao_aprovacoes ap where ap.acao_id = a.id and ap.aprovada_em is null order by ap.ordem limit 1) as aprovacao_secao_id,
+      (select sp.nome from acao_aprovacoes ap join secoes sp on sp.id = ap.secao_id where ap.acao_id = a.id and ap.aprovada_em is null and sp.empresa_id = a.empresa_id order by ap.ordem limit 1) as aprovacao_secao_nome,
+      (select sp.sigla from acao_aprovacoes ap join secoes sp on sp.id = ap.secao_id where ap.acao_id = a.id and ap.aprovada_em is null and sp.empresa_id = a.empresa_id order by ap.ordem limit 1) as aprovacao_secao_sigla,
       us.chefe_id as autor_secao_chefe_id,
       d.criado_por as demandado_por_id,
       ud.nome as demandado_por_nome,
@@ -176,12 +185,18 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     // própria ação, não há quem validar.
     const delegada = !!a.responsavel_id && !!a.atribuido_por && a.responsavel_id !== a.atribuido_por && a.responsavel_perfil === 'membro';
     const concluida = a.status === 'concluida' && !a.encerrada && !a.arquivada;
+    // Aprovação em cadeia (ações demandadas pelo Diretor e concluídas por alguém que tem chefe entre ele e a seção da ação): cada chefe da
+    // cadeia aprova, do mais próximo de quem executou para cima, e só depois o Diretor aceita. As linhas nascem na conclusão (`acao_aprovacoes`).
+    const cadeia = Number(a.aprovacoes_total || 0) > 0;
+    const pendentes = Number(a.aprovacoes_pendentes || 0);
     let aguardando = null;
-    if (concluida && delegada && !a.validada_chefe_em) aguardando = 'chefe';
+    if (concluida && cadeia && pendentes > 0) aguardando = 'chefe';
+    else if (concluida && !cadeia && delegada && !a.validada_chefe_em) aguardando = 'chefe';
     else if (concluida && demandadaChefe) aguardando = 'demandante';
     else if (concluida && demandadaDiretor) aguardando = 'diretor';
-    return { demandada_diretor: demandadaDiretor, demandada_chefe: demandadaChefe, delegada, exige_validacao_chefe: delegada, exige_validacao_diretor: demandadaDiretor, exige_validacao_demandante: demandadaChefe,
-      validada_chefe: !!a.validada_chefe_em, aguardando_validacao: aguardando };
+    return { demandada_diretor: demandadaDiretor, demandada_chefe: demandadaChefe, delegada, exige_validacao_chefe: cadeia || delegada, exige_validacao_diretor: demandadaDiretor, exige_validacao_demandante: demandadaChefe,
+      cadeia_aprovacao: cadeia, aprovacoes_pendentes: pendentes, aprovacoes_total: Number(a.aprovacoes_total || 0),
+      validada_chefe: cadeia ? pendentes === 0 : !!a.validada_chefe_em, aguardando_validacao: aguardando };
   };
   const acaoOut = (a) => ({
     ...a,
@@ -328,8 +343,43 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       pode_atribuir: (user.perfil === 'administrador' || (user.perfil === 'chefe' && !!user.secao_id)) && emCurso,
       // Aceitar ou devolver a ação que o chefe direcionou às subseções, depois de concluída: só quem demandou (a seção dele).
       pode_aceitar_demanda: demandanteDe(user, a) && validacaoDe(a).aguardando_validacao === 'demandante',
+      // Validar (ou devolver) a etapa do chefe: na cadeia, só o chefe da seção que está na vez; sem cadeia, o chefe com acesso à ação.
+      pode_validar_etapa: podeValidarEtapa(user, a),
     };
   };
+  function podeValidarEtapa(user, a) {
+    const v = validacaoDe(a);
+    if (v.aguardando_validacao !== 'chefe') return false;
+    if (user.perfil === 'administrador') return true;
+    if (user.perfil !== 'chefe' || !user.secao_id) return false;
+    return v.cadeia_aprovacao ? a.aprovacao_secao_id === user.secao_id : true;
+  }
+  /** Os chefes que aprovam uma ação demandada pelo Diretor depois de concluída, do mais próximo de quem executou até a seção da ação. */
+  async function cadeiaDeAprovacao(a) {
+    if (!validacaoDe({ ...a, status: 'concluida', encerrada: 0, arquivada: 0 }).demandada_diretor || !a.responsavel_id) return [];
+    const e = await q1('select perfil, secao_id from usuarios where id = ? and empresa_id = ?', a.responsavel_id, empresaAtual());
+    if (!e?.secao_id) return [];
+    const secoes = new Map((await q('select id, pai_id, chefe_id from secoes where empresa_id = ?', empresaAtual())).map((s) => [s.id, s]));
+    // Do começo até a seção da ação, subindo pelo pai de cada seção; `null` se o caminho não chega lá.
+    const sobe = (inicio) => {
+      const caminho = [], vistos = new Set();
+      for (let x = inicio; x != null && !vistos.has(x); x = secoes.get(x)?.pai_id ?? null) {
+        vistos.add(x); caminho.push(x);
+        if (x === a.secao_id) return caminho;
+      }
+      return null;
+    };
+    // O membro é chefiado pelo chefe da própria seção; o chefe que executa a ação é chefiado pelo da seção acima dele.
+    const caminho = e.perfil === 'membro' ? (sobe(e.secao_id) ?? [a.secao_id]) : (sobe(secoes.get(e.secao_id)?.pai_id ?? null) ?? []);
+    return caminho.filter((id) => secoes.get(id)?.chefe_id != null);
+  }
+  /** Refaz as aprovações em cadeia: apaga as da conclusão anterior e, se a ação acaba de ser concluída, fotografa a cadeia de agora. */
+  async function refazerAprovacoes(a, concluindo) {
+    await run('delete from acao_aprovacoes where acao_id = ?', a.id);
+    if (!concluindo) return;
+    let ordem = 1;
+    for (const secaoId of await cadeiaDeAprovacao(a)) await run('insert into acao_aprovacoes (acao_id, secao_id, ordem) values (?,?,?)', a.id, secaoId, ordem++);
+  }
   /** O chefe da seção que direcionou a ação (titular ou suplente): é quem aceita ou devolve o que as subseções concluem. */
   function demandanteDe(user, a) {
     return user.perfil === 'chefe' && !!user.secao_id && a.demandado_por_perfil === 'chefe' && a.demandado_por_secao_id === user.secao_id;
@@ -524,8 +574,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       // `minhas=1` (telas do chefe e do membro, "Minhas ações" e Início): além da seção, as ações atribuídas a quem consulta, que
       // podem ficar numa seção-mãe, fora da árvore dele. Sem isso o filtro por seção as esconderia.
       const comMinhas = f.minhas === '1' && deSecao(req.user);
-      where.push(comMinhas ? `(a.secao_id in (${marks(ids)}) or a.responsavel_id = ?)` : `a.secao_id in (${marks(ids)})`);
-      params.push(...ids, ...(comMinhas ? [req.user.id] : []));
+      const aprova = comMinhas && req.user.perfil === 'chefe' && !!req.user.secao_id; // o chefe chamado a aprovar uma ação de seção acima da dele
+      where.push(comMinhas ? `(a.secao_id in (${marks(ids)}) or a.responsavel_id = ?${aprova ? ' or exists (select 1 from acao_aprovacoes ap where ap.acao_id = a.id and ap.secao_id = ?)' : ''})` : `a.secao_id in (${marks(ids)})`);
+      params.push(...ids, ...(comMinhas ? [req.user.id] : []), ...(aprova ? [req.user.secao_id] : []));
     }
     if (STATUS_OK.has(f.status)) { where.push('a.status = ?'); params.push(f.status); }
     if (f.origem === 'externa') where.push('a.demandante_externo is not null'); // demandas de entidades fora da subordinação ao Diretor
@@ -620,6 +671,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
         await run('delete from impedimentos where acao_id = ?', a.id);
         await run('delete from pontos_atencao where acao_id = ?', a.id);
         await run('delete from acao_diario where acao_id = ?', a.id);
+        await run('delete from acao_aprovacoes where acao_id = ?', a.id);
         await run('delete from acao_checklist where acao_id = ?', a.id);
         await run('delete from acao_prazos where acao_id = ?', a.id);
         await run('delete from pedidos_prazo where acao_id = ?', a.id);
@@ -804,6 +856,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
         if (novo === 'concluida' && a.tempo_total <= 0) throw falha(422, 'Informe o tempo gasto, em minutos, antes de concluir a ação.');
         await db.transaction(async () => {
           // Mudar o status recomeça a validação do chefe: ela vale para a conclusão que ele viu.
+          await refazerAprovacoes(a, novo === 'concluida');
           await run('update acoes set status = ?, concluida_em = ?, validada_chefe_em = null, validada_chefe_por = null where id = ? and empresa_id = ?', novo, novo === 'concluida' ? agoraISO() : null, a.id, empresaAtual());
           // A primeira vez em andamento marca o início da execução (o tempo de espera antes dela não entra no tempo de execução).
           if (novo === 'em_andamento' && !a.iniciada_em) await run('update acoes set iniciada_em = ? where id = ? and empresa_id = ?', agoraISO(), a.id, empresaAtual());
@@ -1224,8 +1277,21 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
   app.post('/api/acoes/:id/validar', permit('chefe', 'administrador'), h(async (req) => {
     const a = await acaoVisivel(req.user, Number(req.params.id));
     await chefeGere(req.user, a);
-    if (!validacaoDe(a).exige_validacao_chefe) throw falha(409, 'Esta ação não foi atribuída a um membro da equipe: não há o que validar.');
+    const v = validacaoDe(a);
+    if (!v.exige_validacao_chefe) throw falha(409, 'Esta ação não foi atribuída a um membro da equipe: não há o que validar.');
     if (a.encerrada || a.status !== 'concluida') throw falha(409, 'Só dá para validar uma ação concluída.');
+    if (v.cadeia_aprovacao) {
+      // Cada chefe da cadeia aprova a sua etapa, na ordem; o Administrador age em qualquer uma.
+      if (v.aguardando_validacao !== 'chefe') throw falha(409, 'Esta ação já foi validada por todos os chefes.');
+      if (!podeValidarEtapa(req.user, a)) throw falha(403, `Esta etapa é do chefe de ${a.aprovacao_secao_sigla || a.aprovacao_secao_nome}. A sua aprovação vem na sequência, se houver.`);
+      await db.transaction(async () => {
+        await run('update acao_aprovacoes set aprovada_em = ?, aprovada_por = ? where acao_id = ? and secao_id = ? and aprovada_em is null', agoraISO(), req.user.id, a.id, a.aprovacao_secao_id);
+        if (v.aprovacoes_pendentes === 1) await run('update acoes set validada_chefe_em = ?, validada_chefe_por = ? where id = ? and empresa_id = ?', agoraISO(), req.user.id, a.id, empresaAtual());
+        await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id,
+          `Aprovada pelo chefe de ${a.aprovacao_secao_sigla || a.aprovacao_secao_nome} (${req.user.nome}).${v.aprovacoes_pendentes === 1 ? ' Segue para o aceite {topo:do}.' : ''}`, agoraISO());
+      });
+      return acaoOut(await q1(`${SELECT_ACAO} where a.id = ? and a.empresa_id = ?`, a.id, empresaAtual()));
+    }
     if (a.validada_chefe_em) throw falha(409, 'Esta ação já foi validada.');
     await run('update acoes set validada_chefe_em = ?, validada_chefe_por = ? where id = ? and empresa_id = ?', agoraISO(), req.user.id, a.id, empresaAtual());
     await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id, `Validada pelo chefe (${req.user.nome}).`, agoraISO());
@@ -1244,9 +1310,11 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       if (etapa === 'demandante') {
         if (!demandanteDe(req.user, a)) throw falha(403, 'Esta ação aguarda o aceite de quem a demandou. Só essa pessoa a devolve nesta etapa.');
       } else if (etapa !== 'chefe') throw falha(409, 'Só dá para devolver a ação que aguarda a sua validação.');
+      else if (!podeValidarEtapa(req.user, a)) throw falha(403, `Esta etapa é do chefe de ${a.aprovacao_secao_sigla || a.aprovacao_secao_nome}. Só ele a devolve agora.`);
     } else if (req.user.perfil === 'diretor' && etapa !== 'diretor') {
       throw falha(409, etapa === 'chefe' ? 'Esta ação ainda aguarda a validação do chefe da seção.' : 'Esta ação não aguarda o aceite {topo:do}.');
     }
+    await run('delete from acao_aprovacoes where acao_id = ?', a.id); // devolver recomeça a cadeia de aprovação
     await run(`update acoes set status = 'em_andamento', concluida_em = null, encerrada = 0, validada_chefe_em = null, validada_chefe_por = null, devolucoes = devolucoes + 1 where id = ? and empresa_id = ?`, a.id, empresaAtual());
     const quem = { administrador: 'o Administrador', diretor: 'o Diretor', chefe: `o chefe (${req.user.nome})` }[req.user.perfil];
     await run('insert into acao_comentarios (acao_id, usuario_id, texto, criado_em) values (?,?,?,?)', a.id, req.user.id, `Devolvida pel${quem}: ${t}`, agoraISO());

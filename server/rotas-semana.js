@@ -42,12 +42,17 @@ export function rotasSemana(app, { db, q, q1, run, agoraISO, hoje, cfgReuniao, s
       recebe ? arvore.then((ids) => q1(
         `select count(*) n from acoes a left join usuarios r on r.id = a.responsavel_id
            left join diretrizes d on d.id = a.diretriz_id left join usuarios ud on ud.id = d.criado_por
-         where a.empresa_id = ? and a.secao_id in (${marks(ids)}) and a.status = 'concluida' and a.encerrada = 0 and a.arquivada = 0
+         where a.empresa_id = ? and (a.secao_id in (${marks(ids)}) or exists (select 1 from acao_aprovacoes ap where ap.acao_id = a.id and ap.secao_id = ?))
+           and a.status = 'concluida' and a.encerrada = 0 and a.arquivada = 0
            and (
-             (r.perfil = 'membro' and a.atribuido_por is not null and a.atribuido_por != a.responsavel_id and a.validada_chefe_em is null)
+             -- sem cadeia de aprovação: a validação de sempre (o chefe da seção que atribuiu a um membro)
+             (not exists (select 1 from acao_aprovacoes ap where ap.acao_id = a.id)
+               and r.perfil = 'membro' and a.atribuido_por is not null and a.atribuido_por != a.responsavel_id and a.validada_chefe_em is null)
+             -- com cadeia: só o chefe da seção que está na vez
+             or (select ap.secao_id from acao_aprovacoes ap where ap.acao_id = a.id and ap.aprovada_em is null order by ap.ordem limit 1) = ?
              or (ud.perfil = 'chefe' and ud.secao_id = ?
                  and not (r.perfil = 'membro' and a.atribuido_por is not null and a.atribuido_por != a.responsavel_id and a.validada_chefe_em is null))
-           )`, empresaAtual(), ...ids, req.user.secao_id)) : null,
+           )`, empresaAtual(), ...ids, req.user.secao_id, req.user.secao_id, req.user.secao_id)) : null,
     ]);
     const semana = referencia();
     // Quem envia a atualização da seção (chefe e Administrador vinculado): a unidade já enviou nesta semana? Alimenta a faixa de aviso.

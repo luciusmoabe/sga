@@ -24,6 +24,7 @@ truncate table
   public.acao_vistas,
   public.pontos_atencao,
   public.acao_diario,
+  public.acao_aprovacoes,
   public.reuniao_equipe_acoes,
   public.acoes
 continue identity restrict;

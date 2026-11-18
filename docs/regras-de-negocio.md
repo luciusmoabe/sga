@@ -51,6 +51,8 @@ Depois de concluída, só duas origens têm validação:
 
 Quando as duas valem, primeiro o chefe, depois o Diretor. As demais ações ficam prontas ao concluir. Mudar status, reabrir ou trocar o responsável recomeça a validação do chefe.
 
+**Demanda do Diretor com mais de um chefe no caminho:** quando quem concluiu é subordinado de um chefe (um membro da subseção, ou o chefe de uma subseção), **cada chefe entre ele e a seção que recebeu a demanda aprova o trabalho, um de cada vez, começando pelo mais próximo de quem executou.** Só depois de todos aprovarem o Diretor aceita. Exemplo: o Diretor direciona ao Centro, o chefe do Centro atribui a um membro da subseção, e o membro conclui: primeiro aprova o chefe da subseção, depois o chefe do Centro, depois o Diretor aceita. Só o chefe que está na vez aprova ou devolve; devolver recomeça a cadeia. Quem executa a ação sendo o próprio chefe da seção não tem chefe no caminho, e o Diretor aceita direto.
+
 ### Demanda de entidade externa
 
 Marca a ação demandada por entidade fora da subordinação ao Diretor (órgão de controle, outra secretaria). O nome (até 120 caracteres) é obrigatório quando marcada; torna a ação visível ao Diretor e não muda o semáforo.

@@ -20,6 +20,7 @@ import { aplicarAtualizacaoEquipe } from './migration-atualizacao-equipe.js';
 import { aplicarPontosAtencao } from './migration-pontos-atencao.js';
 import { aplicarDiario } from './migration-diario.js';
 import { aplicarUso } from './migration-uso.js';
+import { aplicarAprovacoes } from './migration-aprovacoes.js';
 import { aplicarDiretoriaAdjunta } from './migration-diretoria-adjunta.js';
 import { aplicarPrazosEReuniao } from './migration-prazos-reuniao.js';
 import { aplicarMovimentacao } from './migration-movimentacao.js';
@@ -419,6 +420,13 @@ const MIGRACOES = [
     id: 37, nome: 'uso_telas',
     async aplicar(db) {
       await aplicarUso(db);
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
+  {
+    id: 38, nome: 'aprovacoes',
+    async aplicar(db) {
+      await aplicarAprovacoes(db);
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },

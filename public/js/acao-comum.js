@@ -511,6 +511,13 @@ const responsavelHTML = (a) => `<div class="responsavel" id="acao-responsavel">
 const validacaoHTML = (a) => {
   const chefeAgindo = a.pode_executar && ['chefe', 'administrador'].includes(est.user?.perfil);
   if (a.aguardando_validacao === 'chefe') {
+    // Cadeia de aprovação (demanda do Diretor): um chefe de cada vez, do mais próximo de quem executou para cima; só o que está na vez age.
+    if (a.cadeia_aprovacao) {
+      const etapa = a.aprovacoes_total - a.aprovacoes_pendentes + 1;
+      return `<div class="aviso-validacao"><b>Aguardando a aprovação do chefe de ${esc(a.aprovacao_secao_nome || a.aprovacao_secao_sigla)}.</b>
+        <span class="suave pequeno"> ${a.responsavel_nome ? `${esc(a.responsavel_nome)} concluiu a ação. ` : ''}${a.aprovacoes_total > 1 ? `Etapa ${etapa} de ${a.aprovacoes_total}; depois ` : 'Depois, '}o aceite ${doTopo()}.</span>
+        ${a.pode_validar_etapa ? '<div class="linha" style="margin-top:8px"><button type="button" class="btn btn-ok" data-validar>Aprovar</button><button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>' : ''}</div>`;
+    }
     return `<div class="aviso-validacao"><b>Aguardando a validação do chefe da seção.</b>
       ${a.responsavel_nome ? `<span class="suave pequeno"> ${esc(a.responsavel_nome)} concluiu a ação.</span>` : ''}
       ${chefeAgindo ? '<div class="linha" style="margin-top:8px"><button type="button" class="btn btn-ok" data-validar>Validar</button><button type="button" class="btn btn-perigo" data-devolver>Devolver para ajuste</button></div>' : ''}</div>`;

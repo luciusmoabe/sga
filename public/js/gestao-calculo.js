@@ -92,7 +92,7 @@ export function calcularGestao({ acoes, hoje, pessoasDoPeriodo = [], atualizacao
   const criticas = abertas.filter((a) => a.impedimento_critico);
   const vencem7 = abertas.filter((a) => a.prazo >= hoje && diasEntre(hoje, a.prazo) <= 7).sort(porPrazo);
   const vencem2 = vencem7.filter((a) => diasEntre(hoje, a.prazo) <= 2);
-  const validar = abertas.concat(acoes.filter((a) => a.status === 'concluida' && !a.encerrada && !a.arquivada)).filter((a) => a.aguardando_validacao === 'chefe');
+  const validar = abertas.concat(acoes.filter((a) => a.status === 'concluida' && !a.encerrada && !a.arquivada)).filter((a) => a.aguardando_validacao === 'chefe' && a.pode_validar_etapa !== false);
   const paradas = abertas.filter((a) => a.parada && a.prazo >= hoje);
   const bloqueadas = abertas.filter((a) => a.status === 'bloqueada');
   const pedidos = abertas.filter((a) => a.pedido_pendente);

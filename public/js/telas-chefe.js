@@ -152,7 +152,7 @@ function quadroValidarHTML(lista) {
     <ul class="novas-lista">${lista.map((a) => `<li data-validar-item="${a.id}"><div class="novas-item novas-item-estatico">
       <span class="novas-item-titulo">${esc(a.titulo)}</span>
       <span class="pequeno suave">Concluída por ${esc(a.responsavel_nome || (a.aguardando_validacao === 'demandante' ? `${a.secao_sigla || a.secao_nome}` : 'um membro da equipe'))}${a.concluida_em ? ` em ${dataHora(a.concluida_em)}` : ''} · prazo <span class="num">${br(a.prazo)}</span></span>
-      <span class="atencao-botoes">${a.aguardando_validacao === 'demandante' ? '<button type="button" class="btn btn-ok btn-mini" data-aceitar-q>Aceitar e encerrar</button>' : '<button type="button" class="btn btn-ok btn-mini" data-validar-q>Validar</button>'}
+      <span class="atencao-botoes">${a.aguardando_validacao === 'demandante' ? '<button type="button" class="btn btn-ok btn-mini" data-aceitar-q>Aceitar e encerrar</button>' : `<button type="button" class="btn btn-ok btn-mini" data-validar-q>${a.cadeia_aprovacao ? 'Aprovar' : 'Validar'}</button>`}
         <button type="button" class="btn btn-fantasma btn-mini" data-devolver-q>Devolver para ajuste</button>
         <button type="button" class="btn btn-fantasma btn-mini" data-abrir-q>Abrir</button></span></div></li>`).join('')}</ul>
   </section>
@@ -242,14 +242,14 @@ export async function inicio(raiz, { refresh }) {
   // Só a seção do usuário (e as subordinadas): para o Administrador da Diretoria Adjunta, restringe à própria seção.
   const [up, abertas, { aviso }, concluidas, agendaEquipe, relatoEquipe] = await Promise.all([
     get(`/atualizacao?semana=${semana}&resumo=1`), get(`/acoes?situacao=abertas&secao=${est.user.secao_id}&minhas=1`), get('/avisos/atual'),
-    est.boot.acoes_a_validar ? get(`/acoes?situacao=concluidas&secao=${est.user.secao_id}`) : [],
+    est.boot.acoes_a_validar ? get(`/acoes?situacao=concluidas&secao=${est.user.secao_id}&minhas=1`) : [], // minhas=1: também as de seção acima que este chefe é chamado a aprovar
     // A reunião da equipe tem agenda própria, com o mesmo trilho da reunião da instituição (só para o chefe da seção).
     est.user.perfil === 'chefe' ? get('/reunioes-equipe/agenda').catch(() => null) : null,
     // A seção que tem chefe acima relata também para a reunião dele (resumo: só o que já foi enviado).
     est.user.perfil === 'chefe' && est.boot.secao?.tipo === 'subsecao' ? get('/reunioes-equipe/atualizacao?resumo=1').catch(() => null) : null,
   ]);
   const ctx = contextoDeReuniao(semana, agendaEquipe);
-  const aValidar = concluidas.filter((a) => a.aguardando_validacao === 'chefe' || (a.aguardando_validacao === 'demandante' && a.pode_aceitar_demanda));
+  const aValidar = concluidas.filter((a) => (a.aguardando_validacao === 'chefe' && a.pode_validar_etapa !== false) || (a.aguardando_validacao === 'demandante' && a.pode_aceitar_demanda));
   const atrasadas = abertas.filter((a) => a.atrasada).length;
   const vencendo = abertas.filter((a) => !a.atrasada && a.prazo <= addDias(est.boot.hoje, 2)).length;
   const pedidos = abertas.filter((a) => a.pedido_pendente).length;
@@ -428,7 +428,7 @@ export async function minhasAcoes(raiz) {
           <button type="button" class="btn btn-fantasma btn-mini" data-detalhe>Detalhes e histórico</button>
           ${!ehMembro && !a.arquivada && a.status !== 'concluida' && !a.pedido_pendente && !a.pode_mudar_prazo ? '<button type="button" class="btn btn-fantasma btn-mini" data-prazo>Pedir novo prazo</button>' : ''}
           ${aceitaImpedimento(a) && a.pode_executar ? '<button type="button" class="btn btn-fantasma btn-mini" data-impedimento>Impedimento</button>' : ''}
-          ${a.aguardando_validacao === 'chefe' && a.pode_executar && !ehMembro ? '<button type="button" class="btn btn-ok btn-mini" data-validar>Validar</button><button type="button" class="btn btn-fantasma btn-mini" data-devolver>Devolver</button>' : ''}
+          ${a.aguardando_validacao === 'chefe' && a.pode_validar_etapa && !ehMembro ? `<button type="button" class="btn btn-ok btn-mini" data-validar>${a.cadeia_aprovacao ? 'Aprovar' : 'Validar'}</button><button type="button" class="btn btn-fantasma btn-mini" data-devolver>Devolver</button>` : ''}
           ${a.pode_aceitar_demanda ? '<button type="button" class="btn btn-ok btn-mini" data-aceitar>Aceitar e encerrar</button><button type="button" class="btn btn-fantasma btn-mini" data-devolver>Devolver</button>' : ''}
           ${temMais(a) ? `<details class="mais"><summary class="btn btn-fantasma btn-mini">Mais</summary>
             <div class="mais-itens">
