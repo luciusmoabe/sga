@@ -58,7 +58,7 @@ export const AREAS_MEMBRO = [
 
 /** A área de Configuração: Diretor, Apoio e o chefe a quem o Diretor deu acesso (Estrutura e Avisos ficam aqui, fora do caminho diário). */
 /** @type {Area} */
-export const AREA_CONFIGURACAO = { id: 'a-config', rotulo: 'Configuração', icone: 'estrutura', abas: [{ rota: 'estrutura', rotulo: 'Estrutura e acessos' }, { rota: 'avisos' }] };
+export const AREA_CONFIGURACAO = { id: 'a-config', rotulo: 'Configuração', icone: 'estrutura', abas: [{ rota: 'estrutura', rotulo: 'Estrutura e acessos' }, { rota: 'avisos' }, { rota: 'uso' }] };
 
 /**
  * As áreas do perfil, na ordem do menu. O chefe com acesso à configuração ganha também a área "Configuração".

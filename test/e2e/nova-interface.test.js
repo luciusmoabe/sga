@@ -177,7 +177,7 @@ test('Diretor: quatro áreas, Reunião em destaque, abas das telas de sempre e e
 
   await p.click('.menu a[data-rota="a-config"]');
   await p.waitForFunction(() => document.querySelector('.abas-area a[aria-current="page"]')?.textContent.trim() === 'Estrutura e acessos', { timeout: 10000 });
-  assert.deepEqual(await abas(p), ['Estrutura e acessos', 'Avisos']);
+  assert.deepEqual(await abas(p), ['Estrutura e acessos', 'Avisos', 'Uso das telas']);
 
   // Endereços antigos levam à área; o que tem número (um Centro, uma reunião) abre como sempre.
   await p.evaluate(() => { location.hash = '#/prazos'; });

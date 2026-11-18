@@ -19,6 +19,7 @@ import { aplicarReuniaoEquipeCompleta } from './migration-reuniao-equipe-complet
 import { aplicarAtualizacaoEquipe } from './migration-atualizacao-equipe.js';
 import { aplicarPontosAtencao } from './migration-pontos-atencao.js';
 import { aplicarDiario } from './migration-diario.js';
+import { aplicarUso } from './migration-uso.js';
 import { aplicarDiretoriaAdjunta } from './migration-diretoria-adjunta.js';
 import { aplicarPrazosEReuniao } from './migration-prazos-reuniao.js';
 import { aplicarMovimentacao } from './migration-movimentacao.js';
@@ -411,6 +412,13 @@ const MIGRACOES = [
     id: 36, nome: 'diario',
     async aplicar(db) {
       await aplicarDiario(db);
+      if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
+    },
+  },
+  {
+    id: 37, nome: 'uso_telas',
+    async aplicar(db) {
+      await aplicarUso(db);
       if (db.isPg) await db.exec(sqlSeguranca({ transacao: false }));
     },
   },

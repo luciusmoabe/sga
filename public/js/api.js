@@ -124,6 +124,22 @@ export async function api(caminho, { method = 'GET', corpo } = {}) {
 
   return dados;
 }
+/**
+ * Avisa o servidor que uma tela foi aberta (contagem anônima de uso, para saber o que simplificar). Não passa pelo cache nem conta como gravação
+ * (não renova o bootstrap), não espera resposta e ignora qualquer falha: nunca atrapalha a navegação.
+ */
+export function enviarUso(tela, versao) {
+  if (!sessao.csrf && sessao.modo !== 'demo') return;
+  try {
+    fetch('/api/uso', {
+      method: 'POST', cache: 'no-store', credentials: 'same-origin', keepalive: true,
+      headers: { 'content-type': 'application/json',
+        ...(sessao.modo === 'demo' ? { 'x-user-id': sessao.userId || '' } : {}),
+        ...(sessao.csrf ? { 'x-csrf-token': sessao.csrf } : {}) },
+      body: JSON.stringify({ tela, versao }),
+    }).catch(() => { /* a contagem é opcional */ });
+  } catch { /* idem */ }
+}
 export const get   = (c)         => api(c);
 export const post  = (c, corpo = {}) => api(c, { method: 'POST',   corpo });
 export const patch = (c, corpo = {}) => api(c, { method: 'PATCH',  corpo });

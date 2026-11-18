@@ -1,6 +1,6 @@
 // Ponto de entrada: entrada simulada, casca da aplicação e roteamento por hash.
 import { PERFIL_DA_EMPRESA, dosPlural, nomeTipo } from './vocab.js';
-import { empresaLembrada, empresasDaEntrada, entrar, entrarSenha, get, lembrarEmpresa, sair, sessao, limparSessao, modoAuth, versao } from './api.js';
+import { empresaLembrada, empresasDaEntrada, enviarUso, entrar, entrarSenha, get, lembrarEmpresa, sair, sessao, limparSessao, modoAuth, versao } from './api.js';
 import { atualizarSessao, est } from './estado.js';
 import { $, esc, faixaPendente, on, trilho, toast } from './ui.js';
 import { acoes, centro, direcionar, painel, pauta, prazos } from './telas-diretor.js';
@@ -9,6 +9,7 @@ import { agenda } from './agenda.js';
 import { gestao } from './gestao.js';
 import { diarioTela } from './diario-tela.js';
 import { abrirNovaAcao, podeCriarAcao } from './nova-acao.js';
+import { usoTelas } from './uso-telas.js';
 import { PERFIS_NOVA_INTERFACE, TODAS_AS_AREAS, abaAtiva, abasDaArea, areaDaRota, areasDoPerfil, casaNovaInterface, definirNovaInterface, menuNovaInterface, novaInterfaceLigada, temNovaInterface } from './nova-interface.js';
 import { combinados } from './combinados.js';
 import { estrutura } from './estrutura.js';
@@ -76,6 +77,8 @@ const ROTAS = {
   historico: { f: historico, perfis: ['chefe'], titulo: 'Histórico' },
   // Indicadores das unidades (o chefe vê a própria unidade; o Diretor e o Administrador, também as pessoas).
   produtividade: { f: produtividade, perfis: ['diretor', 'apoio', 'administrador', 'chefe'], titulo: 'Produtividade' },
+  // Quantas vezes cada tela foi aberta (contagem anônima): a base para decidir o que simplificar.
+  uso: { f: (raiz, p) => usoTelas(raiz, p, { telas: telasParaAcompanhar() }), perfis: ['diretor', 'administrador'], titulo: 'Uso das telas' },
   // Perfil Plataforma: cria e administra as empresas (não vê dados de negócio).
   empresas: { f: empresas, perfis: ['plataforma'], titulo: 'Empresas' },
 };
@@ -83,6 +86,17 @@ const ROTAS = {
 // ---------- Nova interface (fase 1): quatro áreas, cada uma com as telas atuais em abas ----------
 // A área é só uma moldura: escolhe a aba (`?t=`), desenha a barra de abas e entrega o resto à tela de sempre, com os mesmos parâmetros.
 // As rotas antigas continuam valendo (links, tutorial, ficha da ação); o menu apenas marca a área a que elas pertencem.
+let telaReal = null; // a tela de dentro da área que está aberta (para a contagem de uso)
+let ultimaAbertura = ''; // a última tela contada: recarregar a mesma tela depois de gravar não conta de novo
+/** Avisa (uma vez por abertura) qual tela foi aberta e em que versão da interface. */
+function contarAbertura(tela, id) {
+  const chave = `${tela}|${id || ''}`;
+  if (chave === ultimaAbertura || !est.user || est.user.perfil === 'plataforma') return;
+  ultimaAbertura = chave;
+  if (/^[a-z][a-z0-9-]{0,39}$/.test(tela)) enviarUso(tela, novaAtiva() ? 'nova' : 'atual');
+}
+/** As telas que o relatório de uso acompanha: todas as da casca, menos as áreas (que só reúnem telas) e as que não são telas de uso. */
+const telasParaAcompanhar = () => Object.keys(ROTAS).filter((r) => !r.startsWith('a-') && !['acao', 'hoje', 'uso', 'empresas'].includes(r)).map((r) => ({ tela: r, titulo: ROTAS[r].titulo }));
 const novaAtiva = () => !!est.user && temNovaInterface(est.user.perfil) && novaInterfaceLigada();
 const rotaDisponivel = (rota) => { const d = ROTAS[rota]; return !!d && d.perfis.includes(est.user.perfil) && (!d.exige || !!d.exige()); };
 const abasAtuais = (area) => abasDaArea(area, rotaDisponivel, (r) => ROTAS[r].titulo);
@@ -106,6 +120,7 @@ function rotaDeArea(id) {
       raiz.innerHTML = `${nav || botaoNova ? `<div class="area-cab">${nav}${botaoNova}</div>` : ''}<div id="area-corpo"></div>`;
       if (botaoNova) on(raiz, 'click', '#nova-acao-global', () => abrirNovaAcao({ aoCriar: refresh }));
       // A tela interna recebe os mesmos parâmetros (`?i=equipe`, `?acao=ID`), sem o `t`, que é só da área.
+      telaReal = ativa.rota === 'hoje' ? 'inicio' : ativa.rota; // a contagem de uso fala das telas, não das áreas
       await ROTAS[ativa.rota].f($('#area-corpo', raiz), { id: undefined, q, refresh });
     },
   };
@@ -150,6 +165,7 @@ const ICONES = {
   avisos: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3c-2.5 0-4 2-4 4.5V11l-1.5 2.5h11L14 11V7.5C14 5 12.5 3 10 3z"/><path d="M8 15.5a2 2 0 0 0 4 0"/></svg>',
 };
 
+ICONES.uso = ICONES.produtividade;
 // Os ícones da versão nova são os das telas que cada área reúne.
 for (const a of TODAS_AS_AREAS) ICONES[a.id] = ICONES[a.icone];
 
@@ -170,6 +186,7 @@ const MENU_GESTAO = [
   ['estrutura', 'Configuração', '', 'diretor'],
   ['configuracao', 'Configuração', '', 'apoio'],
   ['avisos', 'Avisos', '', 'diretor'],
+  ['uso', 'Uso das telas', '', 'diretor'],
 ];
 const MENU_CHEFE = [
   ['#Hoje'],
@@ -535,6 +552,7 @@ async function renderizar() {
       document.body.classList.add('tv');
       app.innerHTML = '<div class="tv-app" id="tv"></div>';
       await def.f($('#tv'), { id, q, refresh });
+      contarAbertura(rota, id);
       return;
     }
     document.body.classList.remove('tv');
@@ -555,11 +573,13 @@ async function renderizar() {
       on($('#trilho'), 'click', '[data-alterar-reuniao]', () => abrirAlterarReuniao(est.boot, () => refresh()));
     }
     const conteudo = $('#conteudo');
+    telaReal = null;
     const novo = document.createElement('div');
     novo.id = 'conteudo';
     await def.f(novo, { id, q, refresh });
     if (minha !== gen) return;
     conteudo.replaceWith(novo);
+    contarAbertura(telaReal || rota, id);
     atualizarSelo();
     convidarSeNovo(); // primeira vez da pessoa: oferece o tutorial guiado (uma vez, sem bloquear a tela)
     // Endereço com `?acao=ID` (link compartilhado ou página recarregada): abre a ficha, a menos que já esteja aberta.

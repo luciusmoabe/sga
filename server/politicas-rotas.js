@@ -8,6 +8,7 @@
 
 const CONSULTA = [
   ['GET', /^\/bootstrap$/], ['GET', /^\/acoes$/], ['GET', /^\/acoes\/\d+$/], ['GET', /^\/tarefas$/],
+  ['POST', /^\/uso$/], // a contagem anônima de aberturas de tela (sem dado de ação nem de pessoa)
 ];
 
 // Plataforma: administra as empresas e não toca em dados de negócio.
@@ -28,6 +29,7 @@ const MEMBRO = [
   ['POST', /^\/acoes\/\d+\/(tempo|comentarios|vista|checklist|impedimentos|impedimentos\/\d+\/resolver|pontos-atencao|diario)$/],
   ['PATCH', /^\/acoes\/\d+\/(checklist|pontos-atencao)\/\d+$/],
   ['DELETE', /^\/acoes\/\d+\/(checklist|diario)\/\d+$/],
+  ['POST', /^\/uso$/], // a contagem anônima de aberturas de tela
 ];
 
 export const POLITICAS = {

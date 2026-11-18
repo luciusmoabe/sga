@@ -71,7 +71,7 @@ test('abasDaArea: só as rotas disponíveis, com o rótulo da aba ou o título d
   assert.deepEqual(todas.map((b) => b.rotulo), ['Minhas ações', 'Agenda', 'Diário', 'Direcionar', 'Ações dos Centros']);
   assert.deepEqual(abasDaArea(area(AREAS_CHEFE, 'a-acoes'), sem('direcionar', 'acoes-centros'), (r) => titulos[r]).map((b) => b.rota), ['minhas-acoes', 'agenda', 'diario']);
   assert.deepEqual(abasDaArea(area(AREAS_GESTAO, 'a-reuniao'), sem(), (r) => titulos[r]).map((b) => b.rotulo), ['Iniciar reunião', 'Pauta', 'Combinados', 'Reuniões e atas', 'Ajustes da reunião']);
-  assert.deepEqual(abasDaArea(AREA_CONFIGURACAO, sem('avisos'), (r) => titulos[r]).map((b) => b.rota), ['estrutura'], 'o Apoio não tem Avisos');
+  assert.deepEqual(abasDaArea(AREA_CONFIGURACAO, sem('avisos', 'uso'), (r) => titulos[r]).map((b) => b.rota), ['estrutura'], 'o Apoio não tem Avisos nem Uso das telas');
 });
 
 test('abaAtiva: a pedida se existir; senão a primeira; sem abas, nulo', () => {

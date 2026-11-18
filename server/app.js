@@ -13,6 +13,7 @@ import { rotasReunioesEquipe } from './reunioes-equipe.js';
 import { rotasSemana } from './rotas-semana.js';
 import { rotasReunioes } from './reunioes.js';
 import { rotasAvisos } from './rotas-avisos.js';
+import { rotasUso } from './rotas-uso.js';
 import { rotasPlataforma } from './rotas-plataforma.js';
 import { rotasProdutividade } from './rotas-produtividade.js';
 import { rotasCabecalhoAta } from './ata-cabecalho.js';
@@ -102,6 +103,7 @@ export function createApp(db, { auth = configurarAuth(), provedor, adminAuth, em
   rotasSemana(app, { ...ctx, SELECT_ACAO, acaoOut });
   rotasReunioes(app, { ...ctx, criarDiretriz });
   rotasAvisos(app, ctx);
+  rotasUso(app, ctx);
   rotasPlataforma(app, { ...ctx, auth, adminAuth: contas });
   rotasCabecalhoAta(app, ctx);
 
