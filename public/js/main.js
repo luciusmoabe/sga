@@ -8,6 +8,7 @@ import { historico, inicio, minhasAcoes } from './telas-chefe.js';
 import { agenda } from './agenda.js';
 import { gestao } from './gestao.js';
 import { diarioTela } from './diario-tela.js';
+import { AREAS_CHEFE, abaAtiva, abasDaArea, areaDaRota, definirNovaInterface, menuNovaInterface, novaInterfaceLigada, temNovaInterface } from './nova-interface.js';
 import { combinados } from './combinados.js';
 import { estrutura } from './estrutura.js';
 import { configuracaoAta } from './ata-cabecalho.js';
@@ -76,6 +77,39 @@ const ROTAS = {
   empresas: { f: empresas, perfis: ['plataforma'], titulo: 'Empresas' },
 };
 
+// ---------- Nova interface (fase 1): quatro áreas, cada uma com as telas atuais em abas ----------
+// A área é só uma moldura: escolhe a aba (`?t=`), desenha a barra de abas e entrega o resto à tela de sempre, com os mesmos parâmetros.
+// As rotas antigas continuam valendo (links, tutorial, ficha da ação); o menu apenas marca a área a que elas pertencem.
+const novaAtiva = () => !!est.user && temNovaInterface(est.user.perfil) && novaInterfaceLigada();
+const rotaDisponivel = (rota) => { const d = ROTAS[rota]; return !!d && d.perfis.includes(est.user.perfil) && (!d.exige || !!d.exige()); };
+const abasAtuais = (area) => abasDaArea(area, rotaDisponivel, (r) => ROTAS[r].titulo);
+function rotaDeArea(area) {
+  return {
+    perfis: ['chefe'],
+    get titulo() { return area.rotulo; },
+    // O trilho (reunião, prazo) acompanha a tela interna que está aberta.
+    get trilho() { const a = abaAtiva(abasAtuais(area), lerRota().q.get('t')); return !!(a && ROTAS[a.rota].trilho); },
+    exige: () => novaAtiva() && abasAtuais(area).length > 0,
+    f: async (raiz, { q, refresh }) => {
+      const abas = abasAtuais(area);
+      const ativa = abaAtiva(abas, q.get('t'));
+      raiz.innerHTML = `${abas.length > 1 ? `<nav class="abas-area" aria-label="${esc(area.rotulo)}">${abas.map((b) => `<a href="#/${area.id}?t=${b.rota}" ${b === ativa ? 'aria-current="page"' : ''}>${esc(b.rotulo)}</a>`).join('')}</nav>` : ''}<div id="area-corpo"></div>`;
+      // A tela interna recebe os mesmos parâmetros (`?i=equipe`, `?acao=ID`), sem o `t`, que é só da área.
+      await ROTAS[ativa.rota].f($('#area-corpo', raiz), { id: undefined, q, refresh });
+    },
+  };
+}
+for (const area of AREAS_CHEFE) ROTAS[area.id] = rotaDeArea(area);
+/** Com a versão nova ligada, o endereço de uma tela atual (`#/atualizacao?i=equipe`) leva à mesma tela dentro da sua área (`#/a-semana?t=atualizacao&i=equipe`). */
+function enderecoNaAreaNova(rota, q) {
+  const area = AREAS_CHEFE.find((a) => a.abas.some((b) => b.rota === rota));
+  if (!area || !rotaDisponivel(rota)) return null;
+  const params = new URLSearchParams(q);
+  if (area.abas.length > 1) params.set('t', rota);
+  const s = params.toString();
+  return `#/${area.id}${s ? `?${s}` : ''}`;
+}
+
 // Ícones do menu: SVG embutido (sem fonte de ícones nem CDN de terceiros), um traço simples por rota.
 // `stroke="currentColor"` acompanha a cor do link (normal, hover, selecionado) sem CSS à parte.
 const ICONES = {
@@ -102,6 +136,9 @@ const ICONES = {
   empresas: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 17.5v-12l7-2v14"/><path d="M10.5 8.5h6v9"/><line x1="6" y1="7.5" x2="8" y2="7.5"/><line x1="6" y1="10.5" x2="8" y2="10.5"/><line x1="6" y1="13.5" x2="8" y2="13.5"/><line x1="2.5" y1="17.5" x2="17.5" y2="17.5"/></svg>',
   avisos: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3c-2.5 0-4 2-4 4.5V11l-1.5 2.5h11L14 11V7.5C14 5 12.5 3 10 3z"/><path d="M8 15.5a2 2 0 0 0 4 0"/></svg>',
 };
+
+// Os ícones da versão nova são os das telas que cada área reúne.
+for (const a of AREAS_CHEFE) ICONES[a.id] = ICONES[a.icone];
 
 const MENU_GESTAO = [
   ['reuniao', 'Iniciar reunião', 'destaque'],
@@ -154,6 +191,7 @@ const rotuloDoPerfil = (u) => (u.suplente ? 'Suplente de seção' : PERFIL[u.per
 // Selos do menu, com a contagem que vem no bootstrap: pedidos de prazo pendentes (gestão) e ações recebidas
 // que a pessoa ainda não abriu (chefe e Diretoria Adjunta).
 const SELOS = { prazos: [['pedidos_pendentes'], 'pedidos de prazo pendentes'], 'minhas-acoes': [['acoes_novas', 'acoes_a_validar'], 'ações novas ou aguardando a sua validação'] };
+SELOS['a-acoes'] = SELOS['minhas-acoes']; // a área Ações da versão nova carrega o mesmo selo
 const selo = (rota) => (SELOS[rota] ? `<span class="selo oculto" data-selo="${rota}" title="${SELOS[rota][1]}"></span>` : '');
 const app = document.getElementById('app');
 
@@ -165,7 +203,7 @@ function lerRota() {
 }
 // Início da seção também é a tela de entrada do Administrador da Diretoria Adjunta (mesma tela do chefe).
 const casaDe = () => (est.user.perfil === 'plataforma' ? '#/empresas' : est.user.perfil === 'consulta' ? '#/acoes-centros' : est.user.perfil === 'membro' ? '#/minhas-acoes'
-  : est.user.perfil === 'chefe' || (est.user.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA) ? '#/inicio' : '#/painel');
+  : (est.user.perfil === 'chefe' && novaAtiva()) ? '#/a-hoje' : est.user.perfil === 'chefe' || (est.user.perfil === 'administrador' && est.boot?.secao?.tipo === DIRETORIA_ADJUNTA) ? '#/inicio' : '#/painel');
 
 
 // O bootstrap (usuário, semana, selo) muda pouco: reaproveitá-lo poupa uma ida ao servidor a cada troca de tela.
@@ -315,15 +353,16 @@ function casca() {
   // O chefe com a permissão do Diretor ganha "Ações dos Centros", logo abaixo das próprias ações.
   const chefe = lePorTodosOsCentros() ? MENU_CHEFE.flatMap((m) => (m[0] === 'minhas-acoes' ? [m, ['acoes-centros', `Ações ${dosPlural('centro')}`]] : [m])) : MENU_CHEFE;
   const base = u.perfil === 'chefe' ? (u.acesso_configuracao ? [...chefe, ['#Administração'], ['estrutura', 'Configuração']] : chefe) : u.perfil === 'administrador' ? MENU_ADMIN : u.perfil === 'consulta' ? menuConsulta() : u.perfil === 'membro' ? MENU_MEMBRO : u.perfil === 'plataforma' ? MENU_PLATAFORMA : MENU_GESTAO;
-  const menu = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['equipe', 'Minha equipe'], ['atualizacao', 'Minha atualização']] : []), ...base]
+  const menuAntigo = [...(daDiretoriaAdjunta ? [[`#${est.boot.secao.sigla || 'Diretoria Adjunta'}`], ['inicio', 'Início da seção'], ['minhas-acoes', 'Minhas ações'], ['equipe', 'Minha equipe'], ['atualizacao', 'Minha atualização']] : []), ...base]
     .filter((m) => !m[3] || m[3] === u.perfil).filter((m) => !(m[0].startsWith('#') && m[1] && m[1] !== u.perfil))
     .filter((m) => !(m[0] === 'direcionar' && u.perfil === 'chefe' && !est.boot?.secao?.tem_subsecoes)); // o chefe só direciona se tem subseções
+  const menu = novaAtiva() ? menuNovaInterface() : menuAntigo;
   app.innerHTML = `<div class="app${menuRecolhido() ? ' menu-recolhido' : ''}"><aside class="lateral">
     <div class="marca"><div class="marca-bloco"><img src="/imagens/logo-agilis.png" alt="Agilis" class="marca-logo"><img src="/imagens/favicon-32.png" alt="Agilis" class="marca-icone" width="32" height="32">${est.boot?.empresa ? `<div class="marca-empresa" title="${esc(est.boot.empresa.nome)}">${esc(est.boot.empresa.sigla || est.boot.empresa.nome)}</div>` : ''}</div><button type="button" class="menu-recolher" id="menu-recolher" aria-controls="menu-principal" aria-expanded="true" aria-label="Recolher menu" title="Recolher menu"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="12.5,4.5 7,10 12.5,15.5"/></svg></button></div>
     <nav class="menu" id="menu-principal" aria-label="Principal">${menu.map((m) => m[0].startsWith('#')
       ? `<div class="grupo"><b>${esc(m[0].slice(1))}</b></div>`
       : `<a href="#/${m[0]}" data-rota="${m[0]}" class="${m[2] === 'destaque' ? 'destaque' : ''}"><span class="menu-rotulo">${ICONES[m[0]] || ''}<span class="menu-texto">${esc(m[1])}</span></span>${selo(m[0])}</a>`).join('')}</nav>
-    <div class="usuario"><button type="button" class="usuario-mini" id="usuario-mini" aria-label="${esc(iniciais(u.nome))}, expandir o menu para ver a conta" title="Expandir o menu">${esc(iniciais(u.nome))}</button><div class="usuario-detalhe"><b>${esc(u.nome)}</b>${rotuloDoPerfil(u)}${est.boot?.secao?.tipo === DIRETORIA_ADJUNTA ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}<br><span class="usuario-acoes">${temTutorial(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="tutorial-guiado">Tutorial</button>' : ''}${recebeAvisos(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="avisos-celular">Avisos no celular</button>' : ''}${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
+    <div class="usuario"><button type="button" class="usuario-mini" id="usuario-mini" aria-label="${esc(iniciais(u.nome))}, expandir o menu para ver a conta" title="Expandir o menu">${esc(iniciais(u.nome))}</button><div class="usuario-detalhe"><b>${esc(u.nome)}</b>${rotuloDoPerfil(u)}${est.boot?.secao?.tipo === DIRETORIA_ADJUNTA ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}<br><span class="usuario-acoes">${temTutorial(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="tutorial-guiado">Tutorial</button>' : ''}${recebeAvisos(u.perfil) ? '<button class="btn btn-fantasma btn-mini" id="avisos-celular">Avisos no celular</button>' : ''}${sessao.modo === 'demo' ? '' : '<button class="btn btn-fantasma btn-mini" id="alterar-senha">Alterar senha</button>'}${temNovaInterface(u.perfil) ? `<button class="btn btn-fantasma btn-mini" id="alternar-interface">${novaAtiva() ? 'Voltar à versão atual' : 'Experimentar a versão nova'}</button>` : ''}<button class="btn btn-fantasma btn-mini" id="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button></span>
       <button class="btn btn-fantasma btn-mini oculto" id="instalar-app" style="margin-top:6px">Instalar aplicativo</button></div></div></aside>
     <main class="principal"><div id="trilho"></div><div id="conteudo"></div></main>
     ${cascaMovel(u, menu)}</div>`;
@@ -333,6 +372,7 @@ function casca() {
   $('#alterar-senha')?.addEventListener('click', () => abrirTrocaSenha());
   $('#avisos-celular')?.addEventListener('click', () => abrirAvisosNoCelular(u.id));
   $('#tutorial-guiado')?.addEventListener('click', (ev) => abrirTutorial(ev.currentTarget));
+  $('#alternar-interface')?.addEventListener('click', () => alternarInterface());
   iniciarLembretesDoApp(u.perfil); // lembretes da semana enquanto o app estiver aberto (sem agendador)
   if (recebeAvisos(u.perfil)) restaurarAvisos(u.id); // se a pessoa já ativou neste aparelho, religa em silêncio
   $('#sair').addEventListener('click', async () => {
@@ -363,7 +403,7 @@ const iniciais = (nome) => {
 };
 
 function cascaMovel(u, menu) {
-  const abas = ABAS_MOVEL[['chefe', 'consulta', 'membro', 'plataforma'].includes(u.perfil) ? u.perfil : 'gestao'];
+  const abas = novaAtiva() ? menuNovaInterface() : ABAS_MOVEL[['chefe', 'consulta', 'membro', 'plataforma'].includes(u.perfil) ? u.perfil : 'gestao'];
   const rotuloPerfil = `${rotuloDoPerfil(u)}${est.boot?.secao ? ` · ${esc(est.boot.secao.sigla || est.boot.secao.nome)}` : ''}`;
   return `<header class="topo-movel">
       <img src="/imagens/logo-agilis.png" alt="Agilis" class="topo-movel-logo">
@@ -384,6 +424,7 @@ function cascaMovel(u, menu) {
         ${sessao.modo === 'demo' ? '' : '<button type="button" class="btn btn-sec" data-conta="senha">Alterar senha</button>'}
         ${temTutorial(u.perfil) ? '<button type="button" class="btn btn-sec" data-conta="tutorial">Tutorial guiado</button>' : ''}
         ${recebeAvisos(u.perfil) ? '<button type="button" class="btn btn-sec" data-conta="avisos">Avisos no celular</button>' : ''}
+        ${temNovaInterface(u.perfil) ? `<button type="button" class="btn btn-sec" data-conta="interface">${novaAtiva() ? 'Voltar à versão atual' : 'Experimentar a versão nova'}</button>` : ''}
         <button type="button" class="btn btn-sec oculto" data-conta="instalar">Instalar aplicativo</button>
         <button type="button" class="btn btn-sec" data-conta="sair">${sessao.modo === 'demo' ? 'Trocar usuário' : 'Sair'}</button>
         <button type="button" class="btn btn-fantasma" data-fechar-mais>Fechar</button>
@@ -429,6 +470,7 @@ function ligarCascaMovel() {
   on(folha, 'click', '[data-conta="senha"]', () => { fechar(); abrirTrocaSenha(); });
   on(folha, 'click', '[data-conta="instalar"]', () => { fechar(); $('#instalar-app')?.click(); });
   on(folha, 'click', '[data-conta="tutorial"]', () => { fechar(); abrirTutorial(document.querySelector('.topo-movel-conta')); });
+  on(folha, 'click', '[data-conta="interface"]', () => { fechar(); alternarInterface(); });
   on(folha, 'click', '[data-conta="avisos"]', () => { fechar(); $('#avisos-celular')?.click(); });
   on(folha, 'click', '[data-conta="sair"]', () => { fechar(); $('#sair').click(); });
 }
@@ -440,6 +482,13 @@ function atualizarSelo() {
     s.textContent = n;
     s.classList.toggle('oculto', !n);
   }
+}
+
+/** Liga ou desliga a versão nova para esta pessoa (neste navegador) e volta à tela de entrada da versão escolhida. */
+function alternarInterface() {
+  definirNovaInterface(!novaInterfaceLigada());
+  location.hash = casaDe();
+  render();
 }
 
 let gen = 0;
@@ -464,6 +513,7 @@ async function renderizar() {
     const { rota, id, q } = lerRota();
     const def = ROTAS[rota];
     if (!def || !def.perfis.includes(est.user.perfil) || (def.exige && !def.exige())) { location.hash = casaDe(); return; }
+    if (novaAtiva()) { const destino = enderecoNaAreaNova(rota, q); if (destino) { location.replace(destino); return; } }
     document.title = `${def.titulo} · Agilis`;
     const refresh = async () => { const y = window.scrollY; await render(); window.scrollTo(0, y); };
     if (def.tv?.({ id })) {
@@ -474,16 +524,17 @@ async function renderizar() {
     }
     document.body.classList.remove('tv');
     // A casca muda com o perfil e com a consulta aos outros Centros (o menu ganha "Ações dos Centros").
-    const chaveCasca = `${est.user.perfil}:${lePorTodosOsCentros() ? 1 : 0}:${est.boot?.secao?.tem_subsecoes ? 1 : 0}`;
+    const chaveCasca = `${est.user.perfil}:${lePorTodosOsCentros() ? 1 : 0}:${est.boot?.secao?.tem_subsecoes ? 1 : 0}:${novaAtiva() ? 'n' : 'a'}`;
     if (!$('.app') || $('.app')?.dataset.perfil !== chaveCasca) { casca(); $('.app').dataset.perfil = chaveCasca; }
+    const areaAtual = novaAtiva() ? areaDaRota(AREAS_CHEFE, rota) : null;
     for (const a of document.querySelectorAll('.menu a, .abas-movel a, .folha-menu a')) {
-      const ativa = a.dataset.rota === rota || (rota === 'centro' && a.dataset.rota === 'painel') || (rota === 'pauta' && a.dataset.rota === 'painel') || (['reunioes-equipe', 'reuniao-equipe'].includes(rota) && a.dataset.rota === 'atas');
+      const ativa = (areaAtual ? a.dataset.rota === areaAtual : false) || a.dataset.rota === rota || (rota === 'centro' && a.dataset.rota === 'painel') || (rota === 'pauta' && a.dataset.rota === 'painel') || (['reunioes-equipe', 'reuniao-equipe'].includes(rota) && a.dataset.rota === 'atas');
       if (ativa) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     }
     // No celular, a aba "Mais" fica marcada quando a tela atual não tem aba própria.
     $('[data-aba-mais]')?.classList.toggle('ativa', !document.querySelector('.abas-movel a[aria-current]'));
     // O trilho completo (com a pista) só no Início e no Painel; nas demais telas, uma linha.
-    $('#trilho').innerHTML = def.trilho ? trilho(est.user.perfil === 'chefe' ? { ...est.boot, rotulo_trilho: 'Reunião da organização' } : est.boot, { compacto: rota !== 'painel' && rota !== 'inicio' }) + faixaPendente(est.boot, rota) : '';
+    $('#trilho').innerHTML = def.trilho ? trilho(est.user.perfil === 'chefe' ? { ...est.boot, rotulo_trilho: 'Reunião da organização' } : est.boot, { compacto: rota !== 'painel' && rota !== 'inicio' && rota !== 'a-hoje' }) + faixaPendente(est.boot, rota) : '';
     if (!$('#trilho').dataset.ligado) {
       $('#trilho').dataset.ligado = '1';
       on($('#trilho'), 'click', '[data-alterar-reuniao]', () => abrirAlterarReuniao(est.boot, () => refresh()));

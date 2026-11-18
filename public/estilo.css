@@ -1653,3 +1653,12 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
 .diario-tela-filtros .campo { margin: 0; min-width: 150px; }
 .diario-dia-titulo { margin: 14px 0 6px; font-size: .86rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-family: inherit; }
 @media (max-width: 760px) { .diario-tela-filtros .campo { flex: 1 1 100%; } }
+
+
+/* Nova interface (fase 1): abas de uma área, que reúnem as telas atuais */
+.abas-area { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 18px; border-bottom: 1px solid var(--line-str); }
+.abas-area a { display: flex; align-items: center; min-height: 44px; padding: 8px 16px; margin-bottom: -1px; font-weight: 600; color: var(--muted); text-decoration: none; border-bottom: 3px solid transparent; }
+.abas-area a:hover { color: var(--ink); background: var(--pale); }
+.abas-area a[aria-current="page"] { color: var(--green); border-bottom-color: var(--green); }
+.abas-area a:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+@media (max-width: 760px) { .abas-area { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; } .abas-area a { flex: 0 0 auto; } }
