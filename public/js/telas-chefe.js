@@ -78,7 +78,7 @@ const botoesRapidos = (a) => {
   const passos = { a_fazer: [['em_andamento', 'Iniciar']], em_andamento: [['concluida', 'Concluir'], ['bloqueada', 'Bloquear']], bloqueada: [['em_andamento', 'Retomar']] }[a.status] || [];
   return `${passos.filter(([s]) => TRANSICOES[a.status].includes(s) && (s !== 'concluida' || a.tempo_total > 0))
     .map(([s, rotulo]) => `<button type="button" class="btn btn-sec btn-mini" data-rapido-status="${s}">${rotulo}</button>`).join('')}
-    <button type="button" class="btn btn-fantasma btn-mini" data-rapido-tempo>Registrar tempo</button>
+    ${a.status === 'concluida' ? '' : '<button type="button" class="btn btn-fantasma btn-mini" data-rapido-tempo>Registrar tempo</button>'}
     <button type="button" class="btn btn-fantasma btn-mini" data-rapido-abrir>Abrir</button>`;
 };
 
@@ -420,8 +420,8 @@ export async function minhasAcoes(raiz) {
           <div class="segmento" role="group" aria-label="Status da ação">${Object.entries(STATUS).map(([k, v]) =>
             `<button type="button" data-status="${k}" aria-pressed="${a.status === k}" ${a.status !== k && !TRANSICOES[a.status].includes(k) ? 'disabled' : ''}>${v}</button>`).join('')}</div>
           <div class="tempo-linha"><span>Tempo gasto <b class="num">${fmtMin(a.tempo_total)}</b></span>
-            <input type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="minutos" aria-label="Minutos gastos" data-min>
-            <button type="button" class="btn btn-sec btn-mini" data-tempo aria-label="Registrar tempo gasto">Registrar</button></div>
+            ${a.status === 'concluida' ? '<span class="suave pequeno">Ação concluída: não recebe mais tempo nem andamento. Reabra para continuar.</span>' : `<input type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="minutos" aria-label="Minutos gastos" data-min>
+            <button type="button" class="btn btn-sec btn-mini" data-tempo aria-label="Registrar tempo gasto">Registrar</button>`}</div>
         ` : ''}
         <footer class="acao-rodape">
           ${a.pode_registrar_diario ? '<button type="button" class="btn btn-sec btn-mini" data-registrar>+ Registrar andamento</button>' : ''}

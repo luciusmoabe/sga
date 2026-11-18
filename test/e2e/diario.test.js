@@ -258,3 +258,35 @@ test('Fase 3: lembrete suave no Início e destaques do diário sugeridos nas obs
   assert.ok(obs.length <= 600);
   assert.deepEqual(p.errosDaPagina, []);
 });
+
+test('Membro com uma tarefa sua: registra sobre ela e exclui o próprio registro; não vê Excluir no de outra pessoa; ação concluída não recebe registro', async (t) => {
+  const prep = await preparar(t); if (!prep) return;
+  const { app, acao } = prep;
+  const PAULO = 32;
+  await app.db.prepare('insert into usuarios (id, nome, email, perfil, secao_id) values (?,?,?,?,?)').run(PAULO, 'Paulo Lima', 'paulo@exemplo.invalid', 'membro', 2);
+  const tp = (await app.api(CHEFE_COF, 'POST', `/acoes/${acao}/checklist`, { texto: 'Conferir o empenho do Paulo', responsavel_id: PAULO })).dados.id;
+  const dela = (await app.api(MARINA, 'POST', `/acoes/${acao}/diario`, { texto: 'Registro da Marina.' })).dados.registro.id;
+  const dele = (await app.api(PAULO, 'POST', `/acoes/${acao}/diario`, { texto: 'Conferi o empenho.', tarefa_id: tp })).dados.registro.id;
+
+  const p = await app.abrir(PAULO, `#/minhas-acoes?acao=${acao}`);
+  await p.waitForSelector('dialog[open] #diario-bloco', { timeout: 10000 });
+  assert.ok(await p.$(`dialog[open] [data-excluir-registro="${dele}"]`), 'o autor vê Excluir no próprio registro');
+  assert.equal(await p.$(`dialog[open] [data-excluir-registro="${dela}"]`), null, 'e não no registro de outra pessoa');
+  await p.click(`dialog[open] [data-excluir-registro="${dele}"]`);
+  await p.waitForFunction(() => document.querySelectorAll('dialog[open]').length === 2);
+  await p.evaluate(() => [...document.querySelectorAll('dialog[open]')].at(-1).querySelector('button[type="submit"]').click());
+  await p.waitForFunction(() => document.querySelectorAll('dialog[open] [data-excluir-registro]').length === 0 && !document.querySelector('dialog[open] #diario-bloco')?.innerText.includes('Conferi o empenho'), { timeout: 10000 });
+  assert.deepEqual((await app.api(CHEFE_COF, 'GET', `/acoes/${acao}`)).dados.diario.map((x) => x.id), [dela]);
+
+  // Depois de concluída, a tela não oferece registrar nem lançar tempo.
+  await app.api(CHEFE_COF, 'PATCH', `/acoes/${acao}`, { status: 'em_andamento' });
+  await app.api(CHEFE_COF, 'POST', `/acoes/${acao}/tempo`, { minutos: 30 });
+  await app.api(CHEFE_COF, 'PATCH', `/acoes/${acao}`, { status: 'concluida' });
+  const c = await app.abrir(CHEFE_COF, '#/minhas-acoes');
+  await c.waitForSelector('article.acao', { timeout: 10000 });
+  const cartao = await cartaoDe(c, 'Manifestar-se sobre o contrato');
+  assert.equal(await cartao.$('[data-registrar]'), null, 'sem "+ Registrar andamento"');
+  assert.equal(await cartao.$('[data-tempo]'), null, 'sem o campo de tempo');
+  assert.match(await cartao.evaluate((e) => e.innerText), /Ação concluída: não recebe mais tempo nem andamento/);
+  assert.deepEqual(p.errosDaPagina, []);
+});

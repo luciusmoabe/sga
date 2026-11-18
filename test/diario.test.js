@@ -236,3 +236,55 @@ test('GET /diario: "meu" traz o que a pessoa registrou; "secao" traz o de todos 
   assert.equal((await call(BRUNO_COF, 'GET', '/diario?de=xx&ate=2026-09-22')).status, 400);
   void db;
 });
+
+test('depois de concluída, a ação não recebe tempo nem registro no diário; reabrir libera de novo', async (t) => {
+  const { call, acao, t1, detalhe, registrar } = await demo(t);
+  assert.equal((await call(BRUNO_COF, 'PATCH', `/acoes/${acao}`, { status: 'em_andamento' })).status, 200);
+  assert.equal((await call(BRUNO_COF, 'POST', `/acoes/${acao}/tempo`, { minutos: 30 })).status, 201);
+  assert.equal((await registrar(BRUNO_COF, { texto: 'Antes de concluir.', tarefa_id: t1 })).status, 201);
+  assert.equal((await call(BRUNO_COF, 'PATCH', `/acoes/${acao}`, { status: 'concluida' })).status, 200);
+
+  const c = await detalhe(BRUNO_COF);
+  assert.equal(c.pode_registrar_diario, false, 'a tela não oferece o registro');
+  const tempo = await call(BRUNO_COF, 'POST', `/acoes/${acao}/tempo`, { minutos: 15 });
+  assert.equal(tempo.status, 409);
+  assert.match(tempo.data.erro, /Reabra a ação/);
+  const reg = await registrar(BRUNO_COF, { texto: 'Depois de concluir.' });
+  assert.equal(reg.status, 409);
+  assert.match(reg.data.erro, /Reabra a ação/);
+  assert.equal((await registrar(MARINA, { texto: 'A responsável também não.' })).status, 409);
+  assert.equal((await detalhe(BRUNO_COF)).tempo_total, 30, 'o tempo não mudou');
+  assert.equal((await detalhe(BRUNO_COF)).diario.length, 1, 'e o diário também não');
+
+  // Reabrir devolve a possibilidade de registrar.
+  assert.equal((await call(BRUNO_COF, 'PATCH', `/acoes/${acao}`, { status: 'em_andamento' })).status, 200);
+  assert.equal((await detalhe(BRUNO_COF)).pode_registrar_diario, true);
+  assert.equal((await call(BRUNO_COF, 'POST', `/acoes/${acao}/tempo`, { minutos: 15 })).status, 201);
+  assert.equal((await registrar(BRUNO_COF, { texto: 'Reaberta: volto a registrar.' })).status, 201);
+});
+
+test('quem registrou excluir o próprio registro numa tarefa sua, mesmo sem executar a ação; não exclui o de outra pessoa', async (t) => {
+  const { call, acao, t2, detalhe, registrar } = await demo(t);
+  // Paulo só tem a tarefa t2 nesta ação (não executa a ação). Marina é a responsável.
+  const dele = (await registrar(PAULO, { texto: 'Fiz a conferência do empenho.', tarefa_id: t2 })).data.registro.id;
+  const dela = (await registrar(MARINA, { texto: 'Registro da Marina.', tarefa_id: t2 })).data.registro.id;
+  const d = await detalhe(PAULO);
+  assert.equal(d.diario.find((x) => x.id === dele).pode_excluir, true, 'o autor vê o botão Excluir');
+  assert.equal(d.diario.find((x) => x.id === dela).pode_excluir, false, 'e não o do registro de outra pessoa');
+  assert.equal((await call(PAULO, 'DELETE', `/acoes/${acao}/diario/${dela}`)).status, 403);
+  assert.equal((await call(PAULO, 'DELETE', `/acoes/${acao}/diario/${dele}`)).status, 200);
+  assert.deepEqual((await detalhe(PAULO)).diario.map((x) => x.id), [dela]);
+  assert.equal((await detalhe(PAULO)).checklist.find((c) => c.id === t2).diario_total, 1, 'o contador da tarefa acompanha');
+});
+
+test('o autor ainda exclui o próprio registro depois de a ação ser concluída (só encerrada ou arquivada trava)', async (t) => {
+  const { db, call, acao, t2, registrar } = await demo(t);
+  const dele = (await registrar(PAULO, { texto: 'Registro do Paulo.', tarefa_id: t2 })).data.registro.id;
+  await call(BRUNO_COF, 'PATCH', `/acoes/${acao}`, { status: 'em_andamento' });
+  await call(BRUNO_COF, 'POST', `/acoes/${acao}/tempo`, { minutos: 20 });
+  assert.equal((await call(BRUNO_COF, 'PATCH', `/acoes/${acao}`, { status: 'concluida' })).status, 200);
+  assert.equal((await call(PAULO, 'DELETE', `/acoes/${acao}/diario/${dele}`)).status, 200);
+  const outro = (await db.prepare("insert into acao_diario (acao_id, tarefa_id, tipo, texto, data, criado_em, criado_por) values (?, ?, 'andamento', 'x', '2026-09-20', '2026-09-20T10:00:00', ?)").run(acao, t2, PAULO)).lastInsertRowid;
+  await db.prepare('update acoes set encerrada = 1 where id = ?').run(acao);
+  assert.equal((await call(PAULO, 'DELETE', `/acoes/${acao}/diario/${outro}`)).status, 409, 'encerrada: o histórico fica');
+});

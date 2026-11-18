@@ -12,7 +12,7 @@ Fonte: plano do projeto. **Não altere sem combinar com o Diretor.** Este texto 
 ## Ações
 
 - Status: `a_fazer`, `em_andamento`, `bloqueada`, `concluida`, com transições em `TRANSICOES`.
-- **Concluir exige tempo registrado maior que 0 minutos** (erro 422). O chefe registra tempo em minutos.
+- **Concluir exige tempo registrado maior que 0 minutos** (erro 422). O chefe registra tempo em minutos. **Depois de concluída, a ação não recebe mais tempo nem registro no diário** (409); para continuar a registrar, é preciso reabri-la.
 - Voltar para `a_fazer` exclui todo o tempo registrado e registra um comentário com a quantidade excluída.
 - Prioridades: alta, média, baixa. Esforço estimado: pequeno (1), médio (2), grande (3).
 - Toda ação nasce com prazo. Diretriz do Diretor vira uma ação por seção destinatária.

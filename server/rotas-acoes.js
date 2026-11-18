@@ -62,7 +62,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       if (user.perfil === 'membro' && !a.pode_executar) {
         const tem = comTarefaDele.has(a.id);
         // O membro com tarefa sua nesta ação registra o andamento dessa tarefa (a tela só oferece as dele).
-        return { ...a, ...SEM_PERMISSOES, pode_comentar: tem, pode_registrar_diario: tem && !a.encerrada && !a.arquivada, somente_leitura: !tem };
+        return { ...a, ...SEM_PERMISSOES, pode_comentar: tem, pode_registrar_diario: tem && !a.encerrada && !a.arquivada && a.status !== 'concluida', somente_leitura: !tem };
       }
       return { ...a, somente_leitura: false };
     });
@@ -337,7 +337,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       pode_mudar_demanda: autor && !a.encerrada && !a.diretriz_id,
       pode_excluir: autor && !a.encerrada && a.status !== 'concluida' && !a.apresentada_em,
       pode_executar: executa(user, a) && !a.encerrada,
-      pode_registrar_diario: executa(user, a) && !a.encerrada && !a.arquivada,
+      pode_registrar_diario: executa(user, a) && !a.encerrada && !a.arquivada && a.status !== 'concluida',
       pode_comentar: user.perfil !== 'consulta' && (user.perfil !== 'membro' || executa(user, a)),
       // Atribuir a ação a alguém da seção: o chefe e o Administrador, enquanto ela está em curso.
       pode_atribuir: (user.perfil === 'administrador' || (user.perfil === 'chefe' && !!user.secao_id)) && emCurso,
@@ -883,6 +883,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const a = await acaoVisivel(req.user, Number(req.params.id));
     await chefeGere(req.user, a);
     if (a.encerrada) throw falha(409, 'Esta ação já foi encerrada {topo:pelo}.');
+    if (a.status === 'concluida' || a.arquivada) throw falha(409, 'Ação concluída ou arquivada não recebe mais tempo. Reabra a ação para continuar a registrar.');
     const minutos = Number(req.body?.minutos);
     if (!Number.isInteger(minutos) || minutos <= 0 || minutos > 1440) throw falha(400, 'Informe o tempo em minutos inteiros, entre 1 e 1440.');
     const data = req.body?.data || hoje();
@@ -1055,7 +1056,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       if (!executor && !(req.user.perfil === 'membro' && tarefa?.responsavel_id === req.user.id)) {
         throw falha(403, 'Você registra o andamento das ações que executa; quem tem uma tarefa sua nela registra sobre essa tarefa.');
       }
-      if (a.encerrada || a.arquivada) throw falha(409, 'Ação arquivada ou encerrada não recebe registros no diário.');
+      if (a.encerrada || a.arquivada || a.status === 'concluida') throw falha(409, 'Ação concluída, encerrada ou arquivada não recebe registros no diário. Reabra a ação para continuar.');
       if (minutos !== null && !executor) throw falha(403, 'O tempo é registrado por quem executa a ação.');
       if (b.concluir_tarefa) {
         if (!tarefa) throw falha(400, 'Escolha a tarefa que será concluída.');
