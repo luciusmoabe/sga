@@ -39,6 +39,7 @@ test('o chefe adiciona, marca, edita e exclui itens do checklist; a contagem apa
   const i1 = await call(c1.id, 'POST', `/acoes/${id}/checklist`, { texto: 'Levantar os dados' });
   assert.equal(i1.status, 201);
   assert.equal(i1.data.concluido, false);
+  assert.equal(i1.data.pode_marcar, true, 'a tarefa recém-criada já volta com a marca de que pode ser marcada (a tela não a desenha desabilitada)');
   const i2 = await call(c1.id, 'POST', `/acoes/${id}/checklist`, { texto: 'Redigir a minuta' });
   assert.equal(i2.status, 201);
 
@@ -48,6 +49,7 @@ test('o chefe adiciona, marca, edita e exclui itens do checklist; a contagem apa
   assert.equal((await call(c2.id, 'DELETE', `/acoes/${id}/checklist/${i1.data.id}`)).status, 404);
 
   const marcado = await call(c1.id, 'PATCH', `/acoes/${id}/checklist/${i1.data.id}`, { concluido: true });
+  assert.equal(marcado.data.pode_marcar, true, 'e a tarefa marcada continua podendo ser desmarcada');
   assert.equal(marcado.status, 200);
   assert.equal(marcado.data.concluido, true);
   assert.ok(marcado.data.concluido_em);

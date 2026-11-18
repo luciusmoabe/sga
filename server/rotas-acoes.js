@@ -1169,7 +1169,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const iid = (await run('insert into acao_checklist (acao_id, texto, ordem, criado_em, criado_por, data, responsavel_id) values (?,?,?,?,?,?,?)',
       a.id, t, ordem, agoraISO(), req.user.id, data, responsavel)).lastInsertRowid;
     res.status(201);
-    return tarefa(iid);
+    // Quem chegou até aqui já passou pela conferência de permissão (e a ação não está encerrada): a tarefa devolvida pode ser marcada. Sem isto a
+    // tela a desenhava com a caixa desabilitada até a ficha ser reaberta.
+    return { ...(await tarefa(iid)), pode_marcar: true };
   }));
 
   app.patch('/api/acoes/:id/checklist/:iid', h(async (req) => {
@@ -1197,7 +1199,9 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       await run('update acao_checklist set concluido = ?, concluido_em = ?, concluido_por = ? where id = ?',
         c ? 1 : 0, c ? agoraISO() : null, c ? req.user.id : null, iid);
     }
-    return tarefa(iid);
+    // Quem chegou até aqui já passou pela conferência de permissão (e a ação não está encerrada): a tarefa devolvida pode ser marcada. Sem isto a
+    // tela a desenhava com a caixa desabilitada até a ficha ser reaberta.
+    return { ...(await tarefa(iid)), pode_marcar: true };
   }));
 
   app.delete('/api/acoes/:id/checklist/:iid', h(async (req) => {
