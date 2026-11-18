@@ -30,10 +30,10 @@ export const AREAS_CHEFE = [
     { rota: 'minhas-acoes', rotulo: 'Minhas ações' }, { rota: 'agenda' }, { rota: 'diario' }, { rota: 'direcionar', rotulo: 'Direcionar' }, { rota: 'acoes-centros' },
   ] },
   { id: 'a-semana', rotulo: 'Semana', icone: 'reunioes', extras: ['reunioes-equipe', 'reuniao-equipe'], abas: [
-    { rota: 'atualizacao', rotulo: 'Atualização' }, { rota: 'atas', rotulo: 'Reuniões e atas' }, { rota: 'combinados' }, { rota: 'reuniao-config', rotulo: 'Ajustes da reunião' },
+    { rota: 'atualizacao', rotulo: 'Atualização' }, { rota: 'historico', rotulo: 'Atualizações enviadas' }, { rota: 'atas', rotulo: 'Reuniões e atas' }, { rota: 'combinados' }, { rota: 'reuniao-config', rotulo: 'Ajustes da reunião' },
   ] },
   { id: 'a-equipe', rotulo: 'Equipe', icone: 'equipe', abas: [
-    { rota: 'equipe', rotulo: 'Minha equipe' }, { rota: 'gestao', rotulo: 'Painel de gestão' }, { rota: 'produtividade' }, { rota: 'historico' },
+    { rota: 'gestao', rotulo: 'Painel de gestão' }, { rota: 'equipe', rotulo: 'Minha equipe' }, { rota: 'produtividade' },
   ] },
 ];
 

@@ -53,6 +53,7 @@ test('areaDaRota: a área de cada tela atual, por perfil', () => {
   assert.equal(areaDaRota(AREAS_CHEFE, 'atualizacao'), 'a-semana');
   assert.equal(areaDaRota(AREAS_CHEFE, 'reunioes-equipe'), 'a-semana', 'o detalhe de uma reunião da equipe fica na Semana');
   assert.equal(areaDaRota(AREAS_CHEFE, 'produtividade'), 'a-equipe');
+  assert.equal(areaDaRota(AREAS_CHEFE, 'historico'), 'a-semana', 'as atualizações enviadas ficam na Semana');
   assert.equal(areaDaRota(AREAS_CHEFE, 'painel'), null, 'rota de outro perfil não pertence a nenhuma área');
   const g = [...AREAS_GESTAO, AREA_CONFIGURACAO];
   assert.equal(areaDaRota(g, 'painel'), 'a-painel');

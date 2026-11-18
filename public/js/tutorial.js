@@ -21,7 +21,7 @@ const menu = (rota) => [`.menu a[data-rota="${rota}"]`, `.abas-movel a[data-rota
   // Versão nova: as telas viraram abas das áreas. A aba é o alvo; se ela não existe na tela atual, vale o item da área, que o menu já traz.
   `.abas-area a[href$="t=${rota}"]`, ...AREA_DA_TELA[rota] ? [`.menu a[data-rota="${AREA_DA_TELA[rota]}"]`, `.abas-movel a[data-rota="${AREA_DA_TELA[rota]}"]`] : []];
 /** A área da versão nova a que cada tela pertence (para o destaque do menu). Vale para o chefe, o Diretor e o membro. */
-const AREA_DA_TELA = { agenda: 'a-acoes', diario: 'a-acoes', 'minhas-acoes': 'a-acoes', direcionar: 'a-acoes', atualizacao: 'a-semana', equipe: 'a-equipe', gestao: 'a-equipe', historico: 'a-equipe', acoes: 'a-acoes', prazos: 'a-acoes', painel: 'a-painel' };
+const AREA_DA_TELA = { agenda: 'a-acoes', diario: 'a-acoes', 'minhas-acoes': 'a-acoes', direcionar: 'a-acoes', atualizacao: 'a-semana', equipe: 'a-equipe', gestao: 'a-equipe', historico: 'a-semana', acoes: 'a-acoes', prazos: 'a-acoes', painel: 'a-painel' };
 const nova = () => !!est.user && temNovaInterface(est.user.perfil) && novaInterfaceLigada();
 const eh = (...perfis) => perfis.includes(est.user?.perfil);
 

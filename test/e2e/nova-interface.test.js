@@ -75,12 +75,12 @@ test('As quatro áreas abrem as telas de sempre em abas, e o endereço antigo le
 
   await p.click('.menu a[data-rota="a-semana"]');
   await p.waitForFunction(() => document.querySelector('.abas-area a[aria-current="page"]')?.textContent.trim() === 'Atualização', { timeout: 10000 });
-  assert.deepEqual(await abas(p), ['Atualização', 'Reuniões e atas', 'Combinados', 'Ajustes da reunião']);
+  assert.deepEqual(await abas(p), ['Atualização', 'Atualizações enviadas', 'Reuniões e atas', 'Combinados', 'Ajustes da reunião']);
   assert.equal(await areaAtiva(p), 'a-semana');
 
   await p.click('.menu a[data-rota="a-equipe"]');
-  await p.waitForFunction(() => document.querySelector('.abas-area a[aria-current="page"]')?.textContent.trim() === 'Minha equipe', { timeout: 10000 });
-  assert.deepEqual(await abas(p), ['Minha equipe', 'Painel de gestão', 'Produtividade', 'Histórico']);
+  await p.waitForFunction(() => document.querySelector('.abas-area a[aria-current="page"]')?.textContent.trim() === 'Painel de gestão', { timeout: 10000 });
+  assert.deepEqual(await abas(p), ['Painel de gestão', 'Minha equipe', 'Produtividade']);
 
   // O endereço de uma tela atual leva à mesma tela dentro da área, com os parâmetros (a instância da equipe).
   await p.evaluate(() => { location.hash = '#/combinados?i=equipe'; });
