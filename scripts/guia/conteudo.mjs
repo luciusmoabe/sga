@@ -49,13 +49,24 @@ export function conteudo(dirImagens) {
   <p>As telas ficam <b>agrupadas por assunto</b>. No computador, a <b>setinha</b> ao lado da logo <b>recolhe</b> o menu para uma coluna de ícones, que dá mais espaço à tela: passe o mouse sobre um ícone para ver o nome. Clique de novo (ou no círculo com as suas iniciais, embaixo) para expandir. O sistema lembra a sua escolha neste navegador. Embaixo do menu ficam o seu nome e o seu perfil; quem é suplente aparece como <b>Suplente de seção</b>.</p>
   ${fig('34-menu-recolhido', 'O menu recolhido: só os ícones, com o nome ao passar o mouse.')}
   <h2>A versão nova (opcional)</h2>
-  <p>O chefe, o Diretor, o Apoio e o membro podem ligar a <b>versão nova</b> com o botão <b>Experimentar a versão nova</b> (na barra lateral, junto de "Tutorial"; no celular, em <b>Mais</b>) e voltar quando quiserem, com <b>Voltar à versão atual</b>. A escolha vale para você, neste navegador. No lugar de muitos itens de menu, ficam poucas <b>áreas</b>, e cada tela de antes vira uma <b>aba</b> da sua área. As regras e os dados são os mesmos, e os links antigos continuam valendo.</p>
+  <p>O chefe, o Diretor, o Apoio, o Administrador e o membro podem ligar a <b>versão nova</b> com o botão <b>Experimentar a versão nova</b> (na barra lateral, junto de "Tutorial"; no celular, em <b>Mais</b>) e voltar quando quiserem, com <b>Voltar à versão atual</b>. A escolha vale para você, neste navegador. No lugar de muitos itens de menu, ficam poucas <b>áreas</b>, e cada tela de antes vira uma <b>aba</b> da sua área. As regras e os dados são os mesmos, e os links antigos continuam valendo.</p>
   <ul>
     <li><b>Chefe:</b> <i>Hoje</i>, <i>Ações</i>, <i>Semana</i> e <i>Equipe</i>.</li>
     <li><b>Diretor e Apoio:</b> <i>Painel</i> (com o que pede a sua decisão antes da reunião e o botão <b>Iniciar reunião</b>), <i>Ações</i>, <i>Reunião</i> e <i>Configuração</i>.</li>
     <li><b>Membro:</b> <i>Meu dia</i> e <i>Atas</i>.</li>
+    <li><b>Administrador:</b> a gestão inteira e, se está numa Diretoria Adjunta, também <i>Minha seção</i> (Início, Minhas ações, Atualização e Minha equipe).</li>
   </ul>
+  ${fig('36-nova-hoje', 'A versão nova do chefe: quatro áreas no menu e, em Hoje, a atualização da semana, o que precisa de você e como está a equipe.')}
+  ${fig('38-nova-painel', 'A versão nova do Diretor: o Painel com o que pede a decisão antes da reunião e o botão Iniciar reunião.')}
+  ${fig('39-nova-semana', 'Cada tela de antes vira uma aba da sua área (aqui, a Semana do chefe).')}
   <p>Há <b>um só botão Nova ação</b>, nas áreas de ações: ele pergunta para quem é a ação e abre o formulário certo. A <b>ficha da ação</b> mostra a situação com o <b>próximo passo sugerido</b>, as tarefas e uma só <b>linha do tempo</b>; o botão <b>Registrar</b> pergunta o que você quer registrar (andamento, impedimento, ponto de atenção ou comentário).</p>
+  ${fig('37-nova-ficha', 'A ficha da ação na versão nova: situação com o próximo passo, tarefas e uma só linha do tempo.')}
+  <h3>Regras que valem para todos</h3>
+  <ul>
+    <li><b>Aprovação em cadeia:</b> numa <b>demanda do Diretor</b> concluída por alguém da subseção, cada chefe do caminho aprova na sua vez, do mais próximo de quem executou para cima, e só depois o Diretor aceita. A ficha mostra "Aguardando a aprovação do chefe de …" e a etapa; só o chefe que está na vez vê o botão <b>Aprovar</b>.</li>
+    <li><b>Ação concluída não recebe mais tempo nem registro no diário.</b> Para continuar a registrar, reabra a ação.</li>
+    <li><b>Uso das telas:</b> o Diretor e o Administrador veem, em <i>Uso das telas</i>, quantas vezes cada tela foi aberta, por perfil e por versão, e quais ninguém abriu. A contagem é anônima: não mostra quem abriu.</li>
+  </ul>
   <h2>Tutorial guiado</h2>
   <p>O botão <b>Tutorial</b> (na barra lateral; no celular, em <b>Mais</b>) abre lições curtas para o seu perfil. O sistema leva você de tela em tela, <b>destaca</b> cada parte da interface e explica, passo a passo. Ele <b>só ensina</b>: nada do que você vê ali altera dados, então pode clicar sem medo.</p>
   ${passos('Na primeira vez, o sistema oferece o tutorial. Clique em <b>Começar</b> (ou em <b>Agora não</b>: o botão <b>Tutorial</b> continua disponível).', 'Escolha uma lição na lista. As já concluídas ficam marcadas.', 'Use <b>Próximo</b> e <b>Voltar</b>; <b>Esc</b> ou <b>Sair</b> fecham o tutorial quando quiser.')}

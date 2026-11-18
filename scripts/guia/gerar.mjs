@@ -92,6 +92,11 @@ const TELAS = [
   ['34-menu-recolhido', CHEFE_COF, '#/inicio', { largura: 1100, altura: 640, recorte: false, depois: (p) => p.click('#menu-recolher') }],
   // O tutorial só oferece o convite na primeira visita: esta captura é a única que o deixa aparecer e o abre na primeira lição.
   ['35-tutorial', CHEFE_COF, '#/inicio', { largura: 1280, altura: 760, recorte: false, convite: true, depois: async (p) => { await p.click('[data-tut="lista"]'); await esperar(400); await p.click('[data-tut="licao"][data-id="inicio"]'); await esperar(900); } }],
+  // A versão nova (opcional): cada captura liga a opção no navegador, como a pessoa faria pelo botão "Experimentar a versão nova".
+  ['36-nova-hoje', CHEFE_COF, '#/a-hoje', { nova: true, recorte: false, altura: 1000 }],
+  ['37-nova-ficha', CHEFE_COF, () => `#/a-acoes?t=minhas-acoes&acao=${ficha.id}`, { nova: true, altura: 1300 }],
+  ['38-nova-painel', DIRETOR, '#/a-painel', { nova: true, recorte: false, altura: 1000 }],
+  ['39-nova-semana', CHEFE_COF, '#/a-semana', { nova: true, recorte: false }],
   ['30-cel-inicio', CHEFE_COF, '#/inicio', { largura: 390, altura: 844, celular: true, recorte: false }],
   ['31-cel-acoes', CHEFE_COF, '#/minhas-acoes', { largura: 390, altura: 844, celular: true, recorte: false }],
   ['40-reuniao-conferencia', DIRETOR, '#/reuniao'],
@@ -108,7 +113,7 @@ let paginasNoNavegador = 0;
 const abrirNavegador = async () => { paginasNoNavegador = 0; navegador = await puppeteer.launch({ executablePath: chrome, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] }); };
 
 async function capturar([nome, uid, rota, o = {}]) {
-  const { largura = 1440, altura = 900, celular = false, recorte = true, permissoes = false, convite = false, depois } = o;
+  const { largura = 1440, altura = 900, celular = false, recorte = true, permissoes = false, convite = false, nova = false, depois } = o;
   for (let tentativa = 1; tentativa <= 3; tentativa++) {
     try {
       if (navegador && paginasNoNavegador >= 8) { await navegador.close(); navegador = null; }
@@ -117,14 +122,15 @@ async function capturar([nome, uid, rota, o = {}]) {
       if (permissoes) await navegador.defaultBrowserContext().overridePermissions(BASE, ['notifications']);
       const p = await navegador.newPage();
       await p.setViewport({ width: largura, height: altura, deviceScaleFactor: celular ? 2 : 1.6, isMobile: celular, hasTouch: celular });
-      if (uid) await p.evaluateOnNewDocument((u, comConvite) => {
+      if (uid) await p.evaluateOnNewDocument((u, comConvite, comNova) => {
         try {
           localStorage.setItem('agilis-usuario', String(u));
+          if (comNova) localStorage.setItem('agilis:nova-interface', '1'); else localStorage.removeItem('agilis:nova-interface'); // a versão nova só nas capturas dela
           // Sem isto, o convite do tutorial ("Primeira vez por aqui?") apareceria por cima de todas as telas.
           if (comConvite) localStorage.removeItem(`agilis:tutorial:${u}`); // o navegador pode ter guardado o "já convidado" de telas anteriores
           else localStorage.setItem(`agilis:tutorial:${u}`, '{"convidado":true}');
         } catch { /* segue */ }
-      }, uid, convite);
+      }, uid, convite, nova);
       await p.goto(`${BASE}/${typeof rota === 'function' ? rota() : rota}`, { waitUntil: 'networkidle0' });
       await esperar(1100);
       if (depois) { await depois(p); await esperar(700); }
