@@ -146,3 +146,28 @@ test('tutorial do Chefe que tem subseções: a lição "Direcionar às subseçõ
   assert.deepEqual(faltando, [], `passos sem destaque: ${faltando.join('; ')}`);
   assert.deepEqual(p.errosDaPagina, []);
 });
+
+test('tutorial na versão nova: as lições do chefe, do Diretor e do membro destacam algo em cada passo e não gravam nada', async (t) => {
+  const app = await subir(t); if (!app) return;
+  await app.db.prepare('insert into usuarios (id, nome, email, perfil, secao_id) values (?,?,?,?,?)').run(31, 'Marina Costa', 'marina@exemplo.invalid', 'membro', 2);
+  const antes = JSON.stringify((await app.api(CHEFE_COF, 'GET', '/acoes')).dados.map((a) => [a.id, a.status, a.prazo, a.movimentada_em]));
+  for (const [uid, rota, minimo] of [[CHEFE_COF, '#/a-hoje', 6], [DIRETOR, '#/a-painel', 5], [31, '#/a-meudia', 3]]) {
+    const p = await app.abrir(uid, rota.startsWith('#/a-p') ? '#/painel' : '#/inicio');
+    await p.waitForSelector('.menu a');
+    await p.evaluate((id) => { localStorage.setItem('agilis:nova-interface', '1'); localStorage.setItem(`agilis:tutorial:${id}`, JSON.stringify({ convidado: true })); }, uid);
+    await p.evaluate((r) => { location.hash = r; }, rota);
+    await p.reload({ waitUntil: 'networkidle0' });
+    await p.waitForSelector('.menu a');
+    const { semDestaque, vistos, ids } = await percorrerTudo(p);
+    assert.ok(ids.includes('versao-nova'), `${uid}: a lição da versão nova existe`);
+    assert.ok(ids.length >= minimo, `${uid}: lições (vieram ${ids.length})`);
+    assert.ok(vistos.some((v) => v.startsWith('versao-nova: Nova ação')), `${uid}: o passo do botão Nova ação foi mostrado`);
+    // Quadros que dependem de haver dados podem não existir nos dados de exemplo; o resto precisa ser destacado.
+    const faltando = semDestaque.filter((s) => !/Quadros de atenção|Aceite ao concluir/.test(s));
+    assert.deepEqual(faltando, [], `${uid}: passos sem destaque: ${faltando.join('; ')}`);
+    assert.deepEqual(p.errosDaPagina, []);
+    await p.close();
+  }
+  const depois = JSON.stringify((await app.api(CHEFE_COF, 'GET', '/acoes')).dados.map((a) => [a.id, a.status, a.prazo, a.movimentada_em]));
+  assert.equal(depois, antes, 'o tutorial só ensina: nada foi gravado');
+});

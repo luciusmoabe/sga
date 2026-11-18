@@ -8,6 +8,7 @@
 //   - Texto de passo é HTML escrito aqui (confiável); qualquer valor que venha do sistema passa por `esc()`.
 import { $, esc } from './ui.js';
 import { est } from './estado.js';
+import { areasDoPerfil, novaInterfaceLigada, temNovaInterface } from './nova-interface.js';
 import { OTopo, doTopo, oTopo } from './vocab.js';
 
 const PERFIS_COM_TUTORIAL = ['diretor', 'apoio', 'chefe', 'membro', 'consulta', 'administrador'];
@@ -16,13 +17,18 @@ export const temTutorial = (perfil) => PERFIS_COM_TUTORIAL.includes(perfil);
 // ---------------------------------------------------------------- conteúdo
 const visivel = (e) => !!e && e.getClientRects().length > 0;
 /** Alvos do menu: a lateral no computador, as abas no celular. */
-const menu = (rota) => [`.menu a[data-rota="${rota}"]`, `.abas-movel a[data-rota="${rota}"]`];
+const menu = (rota) => [`.menu a[data-rota="${rota}"]`, `.abas-movel a[data-rota="${rota}"]`,
+  // Versão nova: as telas viraram abas das áreas. A aba é o alvo; se ela não existe na tela atual, vale o item da área, que o menu já traz.
+  `.abas-area a[href$="t=${rota}"]`, ...AREA_DA_TELA[rota] ? [`.menu a[data-rota="${AREA_DA_TELA[rota]}"]`, `.abas-movel a[data-rota="${AREA_DA_TELA[rota]}"]`] : []];
+/** A área da versão nova a que cada tela pertence (para o destaque do menu). Vale para o chefe, o Diretor e o membro. */
+const AREA_DA_TELA = { agenda: 'a-acoes', diario: 'a-acoes', 'minhas-acoes': 'a-acoes', direcionar: 'a-acoes', atualizacao: 'a-semana', equipe: 'a-equipe', gestao: 'a-equipe', historico: 'a-equipe', acoes: 'a-acoes', prazos: 'a-acoes', painel: 'a-painel' };
+const nova = () => !!est.user && temNovaInterface(est.user.perfil) && novaInterfaceLigada();
 const eh = (...perfis) => perfis.includes(est.user?.perfil);
 
 const PASSOS_COMUNS = () => [
   { rota: null, titulo: 'Bem-vindo ao Agilis', texto: 'Este tutorial leva você pelas telas que o seu perfil usa. <b>Ele só mostra: não grava nem altera nada</b>, então pode clicar sem medo. Use <b>Próximo</b> para avançar e <b>Sair</b> quando quiser; você retoma depois.' },
   { rota: null, alvo: ['.menu', '.abas-movel'], titulo: 'O menu', texto: 'Aqui ficam as telas disponíveis para <b>o seu perfil</b>. Os pequenos números ao lado mostram pendências (ações novas, pedidos de prazo). No computador, a <b>setinha no topo</b> recolhe o menu para dar mais espaço à tela; o sistema lembra a sua escolha. Embaixo ficam o seu nome e o seu perfil' + (est.user?.suplente ? ' (você aparece como <b>Suplente de seção</b>: vê os mesmos dados que o titular da seção)' : '') + '.' },
-  { rota: null, alvo: menu('agenda'), clicar: true, titulo: 'Agora é com você', texto: 'Clique em <b>Agenda</b> para abrir o calendário.' },
+  { rota: null, alvo: menu('agenda'), clicar: true, titulo: 'Agora é com você', texto: nova() ? 'Clique em <b>Ações</b>, o item do menu onde a <b>Agenda</b> fica como aba.' : 'Clique em <b>Agenda</b> para abrir o calendário.' },
   { rota: '#/agenda', alvo: '#cal-grade', titulo: 'A Agenda', texto: 'Cada dia mostra o que vence nele: <b>círculo</b> = ação, <b>quadrado</b> = tarefa. A marca fica <b>vermelha</b> só quando aquela ação ou tarefa está atrasada. Clique num dia para ver os detalhes ao lado.' },
   { rota: '#/agenda', alvo: ['#cal-f-mostrar', '.cal-filtros-wrap'], titulo: 'Filtros da Agenda', texto: 'Escolha o que mostrar (tudo, só ações, só tarefas)' + (eh('chefe', 'membro', 'administrador') ? ' e use <b>Só o que é meu</b> para ver apenas o que está com você.' : ' e filtre por seção.') },
 ];
@@ -34,10 +40,21 @@ function licoes() {
   const gestao = eh('diretor', 'apoio', 'administrador');
   const L = [{ id: 'comeco', titulo: 'Conhecendo o Agilis', resumo: 'O menu, a Agenda e como o tutorial funciona.', passos: PASSOS_COMUNS() }];
 
+  // Versão nova: quem a liga ganha uma lição sobre as áreas do menu, as abas e o botão Nova ação.
+  if (nova()) {
+    const areaAcoes = eh('membro') ? '#/a-meudia' : '#/a-acoes';
+    L.push({ id: 'versao-nova', titulo: 'A versão nova', resumo: 'As áreas do menu, as abas e o botão Nova ação.', passos: [
+      { rota: null, alvo: ['.menu', '.abas-movel'], titulo: 'Poucas áreas', texto: 'O menu agora tem <b>poucas áreas</b>, e cada uma reúne as telas que antes ficavam soltas. O que você usava continua aqui, só que dentro da área certa.' },
+      { rota: areaAcoes, alvo: '.abas-area', titulo: 'As telas viraram abas', texto: 'Dentro de cada área, as <b>abas</b> trazem as telas de sempre. Os endereços e os links antigos continuam funcionando e levam à aba certa.' },
+      { rota: areaAcoes, alvo: ['#nova-acao-global'], titulo: 'Nova ação', texto: 'Há <b>um só botão</b> para criar ação. Ele pergunta para quem a ação é e abre o formulário certo' + (eh('diretor', 'apoio') ? ': para quem direciona, leva à aba <b>Direcionar</b>.' : '.') },
+      { rota: areaAcoes, alvo: ['.cartao.acao', '#lista-acoes', '.filtros-acoes', '.abas-area'], titulo: 'A ficha da ação', texto: 'Ao abrir uma ação, a ficha mostra a <b>situação</b> com o <b>próximo passo sugerido</b>, as <b>tarefas</b> e uma <b>linha do tempo</b> única. O botão <b>Registrar</b> pergunta o que você quer registrar: andamento, impedimento, ponto de atenção ou comentário.' },
+    ] });
+  }
+
   if (chefe) {
     L.push(
       { id: 'inicio', titulo: 'Sua semana, no Início', resumo: 'O que falta fazer antes da reunião.', passos: [
-        { rota: '#/inicio', alvo: '.sua-semana', titulo: 'Sua semana', texto: 'Este cartão lista <b>o que falta antes da reunião</b>: a atualização, ações atrasadas, ações novas, validações e o que vence antes da reunião (cada ação conta para a reunião em que será tratada, a da organização ou a da equipe, e o texto diz qual e quando). Cada item leva direto à tela que resolve.' },
+        { rota: '#/inicio', alvo: ['.sua-semana', '.hoje-atualizacao'], titulo: 'Sua semana', texto: 'Este cartão lista <b>o que falta antes da reunião</b>: a atualização, ações atrasadas, ações novas, validações e o que vence antes da reunião (cada ação conta para a reunião em que será tratada, a da organização ou a da equipe, e o texto diz qual e quando). Cada item leva direto à tela que resolve.' },
         { rota: '#/inicio', alvo: ['.atencao-quadro', '.novas-quadro'], titulo: 'Quadros de atenção', texto: 'Quando houver, aparecem aqui <b>Chegaram para você</b> (ações novas, inclusive as que um chefe de cima atribuiu a você; a sigla mostra de qual seção vieram), <b>Aguardando sua validação</b> e <b>Precisa de atenção</b> (atrasadas, sem movimento há 7 dias ou com prazo até a reunião em que serão tratadas: a <b>da organização</b>, para o que o Diretor demandou, ou a <b>da equipe</b>, para o que você trata com ela; o alerta diz qual e quando), com botões rápidos de status e tempo.' },
         { rota: '#/inicio', alvo: '#trilho', titulo: 'A linha do tempo da semana', texto: 'Mostra a reunião, o lembrete (sexta, 15h) e o <b>fechamento: segunda, 18h</b>. Da sexta até a reunião, uma <b>faixa amarela</b> no alto das telas lembra a atualização, e fica vermelha depois do prazo.' },
       ] },
@@ -58,13 +75,13 @@ function licoes() {
         { rota: '#/minhas-acoes', alvo: '.abas-lista', titulo: 'Suas ações', texto: 'As abas separam <b>Todas ativas</b>, <b>Abertas</b>, <b>Concluídas</b> e <b>Arquivadas</b>. Para ver o que foi arquivado, abra <b>Arquivadas</b>; o botão <b>Desarquivar</b>, no cartão, traz a ação de volta.' },
         { rota: '#/minhas-acoes', alvo: '.cartao.acao', titulo: 'Cada cartão é uma ação', texto: 'Os selos mostram o que importa (atrasada, nova, aguardando validação). Por aqui você muda o <b>status</b> e registra o <b>tempo em minutos</b>. <b>Concluir exige tempo maior que zero.</b>' },
         { rota: '#/minhas-acoes', alvo: '.cartao.acao', titulo: 'A ficha da ação', texto: 'Em <b>Detalhes e histórico</b> você cria <b>tarefas</b> (apoio, não mudam o status), registra <b>impedimentos</b> (quem trava a ação; ficam como histórico, não se apagam) e comenta. Em ação criada por outra pessoa, o prazo só muda pelo botão <b>Pedir novo prazo</b>.' },
-        { rota: '#/minhas-acoes', alvo: '#btn-nova-acao', titulo: 'Criar uma ação', texto: 'Informe título, prazo, prioridade e, se quiser, o <b>responsável</b> entre os membros da sua seção. A ação chega para ele como "nova". Quando ele concluir, você <b>valida</b> ou <b>devolve</b> com o motivo.' },
+        { rota: '#/minhas-acoes', alvo: ['#btn-nova-acao', '#nova-acao-global'], titulo: 'Criar uma ação', texto: 'Informe título, prazo, prioridade e, se quiser, o <b>responsável</b> entre os membros da sua seção. A ação chega para ele como "nova". Quando ele concluir, você <b>valida</b> ou <b>devolve</b> com o motivo.' },
       ] },
       ...(est.boot?.secao?.tem_subsecoes ? [{ id: 'direcionar', titulo: 'Direcionar às subseções', resumo: 'Demandar ações às subseções e aceitar o que elas concluem.', passos: [
         { rota: '#/direcionar', alvo: '#form-dir .escolha', titulo: 'Para quem', texto: 'Escolha <b>Todas as subseções</b> (as que ficam diretamente abaixo da sua seção) ou <b>Escolher subseções</b>. Cada uma recebe a sua própria ação, com acompanhamento individual.' },
         { rota: '#/direcionar', alvo: '#d-prazo', titulo: 'Prazo obrigatório', texto: 'Todo direcionamento tem prazo. Se as subseções já têm ações com o mesmo prazo, o sistema avisa antes de criar. A ação chega a elas como <b>nova</b>.' },
         { rota: '#/direcionar', alvo: '#form-dir + .cartao', titulo: 'Acompanhe', texto: 'Aqui você vê quem já abriu a ação (a <b>ciência</b> de cada subseção), o andamento e pode <b>Acrescentar seções</b> a um direcionamento já feito.' },
-        { rota: '#/inicio', alvo: ['.validar-quadro', '.sua-semana'], titulo: 'Aceite ao concluir', texto: 'Quando a subseção conclui, a ação volta a você em <b>Aguardando sua validação</b>: <b>Aceitar e encerrar</b> ou <b>Devolver para ajuste</b>, dizendo o que falta. Quem recebeu não edita nem arquiva a ação; para mudar o prazo, pede novo prazo.' },
+        { rota: '#/inicio', alvo: ['.validar-quadro', '.sua-semana', '.hoje-atualizacao'], titulo: 'Aceite ao concluir', texto: 'Quando a subseção conclui, a ação volta a você em <b>Aguardando sua validação</b>: <b>Aceitar e encerrar</b> ou <b>Devolver para ajuste</b>, dizendo o que falta. Quem recebeu não edita nem arquiva a ação; para mudar o prazo, pede novo prazo.' },
       ] }] : []),
       { id: 'atualizacao', titulo: 'Enviando a atualização semanal', resumo: 'O passo mais importante da semana.', passos: [
         { rota: '#/atualizacao', alvo: '.cabeca', titulo: 'Quando enviar', texto: 'O prazo é <b>segunda-feira, 18h</b>. Se passar, a seção aparece como pendente na reunião.' },
@@ -152,7 +169,22 @@ let painel = null, foco = null, lista = [], licao = null, passoI = 0, alvoEl = n
 let ouvintes = [];
 
 const caminho = (h) => (h || '').split('?')[0];
-const naRota = (r) => !r || caminho(location.hash) === caminho(r);
+/** Com a versão nova ligada, o endereço de uma tela atual vira o da mesma tela dentro da sua área (a casca faz esse redirecionamento sozinha). */
+const enderecoNaVersaoNova = (r) => {
+  const nome = (r || '').replace(/^#\//, '').split('?')[0].split('/')[0];
+  if (nome === 'inicio' && est.user.perfil === 'chefe') return '#/a-hoje';
+  const area = areasDoPerfil(est.user.perfil, { acessoConfiguracao: !!est.user.acesso_configuracao }).find((x) => x.id === nome || x.abas.some((b) => b.rota === nome));
+  if (!area) return null;
+  return area.id === nome || area.abas.length < 2 ? `#/${area.id}` : `#/${area.id}?t=${nome}`;
+};
+const naRota = (r) => {
+  if (!r) return true;
+  const dest = nova() ? enderecoNaVersaoNova(r) : null;
+  if (!dest) return caminho(location.hash) === caminho(r);
+  const [cam, qs] = dest.split('?');
+  const t = new URLSearchParams(qs || '').get('t');
+  return caminho(location.hash) === cam && (!t || new URLSearchParams(location.hash.split('?')[1] || '').get('t') === t);
+};
 const celular = () => window.matchMedia?.('(max-width: 760px)').matches;
 const achar = (alvo) => {
   for (const s of [].concat(alvo || [])) { const e = typeof s === 'function' ? s() : document.querySelector(s); if (visivel(e)) return e; }

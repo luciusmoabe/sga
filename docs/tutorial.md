@@ -42,6 +42,10 @@ Para consulta depois do treino, use o [Guia do usuário](guia-do-usuario.md) (re
 
 ---
 
+## A versão nova (opcional)
+
+Se você ligou a **versão nova** (botão **Experimentar a versão nova**, na barra lateral ou em **Mais**), o menu tem poucas **áreas** e cada tela de antes é uma **aba**: o chefe usa **Hoje, Ações, Semana e Equipe**; o Diretor e o Apoio, **Painel, Ações, Reunião e Configuração**; o membro, **Meu dia e Atas**. Há **um só botão Nova ação**, e a ficha da ação traz o **próximo passo sugerido**, as tarefas e uma **linha do tempo** única, com o botão **Registrar**. O tutorial guiado tem uma lição, **A versão nova**, que mostra isso, e as demais lições seguem as abas. Para voltar, use **Voltar à versão atual**.
+
 ## Trilha A: Chefe de seção
 
 **Meta:** em uma semana típica, você mantém suas ações em dia e envia a atualização semanal até segunda, 18h.
