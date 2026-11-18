@@ -1,7 +1,7 @@
 // Regras puras da interface do diário de progresso (public/js/diario.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TIPOS_DIARIO, agruparPorDia, contagens, ehLink, filtrarDiario, destaquesParaRelato, filtrarRegistros, haQuantoTempo, opcoesDosRegistros, resumir, resumoParaCopiar, rotuloDoDia, rotuloTipo, semRegistroRecente } from '../public/js/diario.js';
+import { TIPOS_DIARIO, agruparPorDia, contagens, ehLink, filtrarDiario, FONTES_DA_LINHA, contagemPorFonte, destaquesParaRelato, eventosDaLinhaDoTempo, filtrarEventos, filtrarRegistros, haQuantoTempo, opcoesDosRegistros, resumir, resumoParaCopiar, rotuloDoDia, rotuloTipo, semRegistroRecente } from '../public/js/diario.js';
 
 const HOJE = '2026-11-17';
 let n = 0;
@@ -132,4 +132,32 @@ test('semRegistroRecente: em andamento sem registro há 7 dias ou mais (ou nunca
   ];
   assert.deepEqual(semRegistroRecente(l, HOJE).map((x) => x.id), [1, 4]);
   assert.deepEqual(semRegistroRecente(l, HOJE, 3).map((x) => x.id), [1, 3, 4]);
+});
+
+const ev = (o = {}) => ({ id: ++n, criado_em: '2026-11-17T10:00:00', ...o });
+
+test('eventosDaLinhaDoTempo: junta as quatro fontes, do dia mais recente ao mais antigo, e no dia pela hora', () => {
+  const e = eventosDaLinhaDoTempo({
+    diario: [ev({ data: '2026-11-17', criado_em: '2026-11-17T09:00:00', texto: 'registro' }), ev({ data: '2026-11-12', criado_em: '2026-11-17T08:00:00', texto: 'antigo, lançado depois' })],
+    impedimentos: [ev({ criado_em: '2026-11-17T14:00:00', descricao: 'trava' })],
+    pontos: [ev({ criado_em: '2026-11-16T10:00:00', descricao: 'atenção' })],
+    comentarios: [ev({ criado_em: '2026-11-17T11:00:00', texto: 'conversa' })],
+  });
+  assert.deepEqual(e.map((x) => x.fonte), ['impedimento', 'comentario', 'registro', 'ponto', 'registro']);
+  assert.deepEqual(e.map((x) => x.data), ['2026-11-17', '2026-11-17', '2026-11-17', '2026-11-16', '2026-11-12'], 'o registro vale pelo dia do trabalho, não pelo dia em que foi lançado');
+  assert.deepEqual(eventosDaLinhaDoTempo({}), []);
+});
+
+test('filtrarEventos e contagemPorFonte: por fonte e por tarefa (a tarefa só existe no diário)', () => {
+  const e = eventosDaLinhaDoTempo({
+    diario: [ev({ data: '2026-11-17', tipo: 'andamento', tarefa_id: 7, tarefa_nome: 'Minuta' }), ev({ data: '2026-11-17', tipo: 'entrega', tarefa_id: null, tarefa_nome: null })],
+    impedimentos: [ev({})], comentarios: [ev({}), ev({})],
+  });
+  assert.deepEqual(contagemPorFonte(e), { registro: 2, impedimento: 1, ponto: 0, comentario: 2 });
+  assert.equal(filtrarEventos(e, {}).length, 5);
+  assert.equal(filtrarEventos(e, { fonte: 'comentario' }).length, 2);
+  assert.equal(filtrarEventos(e, { tarefa: '7' }).length, 1, 'escolher uma tarefa mostra só os registros dela');
+  assert.equal(filtrarEventos(e, { tarefa: 'geral' }).length, 1);
+  assert.equal(filtrarEventos(e, { fonte: 'impedimento', tarefa: '7' }).length, 0, 'impedimento não aponta tarefa');
+  assert.deepEqual(FONTES_DA_LINHA.map(([v]) => v), ['registro', 'impedimento', 'ponto', 'comentario']);
 });

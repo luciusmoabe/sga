@@ -103,6 +103,8 @@ test('Chefe: registra no cartão apontando a tarefa e concluindo-a; vê o diári
   await enviar(p);
   await p.waitForFunction(() => /Diário de progresso \(3\)/.test(document.querySelector('dialog[open]')?.innerText || ''), { timeout: 8000 });
   assert.equal(await p.$$eval('#diario-bloco .pilula', (ps) => ps.filter((x) => x.textContent.trim() === 'Retificado').length), 1);
+  await pausa(600);
+  assert.equal(await p.evaluate(() => document.querySelectorAll('dialog[open]').length), 1, 'depois de registrar, há uma só ficha aberta (não duas empilhadas)');
   assert.deepEqual(p.errosDaPagina, []);
 });
 

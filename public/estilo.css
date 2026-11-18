@@ -1662,3 +1662,8 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
 .abas-area a[aria-current="page"] { color: var(--green); border-bottom-color: var(--green); }
 .abas-area a:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
 @media (max-width: 760px) { .abas-area { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; } .abas-area a { flex: 0 0 auto; } }
+
+/* Ficha da ação, versão nova: o botão "Registrar" pergunta o tipo antes de abrir o formulário */
+.lt-escolha { display: grid; gap: 8px; }
+.lt-escolha .btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; min-height: 56px; }
+.lt-escolha .btn b { font-weight: 700; }

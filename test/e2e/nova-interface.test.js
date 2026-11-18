@@ -190,3 +190,78 @@ test('Diretor: quatro áreas, Reunião em destaque, abas das telas de sempre e e
   await p.waitForSelector('.menu a[data-rota="produtividade"]');
   assert.ok((await p.$$('.menu a')).length >= 10);
 });
+
+test('Ficha da ação na versão nova: situação, tarefas e uma só linha do tempo, com um botão Registrar que pergunta o tipo', async (t) => {
+  const app = await subir(t); if (!app) return;
+  const axe = fs.readFileSync(app.caminhoAxe, 'utf8');
+  await app.db.prepare('insert into usuarios (id, nome, email, perfil, secao_id) values (?,?,?,?,?)').run(31, 'Marina Costa', 'marina@exemplo.invalid', 'membro', 2);
+  const acao = (await app.api(CHEFE_COF, 'POST', '/acoes', { titulo: 'Manifestar-se sobre o contrato', prazo: '2026-12-31', responsavel_id: 31 })).dados.id;
+  const t1 = (await app.api(CHEFE_COF, 'POST', `/acoes/${acao}/checklist`, { texto: 'Minuta do ofício' })).dados.id;
+  await app.api(CHEFE_COF, 'POST', `/acoes/${acao}/diario`, { texto: 'Minuta enviada ao jurídico.', tarefa_id: t1, tipo: 'entrega', minutos: 30 });
+  await app.api(CHEFE_COF, 'POST', `/acoes/${acao}/impedimentos`, { descricao: 'Falta o número do processo no SEI.', critico: true });
+  await app.api(CHEFE_COF, 'POST', `/acoes/${acao}/pontos-atencao`, { descricao: 'Prazo apertado com o jurídico.' });
+  await app.api(CHEFE_COF, 'POST', `/acoes/${acao}/comentarios`, { texto: 'Podemos antecipar a reunião com o jurídico?' });
+
+  // Versão atual: a ficha de sempre, com as seções separadas.
+  const antes = await app.abrir(CHEFE_COF, `#/minhas-acoes?acao=${acao}`);
+  await antes.waitForSelector('dialog[open] #diario-bloco', { timeout: 10000 });
+  assert.equal(await antes.$('dialog[open] #linha-tempo'), null);
+  await antes.close();
+
+  const p = await abrirNova(app, `#/a-acoes?t=minhas-acoes&acao=${acao}`);
+  await p.waitForSelector('dialog[open] #linha-tempo', { timeout: 10000 });
+  assert.equal(await p.$('dialog[open] #diario-bloco'), null, 'não há mais o bloco de diário separado');
+  const titulos = await p.$$eval('dialog[open] h3', (hs) => hs.map((h) => h.textContent.replace(/\s+/g, ' ').trim()));
+  assert.ok(titulos.indexOf('Mais detalhes') < titulos.findIndex((x) => x.startsWith('Tarefas')), 'detalhes antes das tarefas');
+  assert.ok(titulos.findIndex((x) => x.startsWith('Tarefas')) < titulos.indexOf('Linha do tempo'), 'tarefas antes da linha do tempo');
+  assert.equal(titulos.filter((x) => /^(Impedimentos|Pontos de atenção|Comentários|Diário de progresso)/.test(x)).length, 0, 'sem as quatro seções antigas');
+
+  // Uma só lista com as quatro fontes, e os filtros por fonte.
+  const d0 = (await app.api(CHEFE_COF, 'GET', `/acoes/${acao}`)).dados;
+  assert.equal((await p.$$('#lt-bloco .diario-item, #lt-bloco .impedimento, #lt-bloco .comentario')).length, d0.diario.length + d0.impedimentos.length + d0.pontos_atencao.length + d0.comentarios.length, 'todas as fontes numa só lista');
+  const lista = await p.$eval('#lt-bloco', (e) => e.innerText);
+  for (const trecho of ['Minuta enviada ao jurídico', 'Falta o número do processo', 'Prazo apertado', 'Podemos antecipar a reunião']) assert.match(lista, new RegExp(trecho));
+  assert.deepEqual(await violacoes(p, axe), [], 'a ficha nova não tem violações de acessibilidade');
+  await p.click('[data-lt-fonte="comentario"]');
+  assert.equal((await p.$$('#lt-bloco .comentario')).length, d0.comentarios.length);
+  assert.equal((await p.$$('#lt-bloco .impedimento')).length, 0);
+  await p.click('[data-lt-fonte=""]');
+  await p.select('#lt-tarefa', String(t1));
+  assert.equal((await p.$$('#lt-bloco .diario-item')).length, 1, 'escolher a tarefa mostra só os registros dela');
+  await p.select('#lt-tarefa', '');
+
+  // O botão Registrar pergunta o tipo e abre o formulário certo.
+  await p.click('[data-registrar-escolher]');
+  await p.waitForSelector('[data-escolha="impedimento"]');
+  assert.deepEqual(await p.$$eval('[data-escolha]', (bs) => bs.map((b) => b.dataset.escolha)), ['registro', 'impedimento', 'ponto', 'comentario']);
+  await p.click('[data-escolha="registro"]');
+  await p.waitForSelector('dialog[open] #dr-texto');
+  await p.type('#dr-texto', 'Segundo registro pela linha do tempo.');
+  await p.evaluate(() => document.querySelector('#dr-texto').closest('dialog').querySelector('button[type="submit"]').click());
+  await p.waitForFunction(() => document.querySelector('dialog[open] #lt-bloco')?.innerText.includes('Segundo registro pela linha do tempo.'), { timeout: 10000 });
+  assert.equal((await app.api(CHEFE_COF, 'GET', `/acoes/${acao}`)).dados.diario.length, 2);
+  await pausa(600);
+  assert.equal(await p.evaluate(() => document.querySelectorAll('dialog[open]').length), 1, 'depois de registrar, há uma só ficha aberta (não duas empilhadas)');
+
+  await p.click('[data-registrar-escolher]');
+  await p.waitForSelector('[data-escolha="impedimento"]');
+  await p.click('[data-escolha="impedimento"]');
+  await p.waitForSelector('dialog[open] [name="descricao"], dialog[open] #imp-desc', { timeout: 8000 });
+  assert.ok(await p.$('dialog[open] form'), 'o formulário de impedimento abriu');
+  await p.keyboard.press('Escape');
+  await pausa(500);
+
+  await p.click('[data-registrar-escolher]');
+  await p.waitForSelector('[data-escolha="comentario"]');
+  await p.click('[data-escolha="comentario"]');
+  await p.waitForFunction(() => document.activeElement?.id === 'novo-coment', { timeout: 5000 });
+  assert.deepEqual(p.errosDaPagina, []);
+
+  // Excluir um registro e resolver um impedimento continuam funcionando dentro da linha do tempo.
+  await p.click('[data-excluir-registro]');
+  await p.waitForFunction(() => document.querySelectorAll('dialog[open]').length === 2);
+  await p.evaluate(() => [...document.querySelectorAll('dialog[open]')].at(-1).querySelector('button[type="submit"]').click());
+  await p.waitForFunction(() => document.querySelector('dialog[open] #lt-bloco') && document.querySelectorAll('dialog[open] #lt-bloco .diario-item').length === 1, { timeout: 10000 });
+  assert.equal((await app.api(CHEFE_COF, 'GET', `/acoes/${acao}`)).dados.diario.length, 1);
+  assert.deepEqual(p.errosDaPagina, []);
+});

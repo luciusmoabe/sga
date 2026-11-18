@@ -7,7 +7,8 @@ import { abrirForm, br, confirmar, dataHora, esc, fmtMin, on, pilulaStatus, PRIO
 /** Avisa a casca que as contagens dos selos do menu mudaram (ex.: ação nova aberta). */
 export const selosMudaram = () => window.dispatchEvent(new Event('sgc:selos'));
 import { ROTULO_ESFORCO, TIPOS_DE_DIRETRIZ_GERAL, porDataDaTarefa } from './regras.js';
-import { TIPOS_DIARIO, agruparPorDia, contagens, ehLink, filtrarDiario, resumir, rotuloDoDia, rotuloTipo } from './diario.js';
+import { FONTES_DA_LINHA, TIPOS_DIARIO, agruparPorDia, contagemPorFonte, contagens, ehLink, eventosDaLinhaDoTempo, filtrarDiario, filtrarEventos, resumir, rotuloDoDia, rotuloTipo } from './diario.js';
+import { novaInterfaceLigada, temNovaInterface } from './nova-interface.js';
 
 // ---------- Impedimentos (formulários usados também pela atualização semanal e por Minhas ações) ----------
 /** Ação em que ainda faz sentido registrar impedimento. */
@@ -179,6 +180,53 @@ const diarioBlocoHTML = (a, filtro) => {
       <h4>${esc(rotuloDoDia(g.data, hoje))}</h4>${g.registros.map((r) => diarioItemHTML(r, pode)).join('')}</section>`).join('')
     : todos.length ? '<p class="suave pequeno">Nenhum registro com esses filtros.</p>' : '<p class="suave pequeno">Nenhum registro no diário ainda.</p>'}`;
 };
+
+// ---------- Linha do tempo (versão nova da ficha): registros, impedimentos, pontos de atenção e comentários numa só lista ----------
+// Cada item é desenhado pelo mesmo código de antes, com os mesmos botões; só a ordem e o agrupamento por dia mudam.
+const eventoHTML = (e, a, podeImp) => {
+  if (e.fonte === 'registro') return diarioItemHTML(e.item, !!a.pode_registrar_diario);
+  if (e.fonte === 'impedimento') return impedimentoHTML(e.item, podeImp);
+  if (e.fonte === 'ponto') return pontoAtencaoHTML(e.item, podeImp && !a.encerrada && !a.arquivada);
+  return `<div class="comentario"><span class="pilula">Comentário</span> <b>${esc(e.item.usuario_nome || '')}</b>
+    <span class="suave pequeno"> · ${dataHora(e.item.criado_em)}</span><br>${esc(e.item.texto)}</div>`;
+};
+/** A lista com os filtros por fonte e por tarefa (só o que existe). `filtro` vive no diálogo da ficha. */
+const linhaDoTempoListaHTML = (a, filtro, podeImp) => {
+  const todos = eventosDaLinhaDoTempo({ diario: a.diario, impedimentos: a.impedimentos, pontos: a.pontos_atencao, comentarios: a.comentarios });
+  const n = contagemPorFonte(todos);
+  const fontes = FONTES_DA_LINHA.filter(([v]) => n[v]);
+  const c = contagens(a.diario || []);
+  const temTarefas = c.porTarefa.size > 0 || c.excluidas > 0;
+  const lista = filtrarEventos(todos, filtro);
+  const hoje = est.boot.hoje;
+  const ativoTudo = !filtro.fonte && !filtro.tarefa;
+  return `
+    ${todos.length > 1 && (fontes.length > 1 || temTarefas) ? `<div class="diario-filtros">
+      ${fontes.length > 1 ? `<div class="ma-atalhos" role="group" aria-label="Filtrar a linha do tempo"><button type="button" class="ma-chip" data-lt-fonte="" aria-pressed="${ativoTudo}">Tudo <b class="num">${todos.length}</b></button>${fontes.map(([v, r]) =>
+        `<button type="button" class="ma-chip" data-lt-fonte="${v}" aria-pressed="${filtro.fonte === v && !filtro.tarefa}">${r} <b class="num">${n[v]}</b></button>`).join('')}</div>` : ''}
+      ${temTarefas ? `<div class="campo"><label for="lt-tarefa">Tarefa</label><select id="lt-tarefa"><option value="">Todas as tarefas</option>
+        ${c.geral ? `<option value="geral"${filtro.tarefa === 'geral' ? ' selected' : ''}>Geral da ação (${c.geral})</option>` : ''}
+        ${[...c.porTarefa].map(([id, x]) => `<option value="${id}"${String(filtro.tarefa) === String(id) ? ' selected' : ''}>${esc(x.nome)} (${x.n})</option>`).join('')}
+        ${c.excluidas ? `<option value="excluida"${filtro.tarefa === 'excluida' ? ' selected' : ''}>Tarefas excluídas (${c.excluidas})</option>` : ''}</select></div>` : ''}
+    </div>` : ''}
+    ${lista.length ? agruparPorDia(lista).map((g) => `<section class="diario-dia" aria-label="${esc(rotuloDoDia(g.data, hoje))}">
+      <h4>${esc(rotuloDoDia(g.data, hoje))}</h4>${g.registros.map((e) => eventoHTML(e, a, podeImp)).join('')}</section>`).join('')
+    : todos.length ? '<p class="suave pequeno">Nada com esses filtros.</p>' : '<p class="suave pequeno">Nada registrado ainda.</p>'}`;
+};
+/** O que a pessoa pode registrar nesta ação (uma escolha só: o tipo vem antes do formulário). */
+const opcoesDeRegistro = (a, { leitura, podeImp }) => [
+  a.pode_registrar_diario && { id: 'registro', rotulo: 'Andamento, entrega ou observação', dica: 'O que foi feito, com a tarefa e o tempo, se quiser.' },
+  aceitaImpedimento(a) && podeImp && { id: 'impedimento', rotulo: 'Impedimento', dica: 'Algo trava a ação. Um impedimento crítico deixa a seção em vermelho.' },
+  podeImp && !a.encerrada && !a.arquivada && { id: 'ponto', rotulo: 'Ponto de atenção', dica: 'Algo que merece atenção, sem travar a ação.' },
+  !leitura && a.pode_comentar && { id: 'comentario', rotulo: 'Comentário', dica: 'Conversa sobre a ação.' },
+].filter(Boolean);
+const linhaDoTempoSecaoHTML = (a, filtro, { leitura, podeImp }) => `
+  <section id="linha-tempo" aria-labelledby="lt-titulo">
+    <div class="linha entre" style="align-items:center;margin-top:12px"><h3 id="lt-titulo" style="margin:0">Linha do tempo</h3>
+      ${opcoesDeRegistro(a, { leitura, podeImp }).length ? '<button type="button" class="btn btn-primario btn-mini" data-registrar-escolher>Registrar</button>' : ''}</div>
+    ${leitura || !a.pode_comentar ? '' : '<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>'}
+    <div id="lt-bloco">${linhaDoTempoListaHTML(a, filtro, podeImp)}</div>
+  </section>`;
 
 // ---------- Tarefas da ação (apoio ao chefe; quem registra tempo e muda status também mexe aqui) ----------
 /** Quem executa a ação (o chefe da seção, o Administrador e o membro a quem ela foi atribuída ou que a criou) cria, edita
@@ -428,6 +476,7 @@ const validacaoHTML = (a) => {
 // continuar na mesma ação. Fechar a ficha tira o parâmetro. `#/acao/ID` é o link neutro, que cada perfil leva à sua lista.
 let acaoAberta = null;   // id da ficha aberta agora
 let reabrindo = false;   // a ficha fecha e reabre sozinha ao recarregar; a URL não pode piscar
+let fichaAtual = 0;       // número da ficha que está valendo: o fechamento de uma ficha antiga (o evento chega depois) não apaga o endereço da nova
 export const acaoEstaAberta = () => acaoAberta !== null;
 const urlComAcao = (id) => {
   const [caminho, qs = ''] = (location.hash || '#/').slice(1).split('?');
@@ -454,7 +503,7 @@ const secaoRecolhivel = (titulo, quantidade, html, aberta) => `
 
 export async function abrirAcao(id, aoMudar) {
   const a = await get(`/acoes/${id}`);
-  const diarioFiltro = { tipo: '', tarefa: '' }; // filtros do diário (só enquanto a ficha está aberta)
+  const diarioFiltro = { tipo: '', tarefa: '', fonte: '' }; // filtros do diário e da linha do tempo (só enquanto a ficha está aberta)
   // Quem executa a ação escolhe, na lista de responsáveis possíveis, o responsável de cada tarefa; para os demais, vazia.
   const responsaveis = a.pode_executar ? await get(`/acoes/${id}/responsaveis`).catch(() => []) : [];
   // Ação recebida e ainda não aberta por quem a abre agora: registra a ciência e atualiza a lista e os selos.
@@ -465,10 +514,16 @@ export async function abrirAcao(id, aoMudar) {
   const leitura = !!a.somente_leitura;
   const ehMembro = est.user?.perfil === 'membro';
   const podeImp = !leitura && (!ehMembro || a.pode_executar);
-  const corpo = `
+  // A ficha é montada em peças: a versão atual as junta na ordem de sempre; a versão nova agrupa a situação no topo, as tarefas no meio e uma
+  // só linha do tempo (registros, impedimentos, pontos de atenção e comentários) no fim. O conteúdo e os controles de cada peça são os mesmos.
+  const pCopiar = `
     <div class="linha" style="justify-content:flex-end;margin:-6px 0 4px"><button type="button" class="btn btn-fantasma btn-mini" data-copiar-link>Copiar link da ação</button></div>
+`;
+  const pInfo = `
     ${leitura ? '<div class="info">Somente leitura: você acompanha esta ação, mas quem a altera é a seção responsável.</div>'
     : ehMembro && !a.pode_executar ? '<div class="info">Esta ação é de outra pessoa da equipe. Você marca como feitas as tarefas atribuídas a você e pode comentar; o resto fica com quem a executa.</div>' : ''}
+`;
+  const pOrigem = `
     ${a.demandada_chefe ? `
       <div class="banner-origem diretor">
         <span class="banner-origem-icone">🎯</span>
@@ -500,9 +555,17 @@ export async function abrirAcao(id, aoMudar) {
           <div class="detalhes">Criada em ${dataHora(a.criada_em)} · Âmbito interno da seção</div>
         </div>
       </div>` : '')}
+`;
+  const pDesc = `
     <p>${a.detalhe ? esc(a.detalhe) : `<span class="suave">Sem detalhamento.</span>${!leitura && a.pode_descrever ? ' <button type="button" class="btn btn-sec btn-mini" data-descrever>Descrever a ação</button>' : ''}`}</p>
+`;
+  const pBadges = `
     <div class="linha" id="acao-badges" style="margin-bottom:10px;align-items:center;flex-wrap:wrap;gap:8px">${badgesHTML(a)}</div>
+`;
+  const pResp = `
     ${a.responsavel_id || a.pode_atribuir ? responsavelHTML(a) : ''}
+`;
+  const pPrio = `
     ${!leitura && (a.pode_executar || a.pode_editar) ? `    <div class="linha" style="margin-bottom:10px;align-items:center">
       <label for="sel-prio" class="suave pequeno" style="margin:0"><b>Alterar prioridade:</b></label>
       <select id="sel-prio" data-mudar-prio style="width:auto;padding:3px 8px;font-size:0.84rem;margin-left:6px">
@@ -516,31 +579,57 @@ export async function abrirAcao(id, aoMudar) {
         ${Object.entries(ROTULO_ESFORCO).map(([v, r]) => `<option value="${v}" ${a.esforco === v ? 'selected' : ''}>${r}</option>`).join('')}
       </select>
     </div>` : ''}
+`;
+  const pCiencia = `
     ${cienciaHTML(a)}
+`;
+  const pPrazo = `
     <p><b>Prazo:</b> <span class="num">${br(a.prazo)}</span>${prazoAlterado ? ` <span class="suave pequeno">(original: ${br(a.prazo_original)})</span>` : ''}</p>
+`;
+  const pHistPrazos = `
     ${a.prazos?.length ? `<details class="pequeno" style="margin:-4px 0 10px"><summary class="suave">Histórico de prazos (${a.prazos.length})</summary><ul class="suave" style="margin:6px 0 0;padding-left:18px">${a.prazos.map((h) =>
       `<li class="num">${br(h.prazo_anterior)} → <b>${br(h.prazo_novo)}</b> · ${h.origem === 'pedido' ? 'pedido aprovado' : 'alterado'}${h.alterado_por_nome ? ` por ${esc(h.alterado_por_nome)}` : ''} em ${dataHora(h.alterado_em)}</li>`).join('')}</ul></details>` : ''}
+`;
+  const pTempo = `
     <p><b>Tempo gasto:</b> <span class="num">${fmtMin(a.tempo_total)}</span></p>
+`;
+  const pLanc = `
     ${a.lancamentos.length ? `<ul class="pequeno suave" style="margin:0 0 10px;padding-left:18px">${a.lancamentos.map((t) =>
       `<li class="num">${br(t.data)} · ${fmtMin(t.minutos)} · ${esc(t.usuario_nome || '')}</li>`).join('')}</ul>` : ''}
+`;
+  const pPedidos = `
     ${a.pedidos.length ? `<h3 style="margin:10px 0 6px">Pedidos de novo prazo</h3>${a.pedidos.map((p) => `<div class="comentario pequeno">
       ${br(p.prazo_atual)} → <b>${br(p.novo_prazo)}</b> · ${esc(p.status)} <br><span class="suave">${esc(p.justificativa)}</span></div>`).join('')}` : ''}
+`;
+  const pCheck = `
     <div id="acao-checklist-bloco">${checklistBlocoHTML(a, responsaveis)}</div>
+`;
+  const pDiario = `
     ${secaoRecolhivel('Diário de progresso', (a.diario || []).length, `<div id="diario-bloco">${diarioBlocoHTML(a, diarioFiltro)}</div>`, (a.diario || []).length > 0)}
+`;
+  const pImp = `
     ${secaoRecolhivel('Impedimentos', a.impedimentos.length, `
       ${a.impedimentos.length ? a.impedimentos.map((i) => impedimentoHTML(i, podeImp)).join('') : '<p class="suave pequeno">Nenhum impedimento registrado.</p>'}
       ${aceitaImpedimento(a) && podeImp ? '<button type="button" class="btn btn-sec btn-mini" data-novo-imp>Registrar impedimento</button>' : ''}`,
       a.impedimentos.some((i) => i.aberto))}
+`;
+  const pPontos = `
     ${secaoRecolhivel('Pontos de atenção', a.pontos_atencao.length, `
       ${a.pontos_atencao.length ? a.pontos_atencao.map((p) => pontoAtencaoHTML(p, podeImp && !a.encerrada && !a.arquivada)).join('') : '<p class="suave pequeno">Nenhum ponto de atenção registrado.</p>'}
       ${podeImp && !a.encerrada && !a.arquivada ? '<button type="button" class="btn btn-sec btn-mini" data-novo-ponto>Registrar ponto de atenção</button>' : ''}`,
       a.pontos_atencao.some((p) => p.ativo))}
+`;
+  const pComent = `
     ${secaoRecolhivel('Comentários', a.comentarios.length, `
       ${a.comentarios.length ? a.comentarios.map((c) => `<div class="comentario"><b>${esc(c.usuario_nome || '')}</b>
         <span class="suave pequeno"> · ${dataHora(c.criado_em)}</span><br>${esc(c.texto)}</div>`).join('') : '<p class="suave pequeno">Nenhum comentário ainda.</p>'}
       ${leitura || !a.pode_comentar ? '' : '<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>'}`,
       true)}
+`;
+  const pValid = `
     ${validacaoHTML(a)}
+`;
+  const pRodape = `
     ${a.pode_editar || a.pode_mudar_demanda ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Editar ação</button>'
       : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Alterar prazo</button>' : ''}
     ${aceitaRedirecionar(a) ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-redirecionar>Redirecionar para outra seção</button>' : ''}
@@ -558,6 +647,12 @@ export async function abrirAcao(id, aoMudar) {
     `}
     ${a.pode_excluir ? '<button type="button" class="btn btn-perigo" style="margin-top:12px" data-excluir>Excluir ação</button>' : ''}
 `;
+  const novaFicha = temNovaInterface(est.user?.perfil) && novaInterfaceLigada();
+  const corpoAtual = [pCopiar, pInfo, pOrigem, pDesc, pBadges, pResp, pPrio, pCiencia, pPrazo, pHistPrazos, pTempo, pLanc, pPedidos, pCheck, pDiario, pImp, pPontos, pComent, pValid, pRodape].join('\n');
+  const corpoNovo = [pCopiar, pInfo, pOrigem, pDesc, pBadges, pResp, pPrazo, pTempo, pValid,
+    `<details class="secao-rec"${a.pedidos.some((x) => x.status === 'pendente') ? ' open' : ''}><summary><h3>Mais detalhes</h3></summary>${pPrio}${pCiencia}${pHistPrazos}${pLanc}${pPedidos}</details>`,
+    pCheck, linhaDoTempoSecaoHTML(a, diarioFiltro, { leitura, podeImp }), pRodape].join('\n');
+  const corpo = novaFicha ? corpoNovo : corpoAtual;
   const dlgFicha = abrirForm({
     titulo: a.titulo,
     corpo,
@@ -655,7 +750,7 @@ export async function abrirAcao(id, aoMudar) {
           if (n) {
             a.diario = (a.diario || []).filter((r) => r.tarefa_id !== id);
             a.diario_total = Math.max(0, (a.diario_total || 0) - n);
-            dlg.querySelector('#diario-bloco').innerHTML = diarioBlocoHTML(a, diarioFiltro);
+            atualizarDiario();
           }
           atualizarChecklist();
         } catch (e) { toast(e.message, 'erro'); }
@@ -702,15 +797,39 @@ export async function abrirAcao(id, aoMudar) {
       on(dlg, 'click', '[data-redirecionar]', () => abrirRedirecionar(a, recarregar).catch((e) => toast(e.message, 'erro')));
       on(dlg, 'click', '[data-novo-ponto]', () => abrirNovoPontoAtencao(a, recarregar));
       // Diário de progresso: registrar (geral ou numa tarefa), retificar, filtrar e, a partir da tarefa, ver só os registros dela.
-      const atualizarDiario = () => { dlg.querySelector('#diario-bloco').innerHTML = diarioBlocoHTML(a, diarioFiltro); };
+      const atualizarDiario = () => {
+        if (novaFicha) dlg.querySelector('#lt-bloco').innerHTML = linhaDoTempoListaHTML(a, diarioFiltro, podeImp);
+        else dlg.querySelector('#diario-bloco').innerHTML = diarioBlocoHTML(a, diarioFiltro);
+      };
       const registrarNovo = (opcoes) => abrirNovoRegistro(a, recarregar, opcoes).catch((e) => toast(e.message, 'erro'));
       on(dlg, 'click', '[data-novo-registro]', () => registrarNovo());
       on(dlg, 'click', '[data-registrar-tarefa]', (el) => registrarNovo({ tarefaId: Number(el.dataset.registrarTarefa) }));
       on(dlg, 'click', '[data-retificar]', (el) => registrarNovo({ retifica: a.diario.find((r) => r.id === Number(el.dataset.retificar)) }));
+      // Linha do tempo (versão nova): filtros e o botão único "Registrar", que pergunta o tipo antes de abrir o formulário certo.
+      on(dlg, 'click', '[data-lt-fonte]', (el) => { diarioFiltro.fonte = el.dataset.ltFonte; diarioFiltro.tarefa = ''; atualizarDiario(); });
+      on(dlg, 'change', '#lt-tarefa', (el) => { diarioFiltro.tarefa = el.value; diarioFiltro.fonte = ''; atualizarDiario(); });
+      on(dlg, 'click', '[data-registrar-escolher]', () => {
+        const opcoes = opcoesDeRegistro(a, { leitura, podeImp });
+        abrirForm({
+          titulo: 'Registrar',
+          corpo: `<p class="suave pequeno">O que você quer registrar nesta ação?</p><div class="lt-escolha">${opcoes.map((o) =>
+            `<button type="button" class="btn btn-sec" data-escolha="${o.id}"><b>${esc(o.rotulo)}</b><span class="suave pequeno">${esc(o.dica)}</span></button>`).join('')}</div>`,
+          semEnvio: true, cancelar: 'Fechar',
+          aoAbrir: (d) => on(d, 'click', '[data-escolha]', (el) => {
+            d.close();
+            const tipo = el.dataset.escolha;
+            if (tipo === 'registro') registrarNovo();
+            else if (tipo === 'impedimento') abrirNovoImpedimento(a, recarregar);
+            else if (tipo === 'ponto') abrirNovoPontoAtencao(a, recarregar);
+            else { const c = dlg.querySelector('#novo-coment'); c?.scrollIntoView({ block: 'center' }); c?.focus(); }
+          }),
+        });
+      });
       on(dlg, 'click', '[data-diario-tipo]', (el) => { diarioFiltro.tipo = el.dataset.diarioTipo; atualizarDiario(); });
       on(dlg, 'change', '#diario-tarefa', (el) => { diarioFiltro.tarefa = el.value; atualizarDiario(); });
       on(dlg, 'click', '[data-ver-diario]', (el) => {
-        diarioFiltro.tipo = ''; diarioFiltro.tarefa = el.dataset.verDiario; atualizarDiario();
+        diarioFiltro.tipo = ''; diarioFiltro.fonte = ''; diarioFiltro.tarefa = el.dataset.verDiario; atualizarDiario();
+        if (novaFicha) { dlg.querySelector('#linha-tempo').scrollIntoView({ block: 'start' }); return; }
         const secao = dlg.querySelector('#diario-bloco').closest('details');
         secao.open = true;
         secao.scrollIntoView({ block: 'start' });
@@ -771,10 +890,11 @@ export async function abrirAcao(id, aoMudar) {
     },
   });
   // A ficha passa a ter endereço (?acao=ID) enquanto estiver aberta; ao fechar, o endereço volta ao que era.
+  const minhaFicha = ++fichaAtual;
   acaoAberta = a.id;
   history.replaceState(null, '', urlComAcao(a.id));
   dlgFicha.addEventListener('close', () => {
-    if (acaoAberta !== a.id || reabrindo) return;
+    if (minhaFicha !== fichaAtual || acaoAberta !== a.id || reabrindo) return;
     acaoAberta = null;
     tirarAcaoDaUrl();
   });

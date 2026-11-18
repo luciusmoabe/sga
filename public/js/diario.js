@@ -101,6 +101,46 @@ export function semRegistroRecente(acoes, hoje, dias = 7) {
   return acoes.filter((a) => a.status === 'em_andamento' && (!a.ultimo_registro_em || diasEntre(dataNoFuso(instante(a.ultimo_registro_em)), hoje) >= dias));
 }
 
+/** As fontes da linha do tempo de uma ação (versão nova da ficha): o diário, os impedimentos, os pontos de atenção e os comentários. */
+export const FONTES_DA_LINHA = [['registro', 'Registros'], ['impedimento', 'Impedimentos'], ['ponto', 'Pontos de atenção'], ['comentario', 'Comentários']];
+
+/**
+ * Junta o que aconteceu numa ação em uma só linha do tempo, do mais recente ao mais antigo (por dia e, no dia, pela hora do registro).
+ * Cada evento guarda a fonte, o dia civil (`data`), o instante (`quando`) e o item original em `item`. Não muda nenhuma regra de cada fonte:
+ * é só um jeito de ler os quatro históricos juntos.
+ * @param {{ diario?: any[], impedimentos?: any[], pontos?: any[], comentarios?: any[] }} a
+ */
+export function eventosDaLinhaDoTempo({ diario = [], impedimentos = [], pontos = [], comentarios = [] }) {
+  const dia = (iso) => String(iso || '').slice(0, 10);
+  const eventos = [
+    ...diario.map((item) => ({ fonte: 'registro', data: item.data || dia(item.criado_em), quando: item.criado_em || '', id: item.id, item })),
+    ...impedimentos.map((item) => ({ fonte: 'impedimento', data: dia(item.criado_em), quando: item.criado_em || '', id: item.id, item })),
+    ...pontos.map((item) => ({ fonte: 'ponto', data: dia(item.criado_em), quando: item.criado_em || '', id: item.id, item })),
+    ...comentarios.map((item) => ({ fonte: 'comentario', data: dia(item.criado_em), quando: item.criado_em || '', id: item.id, item })),
+  ];
+  return eventos.sort((x, y) => (x.data === y.data ? (x.quando === y.quando ? y.id - x.id : x.quando < y.quando ? 1 : -1) : x.data < y.data ? 1 : -1));
+}
+
+/**
+ * Filtra a linha do tempo por fonte e por tarefa. Escolher uma tarefa mostra só os registros do diário dela (os outros históricos não apontam tarefa).
+ * @param {ReturnType<typeof eventosDaLinhaDoTempo>} eventos
+ * @param {{ fonte?: string, tipo?: string, tarefa?: string }} [filtro]
+ */
+export function filtrarEventos(eventos, { fonte = '', tipo = '', tarefa = '' } = {}) {
+  return eventos.filter((e) => {
+    if (fonte && e.fonte !== fonte) return false;
+    if (tarefa || tipo) return e.fonte === 'registro' && filtrarDiario([e.item], { tipo, tarefa }).length === 1;
+    return true;
+  });
+}
+
+/** Quantos eventos há de cada fonte (para os filtros só mostrarem o que existe). */
+export function contagemPorFonte(eventos) {
+  const n = { registro: 0, impedimento: 0, ponto: 0, comentario: 0 };
+  for (const e of eventos) n[e.fonte] += 1;
+  return n;
+}
+
 /** Só endereços http(s) viram link; o resto é texto (nº do SEI, por exemplo). */
 export const ehLink = (s) => /^https?:\/\/\S+$/i.test(String(s ?? '').trim());
 
