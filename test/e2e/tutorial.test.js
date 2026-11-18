@@ -7,6 +7,15 @@ import { CHEFE_COF, CHEFE_CPE, DIRETOR, subir } from './ajuda.js';
 
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 const painel = (p) => p.evaluate(() => { const e = document.querySelector('.tut'); return e ? { modo: e.dataset.modo, texto: e.innerText, foco: !!document.querySelector('.tut-foco.visivel') } : null; });
+/** Repete a leitura quando a página troca de tela no meio dela ("Execution context was destroyed"): o passo do tutorial navega, e a leitura caiu no instante da troca. */
+async function tentar(fn) {
+  for (let i = 0; ; i += 1) {
+    try { return await fn(); } catch (e) {
+      if (i >= 5 || !/Execution context was destroyed|detached|Cannot find context|Target closed/i.test(String(e.message))) throw e;
+      await pausa(400);
+    }
+  }
+}
 const esperarModo = (p, modo) => p.waitForSelector(`.tut[data-modo="${modo}"]`, { timeout: 8000 });
 
 /** Percorre todas as lições do perfil; devolve os passos que ficaram sem destaque (alvo não achado) e os títulos vistos. */
@@ -19,14 +28,16 @@ async function percorrerTudo(p) {
     await p.click('#tutorial-guiado').catch(() => {}); // já aberto: só devolve o foco
     await p.evaluate((i) => document.querySelector(`.tut [data-tut="licao"][data-id="${i}"]`)?.click(), id);
     for (;;) {
-      await p.waitForSelector('.tut[data-modo="passo"]', { timeout: 8000 });
+      await tentar(() => p.waitForSelector('.tut[data-modo="passo"]', { timeout: 8000 }));
       await pausa(450);
-      const e = await painel(p);
-      const titulo = await p.$eval('#tut-titulo', (h) => h.textContent);
+      const { e, titulo, ultimo } = await tentar(async () => ({
+        e: await painel(p),
+        titulo: await p.$eval('#tut-titulo', (h) => h.textContent),
+        ultimo: await p.$eval('[data-tut="proximo"]', (b) => /Concluir/.test(b.textContent)),
+      }));
       vistos.push(`${id}: ${titulo}`);
       if (/ainda não há nada para destacar/.test(e.texto)) semDestaque.push(`${id}: ${titulo}`);
-      const ultimo = await p.$eval('[data-tut="proximo"]', (b) => /Concluir/.test(b.textContent));
-      await p.click('[data-tut="proximo"]');
+      await tentar(() => p.click('[data-tut="proximo"]'));
       if (ultimo) break;
     }
     await esperarModo(p, 'fim');
