@@ -29,9 +29,10 @@ function textoRadar(r) {
 const NIVEL = { critico: ['●', 'Crítico'], atencao: ['▲', 'Atenção'], info: ['ℹ', 'Informação'] };
 const DESTINO = { atualizacao: '#/atualizacao', validar: '#/minhas-acoes' };
 
-function radarHTML(g) {
+/** O radar de "O que precisa de você hoje". `max` limita os itens (o resumo da tela Hoje mostra os mais graves; o Painel de gestão, todos). */
+export function radarHTML(g, max = Infinity) {
   if (!g.radar.length) return `<div class="gestao-ok"><b>✓ Nada urgente.</b> Sem atrasos, impedimentos críticos nem validações pendentes. Bom momento para olhar o que vence adiante e reconhecer a equipe.</div>`;
-  return `<ol class="gestao-radar">${g.radar.map((r) => {
+  return `<ol class="gestao-radar">${g.radar.slice(0, max).map((r) => {
     const [titulo, dica] = textoRadar(r);
     const [forma, nome] = NIVEL[r.nivel];
     return `<li class="gestao-risco n-${r.nivel}"><div class="gestao-risco-cab"><span class="gestao-nivel" title="${nome}"><span aria-hidden="true">${forma}</span> ${nome}</span>

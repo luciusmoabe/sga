@@ -5,12 +5,15 @@ import { abrirAlterarReuniao } from './reuniao-data.js';
 import { agendaComoBoot } from './agenda-equipe.js';
 import { agora, est } from './estado.js';
 import {
-  $, abrirForm, addDias, br, brCurto, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, seloNova, STATUS, tempoRestante, textoEtapa, toast, trilho, vazio,
+  $, abrirForm, addDias, br, brCurto, confirmar, dataHora, diaSemana, esc, fmtMin, on, pilulaStatus, plural, PRIO, sem, seloNova, STATUS, tempoRestante, textoEtapa, toast, trilho, vazio,
 } from './ui.js';
 import { aceitarAcao, abrirAcao, abrirEditarAcao, abrirNovoImpedimento, abrirNovoRegistro, aceitaImpedimento, devolverAcao, lerOrigem, ligarOrigem, origemCamposHTML, validarAcao } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
 import { nomeDaReuniao, reuniaoDaAcao } from './reuniao-da-acao.js';
 import { haQuantoTempo, resumir, semRegistroRecente } from './diario.js';
+import { calcularGestao } from './gestao-calculo.js';
+import { radarHTML } from './gestao.js';
+import { novaInterfaceLigada } from './nova-interface.js';
 import { ATALHOS, FACETAS, FILTRO_VAZIO, ORDENS, ROTULO_FACETA, aplicarFiltros, contarAtalhos, contarAtivos, opcoesDe, ordenar } from './filtro-acoes.js';
 import { dataNoFuso, diasEntre, instante } from './datas.js';
 import { relatoHTML } from './telas-diretor.js';
@@ -223,6 +226,26 @@ export async function inicio(raiz, { refresh }) {
   const vencendo = abertas.filter((a) => !a.atrasada && a.prazo <= addDias(est.boot.hoje, 2)).length;
   const pedidos = abertas.filter((a) => a.pedido_pendente).length;
   const semRegistro = semRegistroRecente(abertas, est.boot.hoje); // lembrete suave: só informa
+  // Versão nova (tela Hoje): no lugar dos quatro números e das próximas ações, o resumo do Painel de gestão ("Como está a equipe"),
+  // com os itens mais graves do radar. A lista completa de ações fica na área Ações.
+  const hoje = est.user.perfil === 'chefe' && novaInterfaceLigada();
+  const g = hoje ? calcularGestao({ acoes: [...abertas, ...concluidas], hoje: est.boot.hoje, atualizacaoPendente: est.boot.atualizacao_enviada === false }) : null;
+  const blocoNumeros = hoje ? `<section class="cartao" id="hoje-equipe" aria-labelledby="hoje-equipe-t">
+      <div class="linha entre"><h2 id="hoje-equipe-t">Como está a equipe</h2><span class="gestao-situacao">${sem(g.cor)}</span></div>
+      <p class="suave pequeno">O que mais precisa de você hoje. Os números completos estão no painel de gestão.</p>
+      ${radarHTML(g, 3)}
+      <p style="margin-top:12px"><a href="#/gestao">Ver o painel de gestão</a> · <a href="#/minhas-acoes">Ver todas as ações</a></p></section>` : `    <div class="grade" style="grid-template-columns:repeat(4,1fr)">
+      <div class="cartao"><div class="suave pequeno">Ações abertas</div><div style="font-family:var(--head);font-weight:650;font-size:2rem" class="num">${abertas.length}</div></div>
+      <div class="cartao"><div class="suave pequeno">Atrasadas</div><div style="font-family:var(--head);font-weight:650;font-size:2rem;color:${atrasadas ? 'var(--vermelho)' : 'inherit'}" class="num">${atrasadas}</div></div>
+      <div class="cartao"><div class="suave pequeno">Vencem em até 2 dias</div><div style="font-family:var(--head);font-weight:650;font-size:2rem;color:${vencendo ? 'var(--amarelo)' : 'inherit'}" class="num">${vencendo}</div></div>
+      <div class="cartao"><div class="suave pequeno">Pedidos de prazo</div><div style="font-family:var(--head);font-weight:650;font-size:2rem" class="num">${pedidos}</div></div>
+    </div>
+    <div class="espaco"></div>
+    <div class="cartao"><div class="linha entre"><h2>Próximas ações</h2><a href="#/minhas-acoes">Ver todas</a></div>
+      ${abertas.length ? `<table><tbody>${abertas.slice(0, 4).map((a) => `<tr class="clicavel" data-acao="${a.id}" tabindex="0">
+        <td><b>${esc(a.titulo)}</b>${a.demandada_diretor ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">Demandada ${peloTopo()} em ${br(a.demandado_em || a.criada_em)}</div>` : a.demandada_chefe ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">Demandada por ${esc(a.demandado_por_nome || 'o chefe da seção acima')} em ${br(a.demandado_em || a.criada_em)}</div>` : ''}</td>
+        <td class="num">${br(a.prazo)}</td><td>${pilulaStatus(a)}</td></tr>`).join('')}</tbody></table>`
+        : vazio('Nenhuma ação em aberto', `Quando ${oTopo()} direcionar algo, aparecerá aqui.`)}</div>`;
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>${esc(est.boot.secao?.nome || 'Minha seção')}</h1><div class="sub">Olá, ${esc(est.user.nome)}. Aqui está o que precisa da sua atenção.</div></div></div>
     ${agendaEquipe ? trilho(agendaComoBoot(agendaEquipe)) : ''}
@@ -234,18 +257,7 @@ export async function inicio(raiz, { refresh }) {
     ${suaSemanaHTML({ up, semana, abertas, aValidar, atrasadas, ctx })}
     ${semRegistro.length ? `<p class="info" role="status" id="lembrete-diario">${plural(semRegistro.length, 'ação em andamento está', 'ações em andamento estão')} sem registro no diário há 7 dias ou mais. <a href="#/minhas-acoes">Ver ações</a> e use <b>+ Registrar andamento</b>.</p>` : ''}
     <div class="espaco"></div>
-    <div class="grade" style="grid-template-columns:repeat(4,1fr)">
-      <div class="cartao"><div class="suave pequeno">Ações abertas</div><div style="font-family:var(--head);font-weight:650;font-size:2rem" class="num">${abertas.length}</div></div>
-      <div class="cartao"><div class="suave pequeno">Atrasadas</div><div style="font-family:var(--head);font-weight:650;font-size:2rem;color:${atrasadas ? 'var(--vermelho)' : 'inherit'}" class="num">${atrasadas}</div></div>
-      <div class="cartao"><div class="suave pequeno">Vencem em até 2 dias</div><div style="font-family:var(--head);font-weight:650;font-size:2rem;color:${vencendo ? 'var(--amarelo)' : 'inherit'}" class="num">${vencendo}</div></div>
-      <div class="cartao"><div class="suave pequeno">Pedidos de prazo</div><div style="font-family:var(--head);font-weight:650;font-size:2rem" class="num">${pedidos}</div></div>
-    </div>
-    <div class="espaco"></div>
-    <div class="cartao"><div class="linha entre"><h2>Próximas ações</h2><a href="#/minhas-acoes">Ver todas</a></div>
-      ${abertas.length ? `<table><tbody>${abertas.slice(0, 4).map((a) => `<tr class="clicavel" data-acao="${a.id}" tabindex="0">
-        <td><b>${esc(a.titulo)}</b>${a.demandada_diretor ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">Demandada ${peloTopo()} em ${br(a.demandado_em || a.criada_em)}</div>` : a.demandada_chefe ? `<div class="suave pequeno" style="color:var(--verde);margin-top:2px">Demandada por ${esc(a.demandado_por_nome || 'o chefe da seção acima')} em ${br(a.demandado_em || a.criada_em)}</div>` : ''}</td>
-        <td class="num">${br(a.prazo)}</td><td>${pilulaStatus(a)}</td></tr>`).join('')}</tbody></table>`
-        : vazio('Nenhuma ação em aberto', `Quando ${oTopo()} direcionar algo, aparecerá aqui.`)}</div>
+    ${blocoNumeros}
     </div>${quadroAtencaoHTML(abertas, ctx)}</div>`;
   ligarAtencao(raiz, abertas, refresh);
   if (agendaEquipe) {
