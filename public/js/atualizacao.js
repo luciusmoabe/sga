@@ -7,6 +7,7 @@ import { est } from './estado.js';
 import { $, addDias, br, dataHora, diaSemana, esc, on, STATUS, toast, vazio } from './ui.js';
 import { abrirAcao, abrirNovoImpedimento, abrirResolverImpedimento } from './acao-comum.js';
 import { HORA_FECHAMENTO } from './regras.js';
+import { destaquesParaRelato } from './diario.js';
 
 const semSecao = (raiz) => {
   raiz.innerHTML = `<div class="cabeca"><h1>Sem seção atribuída</h1></div><div class="cartao">${vazio(
@@ -70,7 +71,9 @@ export async function atualizacao(raiz, { refresh }, o = {}) {
       ${bloco('O que será feito nesta semana', `Ações com prazo de ${br(j.programadas.de)} a ${br(j.programadas.ate)}`, rel.programadas.map((a) => linhaAcao(a)), 'Nenhuma ação com prazo neste período.')}
       ${bloco('O que trava', 'Impedimentos ainda abertos nas suas ações. Para registrar um novo, use o botão da ação.', rel.impedimentos.map(linhaImpedimento), 'Nenhum impedimento aberto.')}
       <div class="cartao"><h2>Observações</h2><div class="campo"><label for="obs" class="suave pequeno">Algo que não está nas ações (opcional)</label>
-        <textarea id="obs" maxlength="600" placeholder="Ex.: contexto para a reunião">${esc(observacoes)}</textarea></div></div>
+        <textarea id="obs" maxlength="600" placeholder="Ex.: contexto para a reunião">${esc(observacoes)}</textarea></div>
+        <div class="linha" style="gap:10px;flex-wrap:wrap;align-items:center"><button type="button" class="btn btn-sec btn-mini" id="obs-sugerir">Sugerir destaques do diário</button>
+          <span class="suave pequeno" id="obs-dica">Traz os registros da semana (entregas primeiro). Ações internas ficam de fora. Você revê o texto antes de enviar.</span></div></div>
       <div class="espaco"></div>
       <div class="barra-acao"><button class="btn btn-primario" type="submit">${at ? 'Enviar correção' : 'Enviar atualização'}</button></div>
     </form>`;
@@ -79,6 +82,21 @@ export async function atualizacao(raiz, { refresh }, o = {}) {
     try { sessionStorage.setItem(chaveRascunho, JSON.stringify({ observacoes: $('#obs', raiz).value })); } catch { /* segue sem rascunho */ }
   };
   on(raiz, 'input', '#obs', gravarRascunho);
+  // Sugere as observações a partir do diário da semana (só leitura; o texto fica no campo para o chefe conferir e editar).
+  on(raiz, 'click', '#obs-sugerir', async () => {
+    try {
+      const { registros } = await get(`/diario?escopo=secao&de=${j.concluidas.de}&ate=${est.boot.hoje}`);
+      const campo = $('#obs', raiz);
+      const atual = campo.value.trim();
+      const sobra = 600 - (atual ? atual.length + 1 : 0);
+      const sugestao = destaquesParaRelato(registros, { max: Math.max(sobra, 0) });
+      if (!sugestao) { toast(registros.length ? 'Não há mais espaço nas observações ou os registros são de ações internas.' : 'Não há registros no diário nesta semana.'); return; }
+      campo.value = atual ? `${atual}\n${sugestao}` : sugestao;
+      gravarRascunho();
+      campo.focus();
+      toast('Destaques do diário incluídos. Revise o texto antes de enviar.');
+    } catch (e) { erro(e); }
+  });
   const erro = (e) => toast(e.message, 'erro');
   // A tela é redesenhada depois de registrar ou resolver: o texto das observações já está no rascunho.
   on(raiz, 'click', '[data-abrir]', (el) => { gravarRascunho(); abrirAcao(el.dataset.abrir, refresh).catch(erro); });

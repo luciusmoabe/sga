@@ -68,6 +68,39 @@ export function contagens(lista) {
   return { porTipo, porTarefa, geral, excluidas };
 }
 
+/**
+ * Sugestão de texto para as observações do relato semanal, tirada dos registros da semana: primeiro as entregas, depois os impedimentos,
+ * os andamentos e as observações (em cada grupo, o mais recente antes), uma linha por registro, até caber em `max` caracteres. Registro de ação
+ * interna (que não aparece para a gestão) nunca entra. Quem envia revê e edita o texto antes.
+ * @param {any[]} registros
+ * @param {{ max?: number }} [opcoes]
+ */
+export function destaquesParaRelato(registros, { max = 600 } = {}) {
+  const ordemTipo = { entrega: 0, impedimento: 1, andamento: 2, observacao: 3 };
+  const lista = registros.filter((r) => !(r.interna && !r.compartilhada))
+    .sort((x, y) => (ordemTipo[x.tipo] ?? 9) - (ordemTipo[y.tipo] ?? 9) || (x.data === y.data ? y.id - x.id : x.data < y.data ? 1 : -1));
+  const linhas = [];
+  let tamanho = 0;
+  for (const r of lista) {
+    const linha = `- ${resumir(r.acao_titulo, 50)}: ${resumir(r.texto, 90)}`;
+    const novo = tamanho + (linhas.length ? 1 : 0) + linha.length;
+    if (novo > max) { if (!linhas.length) linhas.push(resumir(linha, max)); break; }
+    linhas.push(linha);
+    tamanho = novo;
+  }
+  return linhas.join('\n');
+}
+
+/**
+ * Ações em andamento sem registro no diário há `dias` dias ou mais (ou que nunca tiveram), para um lembrete suave. Só informa: não muda
+ * status, semáforo nem a regra de "parada".
+ * @param {any[]} acoes  ações com `status` e `ultimo_registro_em` (como GET /acoes devolve)
+ * @param {string} hoje  dia civil de hoje (AAAA-MM-DD)
+ */
+export function semRegistroRecente(acoes, hoje, dias = 7) {
+  return acoes.filter((a) => a.status === 'em_andamento' && (!a.ultimo_registro_em || diasEntre(dataNoFuso(instante(a.ultimo_registro_em)), hoje) >= dias));
+}
+
 /** Só endereços http(s) viram link; o resto é texto (nº do SEI, por exemplo). */
 export const ehLink = (s) => /^https?:\/\/\S+$/i.test(String(s ?? '').trim());
 

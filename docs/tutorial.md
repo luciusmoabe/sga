@@ -95,7 +95,7 @@ Impedimentos são histórico: não se editam nem se apagam. Para corrigir, resol
 1. A partir de **sexta, 15h**, uma **faixa amarela** lembra a atualização (vermelha depois do prazo).
 2. Abra **Minha atualização**. O relato já vem **montado pelo sistema** com o que foi feito, está atrasado, está programado e trava.
 3. Algo errado? Corrija na própria ação (status, prazo, impedimento) e volte: o relato se refaz.
-4. Escreva as **observações** e **envie** até **segunda, 18h**. A faixa some.
+4. Escreva as **observações** (o botão **Sugerir destaques do diário** traz os registros da semana para o campo, e você revê o texto) e **envie** até **segunda, 18h**. A faixa some.
 5. Se algo mudar depois, a tela avisa "desatualizada": envie de novo (cria nova versão; o histórico fica em **Histórico**).
 
 ✅ Você aprendeu quando a faixa sumiu e a seção deixou de aparecer como pendente.

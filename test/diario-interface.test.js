@@ -1,7 +1,7 @@
 // Regras puras da interface do diário de progresso (public/js/diario.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TIPOS_DIARIO, agruparPorDia, contagens, ehLink, filtrarDiario, filtrarRegistros, haQuantoTempo, opcoesDosRegistros, resumir, resumoParaCopiar, rotuloDoDia, rotuloTipo } from '../public/js/diario.js';
+import { TIPOS_DIARIO, agruparPorDia, contagens, ehLink, filtrarDiario, destaquesParaRelato, filtrarRegistros, haQuantoTempo, opcoesDosRegistros, resumir, resumoParaCopiar, rotuloDoDia, rotuloTipo, semRegistroRecente } from '../public/js/diario.js';
 
 const HOJE = '2026-11-17';
 let n = 0;
@@ -100,4 +100,36 @@ test('resumoParaCopiar: cabeçalho, total de tempo, um bloco por dia do mais ant
   assert.doesNotMatch(t, /Marina/, 'sem o autor no "meu diário"');
   assert.match(resumoParaCopiar(l, { de: '2026-11-11', ate: '2026-11-17', comAutor: true }), /\[Andamento · Marina\]/);
   assert.match(resumoParaCopiar([], { de: '2026-11-11', ate: '2026-11-17' }), /Nenhum registro no período\./);
+});
+
+test('destaquesParaRelato: entregas primeiro, ação interna fora, cabe no limite', () => {
+  const l = [
+    dia({ id: 1, tipo: 'andamento', texto: 'Andei.', acao_titulo: 'Ação A' }),
+    dia({ id: 2, tipo: 'entrega', texto: 'Entreguei o ofício.', acao_titulo: 'Ação B' }),
+    dia({ id: 3, tipo: 'observacao', texto: 'Segredo.', acao_titulo: 'Interna', interna: true, compartilhada: false }),
+    dia({ id: 4, tipo: 'impedimento', texto: 'Sem número no SEI.', acao_titulo: 'Ação C' }),
+    dia({ id: 5, tipo: 'observacao', texto: 'Compartilhada.', acao_titulo: 'Ação D', interna: true, compartilhada: true }),
+  ];
+  const t = destaquesParaRelato(l);
+  assert.deepEqual(t.split('\n'), ['- Ação B: Entreguei o ofício.', '- Ação C: Sem número no SEI.', '- Ação A: Andei.', '- Ação D: Compartilhada.']);
+  assert.doesNotMatch(t, /Segredo|Interna/, 'registro de ação interna nunca entra');
+  const curto = destaquesParaRelato(l, { max: 60 });
+  assert.ok(curto.length <= 60, `cabe no limite (${curto.length})`);
+  assert.equal(curto.split('\n').length, 2, 'para na linha que não cabe');
+  assert.equal(destaquesParaRelato([], { max: 600 }), '');
+  assert.ok(destaquesParaRelato([dia({ texto: 'x'.repeat(500) })], { max: 40 }).length <= 40, 'se nem a primeira cabe, corta');
+});
+
+test('semRegistroRecente: em andamento sem registro há 7 dias ou mais (ou nunca)', () => {
+  const a = (o) => ({ status: 'em_andamento', ultimo_registro_em: null, ...o });
+  const l = [
+    a({ id: 1 }),
+    a({ id: 2, ultimo_registro_em: '2026-11-17T09:00:00' }),
+    a({ id: 3, ultimo_registro_em: '2026-11-11T09:00:00' }),
+    a({ id: 4, ultimo_registro_em: '2026-11-10T09:00:00' }),
+    a({ id: 5, status: 'a_fazer' }),
+    a({ id: 6, status: 'concluida' }),
+  ];
+  assert.deepEqual(semRegistroRecente(l, HOJE).map((x) => x.id), [1, 4]);
+  assert.deepEqual(semRegistroRecente(l, HOJE, 3).map((x) => x.id), [1, 3, 4]);
 });

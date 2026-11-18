@@ -122,7 +122,7 @@ export function conteudo(dirImagens) {
   <h2>Minha atualização (relato semanal)</h2>
   <p>O relato é <b>montado pelo sistema</b> a partir das suas ações e impedimentos: o que foi feito, o que está atrasado, o que está programado e o que trava. Você confere, acrescenta observações e envia até a <b>segunda, 18h</b>.</p>
   ${fig('22-chefe-atualizacao', 'Minha atualização: o relato montado automaticamente e o campo de observações.')}
-  ${passos('Abra <b>Minha atualização</b>.', 'Confira cada bloco; se algo estiver errado, corrija na ação (status, prazo, impedimento) e volte.', 'Escreva as observações e envie a atualização. Você volta ao Início.')}
+  ${passos('Abra <b>Minha atualização</b>.', 'Confira cada bloco; se algo estiver errado, corrija na ação (status, prazo, impedimento) e volte.', 'Escreva as observações (o botão <b>Sugerir destaques do diário</b> traz os registros da semana, entregas primeiro e sem ações internas; revise o texto) e envie a atualização. Você volta ao Início.')}
   ${dica('Se algo mudar depois do envio, a tela avisa que o relato está <b>desatualizado</b>. Enviar de novo cria uma nova versão; o histórico é mantido. O relato enviado nunca mostra o detalhe de ações internas, apenas contagens.')}
   <h2>Minha equipe</h2>
   <p>Cadastre os membros da seção, desative ou reative e redefina senhas. Ações atribuídas a quem for desativado continuam com o nome da pessoa, para você reatribuir.</p>

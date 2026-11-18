@@ -1040,13 +1040,13 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
     const params = escopo === 'secao' ? v.params : [req.user.id];
     const lista = await q(`select d.id, d.acao_id, d.tarefa_id, coalesce(t.texto, d.tarefa_texto) as tarefa_nome, d.tipo, d.texto, d.minutos,
         d.referencia, d.data, d.criado_em, d.criado_por as autor_id, u.nome as autor_nome, a.titulo as acao_titulo, a.secao_id, s.sigla as secao_sigla,
-        a.encerrada, a.arquivada
+        a.encerrada, a.arquivada, a.interna, a.compartilhada
       from acao_diario d join acoes a on a.id = d.acao_id join secoes s on s.id = a.secao_id
         left join usuarios u on u.id = d.criado_por left join acao_checklist t on t.id = d.tarefa_id
       where a.empresa_id = ? and d.data >= ? and d.data <= ? and ${filtro}
       order by d.data desc, d.id desc limit ${LIMITE_DIARIO + 1}`, empresaAtual(), de, ate, ...params);
     const truncado = lista.length > LIMITE_DIARIO;
-    return { de, ate, escopo, truncado, registros: lista.slice(0, LIMITE_DIARIO).map((d) => ({ ...d, encerrada: !!d.encerrada, arquivada: !!d.arquivada })) };
+    return { de, ate, escopo, truncado, registros: lista.slice(0, LIMITE_DIARIO).map((d) => ({ ...d, encerrada: !!d.encerrada, arquivada: !!d.arquivada, interna: !!d.interna, compartilhada: !!d.compartilhada })) };
   }));
 
   // Exclui um registro do diário (quem o fez ou quem executa a ação). Os registros que o retificavam deixam de apontá-lo; o tempo

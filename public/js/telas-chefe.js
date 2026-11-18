@@ -10,7 +10,7 @@ import {
 import { aceitarAcao, abrirAcao, abrirEditarAcao, abrirNovoImpedimento, abrirNovoRegistro, aceitaImpedimento, devolverAcao, lerOrigem, ligarOrigem, origemCamposHTML, validarAcao } from './acao-comum.js';
 import { HORA_FECHAMENTO, TRANSICOES } from './regras.js';
 import { nomeDaReuniao, reuniaoDaAcao } from './reuniao-da-acao.js';
-import { haQuantoTempo, resumir } from './diario.js';
+import { haQuantoTempo, resumir, semRegistroRecente } from './diario.js';
 import { ATALHOS, FACETAS, FILTRO_VAZIO, ORDENS, ROTULO_FACETA, aplicarFiltros, contarAtalhos, contarAtivos, opcoesDe, ordenar } from './filtro-acoes.js';
 import { dataNoFuso, diasEntre, instante } from './datas.js';
 import { relatoHTML } from './telas-diretor.js';
@@ -222,6 +222,7 @@ export async function inicio(raiz, { refresh }) {
   const atrasadas = abertas.filter((a) => a.atrasada).length;
   const vencendo = abertas.filter((a) => !a.atrasada && a.prazo <= addDias(est.boot.hoje, 2)).length;
   const pedidos = abertas.filter((a) => a.pedido_pendente).length;
+  const semRegistro = semRegistroRecente(abertas, est.boot.hoje); // lembrete suave: só informa
   raiz.innerHTML = `
     <div class="cabeca"><div><h1>${esc(est.boot.secao?.nome || 'Minha seção')}</h1><div class="sub">Olá, ${esc(est.user.nome)}. Aqui está o que precisa da sua atenção.</div></div></div>
     ${agendaEquipe ? trilho(agendaComoBoot(agendaEquipe)) : ''}
@@ -231,6 +232,7 @@ export async function inicio(raiz, { refresh }) {
     ${quadroValidarHTML(aValidar)}
     <div class="inicio-grade"><div class="inicio-principal">
     ${suaSemanaHTML({ up, semana, abertas, aValidar, atrasadas, ctx })}
+    ${semRegistro.length ? `<p class="info" role="status" id="lembrete-diario">${plural(semRegistro.length, 'ação em andamento está', 'ações em andamento estão')} sem registro no diário há 7 dias ou mais. <a href="#/minhas-acoes">Ver ações</a> e use <b>+ Registrar andamento</b>.</p>` : ''}
     <div class="espaco"></div>
     <div class="grade" style="grid-template-columns:repeat(4,1fr)">
       <div class="cartao"><div class="suave pequeno">Ações abertas</div><div style="font-family:var(--head);font-weight:650;font-size:2rem" class="num">${abertas.length}</div></div>

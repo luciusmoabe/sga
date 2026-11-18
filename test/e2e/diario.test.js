@@ -226,3 +226,33 @@ test('Meu diário e Diário da seção: períodos, filtros, abrir a ação, e o 
   assert.equal(await m.$('[data-escopo]'), null, 'o membro não tem o diário da seção');
   assert.deepEqual(m.errosDaPagina, []);
 });
+
+test('Fase 3: lembrete suave no Início e destaques do diário sugeridos nas observações da atualização', async (t) => {
+  const prep = await preparar(t); if (!prep) return;
+  const { app, acao, t1 } = prep;
+  assert.equal((await app.api(CHEFE_COF, 'PATCH', `/acoes/${acao}`, { status: 'em_andamento' })).status, 200);
+
+  // Em andamento e sem nenhum registro: o Início lembra, sem mudar o status nem pedir nada.
+  const i = await app.abrir(CHEFE_COF, '#/inicio');
+  await i.waitForSelector('#lembrete-diario', { timeout: 10000 });
+  const antes = Number((await texto(i, '#lembrete-diario')).match(/^(\d+) ações? em andamento (?:está|estão) sem registro no diário há 7 dias ou mais/)?.[1]);
+  assert.ok(antes >= 1, 'o lembrete conta as ações em andamento sem registro');
+
+  // Com registro, o lembrete some.
+  await app.api(CHEFE_COF, 'POST', `/acoes/${acao}/diario`, { texto: 'Minuta enviada ao jurídico.', tarefa_id: t1, tipo: 'entrega' });
+  const i2 = await app.abrir(CHEFE_COF, '#/inicio');
+  await i2.waitForSelector('#sua-semana-titulo', { timeout: 10000 });
+  const depois = Number((await i2.$('#lembrete-diario') ? await texto(i2, '#lembrete-diario') : '0 ').match(/^(\d+)/)[1]);
+  assert.equal(depois, antes - 1, 'registrou: a ação sai do lembrete');
+
+  // Atualização: o botão traz os destaques para o campo de observações, que continua editável.
+  const p = await app.abrir(CHEFE_COF, '#/atualizacao');
+  await p.waitForSelector('#obs-sugerir');
+  await p.type('#obs', 'Contexto do chefe.');
+  await p.click('#obs-sugerir');
+  await p.waitForFunction(() => document.querySelector('#obs').value.includes('Minuta enviada ao jurídico.'), { timeout: 8000 });
+  const obs = await p.$eval('#obs', (e) => e.value);
+  assert.match(obs, /^Contexto do chefe\.\n- Manifestar-se sobre o contrato: Minuta enviada ao jurídico\./);
+  assert.ok(obs.length <= 600);
+  assert.deepEqual(p.errosDaPagina, []);
+});
