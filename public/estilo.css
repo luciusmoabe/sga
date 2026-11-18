@@ -1689,3 +1689,8 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
 /* Uso das telas */
 .uso-barra { display: inline-block; width: 90px; height: 8px; margin-left: 8px; vertical-align: middle; background: var(--pale); border-radius: 4px; overflow: hidden; }
 .uso-barra i { display: block; height: 100%; background: var(--green); }
+
+/* Trilho: o Fechamento fica a pouco mais de um dia da Reunião, e os dois rótulos lado a lado se sobrepunham. Com os marcos próximos, o do Fechamento desce para uma segunda linha. */
+.trilho-pista.dois-niveis { margin-bottom: 70px; }
+.trilho-rotulo.baixo { top: 50px; }
+.trilho-rotulo.baixo::before { content: ""; position: absolute; left: 50%; top: -30px; height: 26px; border-left: 1px dashed var(--line-str); }

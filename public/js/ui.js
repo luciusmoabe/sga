@@ -167,7 +167,7 @@ export function trilho(boot, { compacto = false } = {}) {
     { t: ini, rot: 'Reunião anterior', sub: `${NOMES_DIA[diaDe(anterior)]} ${br(anterior).slice(0, 5)}`, marco: true },
     { t: ts(addDias(semana, -4), '15:00'), rot: 'Lembrete', sub: `${NOMES_DIA[diaDe(addDias(semana, -4))]} 15h` },
     { t: ts(diaAntes, '09:00'), rot: '', sub: '' },
-    { t: fechamento, rot: 'Fechamento', sub: `${NOMES_DIA[diaDe(diaAntes)]} ${HORA_FECHAMENTO}h`, marco: true },
+    { t: fechamento, rot: 'Fechamento', sub: `${NOMES_DIA[diaDe(diaAntes)]} ${HORA_FECHAMENTO}h`, marco: true, perto: true },
     { t: fim, rot: 'Reunião', sub: `${nomeDia} ${br(semana).slice(0, 5)} ${horaReuniao}`, marco: true },
   ];
   const falta = tempoRestante;
@@ -179,10 +179,10 @@ export function trilho(boot, { compacto = false } = {}) {
   const gere = ['diretor', 'apoio', 'administrador'].includes(boot.user?.perfil) || !!boot.alteravel; // `alteravel`: o trilho da reunião da seção, do próprio chefe
   return `<section class="trilho${compacto ? ' compacto' : ''}" aria-label="Trilho da reunião">
     <div class="trilho-topo"><b>${esc(boot.rotulo_trilho || 'Reunião')}${intervalo === 14 ? ' quinzenal' : ''} de ${nomeDia}, ${br(semana)}, às ${horaReuniao}${alterada ? ' (data alterada)' : ''}</b><span class="suave">${estado}${gere && !compacto ? ` · <button type="button" class="btn btn-fantasma btn-mini" data-alterar-reuniao="${boot.alteravel ? 'equipe' : ''}">Alterar a data</button>` : ''}</span></div>
-    <div class="trilho-pista" role="img" aria-label="Posição de hoje entre uma reunião e a seguinte">
+    <div class="trilho-pista${marcos.some((m) => m.perto && pos(fim) - pos(m.t) < 0.25) ? ' dois-niveis' : ''}" role="img" aria-label="Posição de hoje entre uma reunião e a seguinte">
       <div class="trilho-feito" style="width:${p}%"></div>
       ${marcos.map((m) => `<span class="trilho-ponto ${m.marco ? 'marco' : ''} ${m.t <= agoraMs ? 'passou' : ''}" style="left:${pos(m.t) * 100}%"></span>
-        ${m.rot ? `<span class="trilho-rotulo ${pos(m.t) >= 0.99 ? 'fim' : pos(m.t) > 0.05 ? 'meio' : ''}" style="left:${pos(m.t) >= 0.99 ? 100 : Math.min(96, Math.max(4, pos(m.t) * 100))}%"><b>${m.rot}</b>${m.sub}</span>` : ''}`).join('')}
+        ${m.rot ? `<span class="trilho-rotulo ${pos(m.t) >= 0.99 ? 'fim' : pos(m.t) > 0.05 ? 'meio' : ''}${m.perto && pos(fim) - pos(m.t) < 0.25 ? ' baixo' : ''}" style="left:${pos(m.t) >= 0.99 ? 100 : Math.min(96, Math.max(4, pos(m.t) * 100))}%"><b>${m.rot}</b>${m.sub}</span>` : ''}`).join('')}
       <span class="trilho-agora" style="left:${Math.min(97, Math.max(3, p))}%">hoje</span>
     </div>
   </section>`;
