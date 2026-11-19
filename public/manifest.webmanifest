@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Agilis — Acompanhamento semanal",
+  "name": "Agilis — Acompanhamento periódico",
   "short_name": "Agilis",
-  "description": "Acompanhamento semanal dos Centros do Departamento de Planejamento, Orçamento e Gestão.",
+  "description": "Acompanhamento periódico dos Centros do Departamento de Planejamento, Orçamento e Gestão.",
   "lang": "pt-BR",
   "start_url": "/",
   "scope": "/",
