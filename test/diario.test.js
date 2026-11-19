@@ -288,3 +288,35 @@ test('o autor ainda exclui o próprio registro depois de a ação ser concluída
   await db.prepare('update acoes set encerrada = 1 where id = ?').run(acao);
   assert.equal((await call(PAULO, 'DELETE', `/acoes/${acao}/diario/${outro}`)).status, 409, 'encerrada: o histórico fica');
 });
+
+test('excluir um comentário: só quem executa a ação (chefe, responsável, Administrador); quem só tem tarefa, o Diretor e o Apoio não; ação encerrada não permite', async (t) => {
+  const { db, call, acao, detalhe } = await demo(t);
+  await call(MARINA, 'POST', `/acoes/${acao}/comentarios`, { texto: 'Comecei hoje.' });
+  await call(PAULO, 'POST', `/acoes/${acao}/comentarios`, { texto: 'Falta o empenho.' });
+  const comentarios = async (uid) => (await detalhe(uid)).comentarios.filter((c) => ['Comecei hoje.', 'Falta o empenho.'].includes(c.texto));
+  const [da_marina, do_paulo] = await comentarios(BRUNO_COF);
+  assert.equal((await comentarios(BRUNO_COF)).every((c) => c.pode_excluir), true, 'o chefe exclui');
+  assert.equal((await comentarios(MARINA)).every((c) => c.pode_excluir), true, 'o responsável exclui, inclusive o de outra pessoa');
+  assert.equal((await comentarios(PAULO)).some((c) => c.pode_excluir), false, 'quem só tem uma tarefa não exclui, nem o próprio');
+  assert.equal((await comentarios(DIRETOR)).some((c) => c.pode_excluir), false);
+  assert.equal((await call(PAULO, 'DELETE', `/acoes/${acao}/comentarios/${do_paulo.id}`)).status, 403);
+  assert.equal((await call(OUTRO, 'DELETE', `/acoes/${acao}/comentarios/${do_paulo.id}`)).status, 403);
+  assert.equal((await call(DIRETOR, 'DELETE', `/acoes/${acao}/comentarios/${do_paulo.id}`)).status, 403);
+  assert.equal((await call(APOIO, 'DELETE', `/acoes/${acao}/comentarios/${do_paulo.id}`)).status, 403);
+  assert.equal((await call(BRUNO_COF, 'DELETE', `/acoes/${acao}/comentarios/999999`)).status, 404);
+  assert.equal((await call(MARINA, 'DELETE', `/acoes/${acao}/comentarios/${do_paulo.id}`)).status, 200);
+  assert.equal((await call(BRUNO_COF, 'DELETE', `/acoes/${acao}/comentarios/${da_marina.id}`)).status, 200);
+  assert.equal((await comentarios(BRUNO_COF)).length, 0);
+  // O Administrador também exclui (mesmo de outra seção).
+  const admin = 90;
+  await db.prepare('insert into usuarios (id, nome, email, perfil, secao_id) values (?,?,?,?,?)').run(admin, 'Admin Teste', 'admin@exemplo.invalid', 'administrador', null);
+  await call(MARINA, 'POST', `/acoes/${acao}/comentarios`, { texto: 'Outro.' });
+  const outro = (await detalhe(admin)).comentarios.find((c) => c.texto === 'Outro.');
+  assert.equal(outro.pode_excluir, true);
+  assert.equal((await call(admin, 'DELETE', `/acoes/${acao}/comentarios/${outro.id}`)).status, 200);
+  // Ação encerrada: o histórico fica.
+  await call(MARINA, 'POST', `/acoes/${acao}/comentarios`, { texto: 'Último.' });
+  const ultimo = (await detalhe(BRUNO_COF)).comentarios.find((c) => c.texto === 'Último.');
+  await db.prepare('update acoes set encerrada = 1 where id = ?').run(acao);
+  assert.equal((await call(BRUNO_COF, 'DELETE', `/acoes/${acao}/comentarios/${ultimo.id}`)).status, 409);
+});

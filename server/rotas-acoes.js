@@ -234,6 +234,8 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
   // Quem pode excluir um registro do diário: quem o fez ou quem executa a ação; nunca em ação encerrada ou arquivada.
   const podeExcluirRegistro = (user, a, d) => ['chefe', 'membro', 'administrador'].includes(user.perfil) && !a.encerrada && !a.arquivada
     && (d.criado_por === user.id || executa(user, a));
+  // Quem pode excluir um comentário: quem executa a ação (o chefe da seção, o Administrador e o membro responsável); nunca em ação encerrada ou arquivada.
+  const podeExcluirComentario = (user, a) => ['chefe', 'membro', 'administrador'].includes(user.perfil) && !a.encerrada && !a.arquivada && executa(user, a);
   const TIPOS_DIARIO = ['andamento', 'entrega', 'impedimento', 'observacao'];
   const DIAS_PARA_TRAS_DIARIO = 60; // até quantos dias atrás o registro pode datar o trabalho
   const checklistOut = (c) => ({ ...c, concluido: !!c.concluido, atrasada: !!c.data && !c.concluido && c.data < hoje() });
@@ -737,7 +739,7 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       nova,
       vistas,
       prazos,
-      comentarios,
+      comentarios: comentarios.map((c) => ({ ...c, pode_excluir: podeExcluirComentario(req.user, a) })),
       lancamentos,
       pedidos,
       impedimentos: impedimentos.map(impedimentoOut),
@@ -1118,6 +1120,17 @@ export function rotasAcoes(app, { db, q, q1, run, agoraISO, hoje, vocabularioAtu
       await run('delete from acao_diario where id = ?', rid);
       return { ok: true };
     });
+  }));
+
+  // Exclui um comentário da ação: só quem a executa (o chefe da seção, o Administrador e o membro responsável).
+  app.delete('/api/acoes/:id/comentarios/:cid', permit('chefe', 'membro', 'administrador'), h(async (req) => {
+    const a = await acaoVisivel(req.user, Number(req.params.id));
+    const c = await q1('select id from acao_comentarios where id = ? and acao_id = ?', Number(req.params.cid), a.id);
+    if (!c) throw falha(404, 'Comentário não encontrado.');
+    if (a.encerrada || a.arquivada) throw falha(409, 'Ação arquivada ou encerrada não permite excluir comentários.');
+    if (!podeExcluirComentario(req.user, a)) throw falha(403, 'Só quem executa a ação (o chefe da seção, o responsável ou o Administrador) exclui comentários.');
+    await run('delete from acao_comentarios where id = ?', c.id);
+    return { ok: true };
   }));
 
   // ---------- Tarefas da ação (tabela acao_checklist) ----------

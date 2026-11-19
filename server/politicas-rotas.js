@@ -28,7 +28,7 @@ const MEMBRO = [
   ['DELETE', /^\/acoes\/\d+$/],
   ['POST', /^\/acoes\/\d+\/(tempo|comentarios|vista|checklist|impedimentos|impedimentos\/\d+\/resolver|pontos-atencao|diario)$/],
   ['PATCH', /^\/acoes\/\d+\/(checklist|pontos-atencao)\/\d+$/],
-  ['DELETE', /^\/acoes\/\d+\/(checklist|diario)\/\d+$/],
+  ['DELETE', /^\/acoes\/\d+\/(checklist|diario|comentarios)\/\d+$/],
   ['POST', /^\/uso$/], // a contagem anônima de aberturas de tela
 ];
 

@@ -287,3 +287,24 @@ test('Membro com uma tarefa sua: registra sobre ela e exclui o próprio registro
   assert.match(await cartao.evaluate((e) => e.innerText), /Ação concluída: não recebe mais tempo nem andamento/);
   assert.deepEqual(p.errosDaPagina, []);
 });
+
+test('Comentários: quem executa a ação vê Excluir, confirma e o comentário sai; o Diretor não vê o botão', async (t) => {
+  const prep = await preparar(t); if (!prep) return;
+  const { app, acao, axe } = prep;
+  await app.api(MARINA, 'POST', `/acoes/${acao}/comentarios`, { texto: 'Comentário para apagar.' });
+  const d = await app.abrir(DIRETOR, `#/acoes?acao=${acao}`);
+  await d.waitForSelector('dialog[open]', { timeout: 10000 });
+  await esperarTexto(d, 'Comentário para apagar.');
+  assert.equal(await d.$('dialog[open] [data-excluir-comentario]'), null, 'o Diretor não exclui comentário');
+
+  const p = await app.abrir(CHEFE_COF, `#/minhas-acoes?acao=${acao}`);
+  await p.waitForSelector('dialog[open] [data-excluir-comentario]', { timeout: 10000 });
+  assert.deepEqual(await violacoes(p, axe, 'dialog[open]'), [], 'a ficha com o botão Excluir não tem violações de acessibilidade');
+  await p.evaluate(() => [...document.querySelectorAll('dialog[open] [data-excluir-comentario]')].find((b) => b.closest('.comentario').innerText.includes('Comentário para apagar.')).click());
+  await p.waitForFunction(() => document.querySelectorAll('dialog[open]').length === 2);
+  assert.match(await p.evaluate(() => [...document.querySelectorAll('dialog[open]')].at(-1).innerText), /Excluir o comentário/);
+  await p.evaluate(() => [...document.querySelectorAll('dialog[open]')].at(-1).querySelector('button[type="submit"]').click());
+  await p.waitForFunction(() => !document.querySelector('dialog[open]')?.innerText.includes('Comentário para apagar.'), { timeout: 10000 });
+  assert.equal((await app.api(CHEFE_COF, 'GET', `/acoes/${acao}`)).dados.comentarios.some((c) => c.texto === 'Comentário para apagar.'), false);
+  assert.deepEqual(p.errosDaPagina, []);
+});

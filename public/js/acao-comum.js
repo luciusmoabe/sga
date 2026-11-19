@@ -234,12 +234,14 @@ const diarioBlocoHTML = (a, filtro) => {
 
 // ---------- Linha do tempo (versão nova da ficha): registros, impedimentos, pontos de atenção e comentários numa só lista ----------
 // Cada item é desenhado pelo mesmo código de antes, com os mesmos botões; só a ordem e o agrupamento por dia mudam.
+const comentarioExcluirHTML = (c, a) => (c.pode_excluir && !a.encerrada && !a.arquivada
+  ? ` <button type="button" class="btn btn-fantasma btn-mini" data-excluir-comentario="${c.id}" aria-label="Excluir o comentário de ${esc(c.usuario_nome || '')}, ${esc(dataHora(c.criado_em))}">Excluir</button>` : '');
 const eventoHTML = (e, a, podeImp) => {
   if (e.fonte === 'registro') return diarioItemHTML(e.item, !!a.pode_registrar_diario);
   if (e.fonte === 'impedimento') return impedimentoHTML(e.item, podeImp);
   if (e.fonte === 'ponto') return pontoAtencaoHTML(e.item, podeImp && !a.encerrada && !a.arquivada);
   return `<div class="comentario"><span class="pilula">Comentário</span> <b>${esc(e.item.usuario_nome || '')}</b>
-    <span class="suave pequeno"> · ${dataHora(e.item.criado_em)}</span><br>${esc(e.item.texto)}</div>`;
+    <span class="suave pequeno"> · ${dataHora(e.item.criado_em)}</span>${comentarioExcluirHTML(e.item, a)}<br>${esc(e.item.texto)}</div>`;
 };
 /** A lista com os filtros por fonte e por tarefa (só o que existe). `filtro` vive no diálogo da ficha. */
 const linhaDoTempoListaHTML = (a, filtro, podeImp) => {
@@ -680,7 +682,7 @@ export async function abrirAcao(id, aoMudar) {
   const pComent = `
     ${secaoRecolhivel('Comentários', a.comentarios.length, `
       ${a.comentarios.length ? a.comentarios.map((c) => `<div class="comentario"><b>${esc(c.usuario_nome || '')}</b>
-        <span class="suave pequeno"> · ${dataHora(c.criado_em)}</span><br>${esc(c.texto)}</div>`).join('') : '<p class="suave pequeno">Nenhum comentário ainda.</p>'}
+        <span class="suave pequeno"> · ${dataHora(c.criado_em)}</span>${comentarioExcluirHTML(c, a)}<br>${esc(c.texto)}</div>`).join('') : '<p class="suave pequeno">Nenhum comentário ainda.</p>'}
       ${leitura || !a.pode_comentar ? '' : '<div class="campo" style="margin-top:10px"><label for="novo-coment">Novo comentário</label><textarea id="novo-coment" name="texto" style="min-height:60px"></textarea></div>'}`,
       true)}
 `;
@@ -832,6 +834,20 @@ export async function abrirAcao(id, aoMudar) {
         try {
           await del(`/acoes/${a.id}/diario/${r.id}`);
           toast('Registro excluído.');
+          await recarregar();
+        } catch (e) { toast(e.message, 'erro'); }
+      });
+      on(dlg, 'click', '[data-excluir-comentario]', async (el) => {
+        const c = a.comentarios.find((x) => x.id === Number(el.dataset.excluirComentario));
+        if (!c) return;
+        if (!await confirmar({
+          titulo: 'Excluir o comentário',
+          texto: `Excluir o comentário de <b>${esc(c.usuario_nome || '')}</b> de ${esc(dataHora(c.criado_em))}? Isso não pode ser desfeito.`,
+          rotulo: 'Excluir comentário', perigo: true,
+        })) return;
+        try {
+          await del(`/acoes/${a.id}/comentarios/${c.id}`);
+          toast('Comentário excluído.');
           await recarregar();
         } catch (e) { toast(e.message, 'erro'); }
       });
