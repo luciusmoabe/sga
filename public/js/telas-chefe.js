@@ -424,7 +424,7 @@ export async function minhasAcoes(raiz) {
             <button type="button" class="btn btn-sec btn-mini" data-tempo aria-label="Registrar tempo gasto">Registrar</button>`}</div>
         ` : ''}
         <footer class="acao-rodape">
-          ${a.pode_registrar_diario ? '<button type="button" class="btn btn-sec btn-mini" data-registrar>+ Registrar andamento</button>' : ''}
+          ${a.pode_registrar_diario && a.pode_executar ? '<button type="button" class="btn btn-sec btn-mini" data-registrar>+ Registrar andamento</button>' : ''}
           <button type="button" class="btn btn-fantasma btn-mini" data-detalhe>Detalhes e histórico</button>
           ${!ehMembro && !a.arquivada && a.status !== 'concluida' && !a.pedido_pendente && !a.pode_mudar_prazo ? '<button type="button" class="btn btn-fantasma btn-mini" data-prazo>Pedir novo prazo</button>' : ''}
           ${aceitaImpedimento(a) && a.pode_executar ? '<button type="button" class="btn btn-fantasma btn-mini" data-impedimento>Impedimento</button>' : ''}

@@ -267,6 +267,9 @@ test('Membro com uma tarefa sua: registra sobre ela e exclui o próprio registro
 
   const p = await app.abrir(PAULO, `#/minhas-acoes?acao=${acao}`);
   await p.waitForSelector('dialog[open] #diario-bloco', { timeout: 10000 });
+  assert.equal(await p.$('dialog[open] [data-novo-registro]'), null, 'quem só tem tarefa não vê o registro geral da ação');
+  assert.ok(await p.$(`dialog[open] [data-registrar-tarefa="${tp}"]`), 'mas vê o "+ Registrar" da própria tarefa');
+  assert.equal(await p.$('article.acao [data-registrar]'), null, 'e o cartão não tem "+ Registrar andamento"');
   assert.ok(await p.$(`dialog[open] [data-excluir-registro="${dele}"]`), 'o autor vê Excluir no próprio registro');
   assert.equal(await p.$(`dialog[open] [data-excluir-registro="${dela}"]`), null, 'e não no registro de outra pessoa');
   await p.click(`dialog[open] [data-excluir-registro="${dele}"]`);

@@ -212,13 +212,14 @@ const diarioItemHTML = (r, podeRetificar) => `<article class="diario-item tipo-$
 const diarioBlocoHTML = (a, filtro) => {
   const todos = a.diario || [];
   const pode = !!a.pode_registrar_diario;
+  const poderGeral = pode && !!a.pode_executar; // o registro geral da ação é de quem a executa; quem só tem tarefa registra pelo "+ Registrar" dela
   const c = contagens(todos);
   const tipos = TIPOS_DIARIO.filter(([v]) => c.porTipo[v]);
   const temTarefas = c.porTarefa.size > 0 || c.excluidas > 0;
   const lista = filtrarDiario(todos, filtro);
   const hoje = est.boot.hoje;
   return `
-    ${pode ? '<div class="linha" style="margin:2px 0 8px"><button type="button" class="btn btn-sec btn-mini" data-novo-registro>+ Registrar andamento</button></div>' : ''}
+    ${poderGeral ? '<div class="linha" style="margin:2px 0 8px"><button type="button" class="btn btn-sec btn-mini" data-novo-registro>+ Registrar andamento</button></div>' : ''}
     ${todos.length > 1 && (tipos.length > 1 || temTarefas) ? `<div class="diario-filtros">
       ${tipos.length > 1 ? `<div class="ma-atalhos" role="group" aria-label="Filtrar o diário por tipo"><button type="button" class="ma-chip" data-diario-tipo="" aria-pressed="${!filtro.tipo}">Tudo <b class="num">${todos.length}</b></button>${tipos.map(([v, r]) =>
         `<button type="button" class="ma-chip" data-diario-tipo="${v}" aria-pressed="${filtro.tipo === v}">${r} <b class="num">${c.porTipo[v]}</b></button>`).join('')}</div>` : ''}
@@ -228,7 +229,7 @@ const diarioBlocoHTML = (a, filtro) => {
         ${c.excluidas ? `<option value="excluida"${filtro.tarefa === 'excluida' ? ' selected' : ''}>Tarefas excluídas (${c.excluidas})</option>` : ''}</select></div>` : ''}
     </div>` : ''}
     ${lista.length ? agruparPorDia(lista).map((g) => `<section class="diario-dia" aria-label="${esc(rotuloDoDia(g.data, hoje))}">
-      <h4>${esc(rotuloDoDia(g.data, hoje))}</h4>${g.registros.map((r) => diarioItemHTML(r, pode)).join('')}</section>`).join('')
+      <h4>${esc(rotuloDoDia(g.data, hoje))}</h4>${g.registros.map((r) => diarioItemHTML(r, pode && (poderGeral || !!r.tarefa_id))).join('')}</section>`).join('')
     : todos.length ? '<p class="suave pequeno">Nenhum registro com esses filtros.</p>' : '<p class="suave pequeno">Nenhum registro no diário ainda.</p>'}`;
 };
 
@@ -237,7 +238,7 @@ const diarioBlocoHTML = (a, filtro) => {
 const comentarioExcluirHTML = (c, a) => (c.pode_excluir && !a.encerrada && !a.arquivada
   ? ` <button type="button" class="btn btn-fantasma btn-mini" data-excluir-comentario="${c.id}" aria-label="Excluir o comentário de ${esc(c.usuario_nome || '')}, ${esc(dataHora(c.criado_em))}">Excluir</button>` : '');
 const eventoHTML = (e, a, podeImp) => {
-  if (e.fonte === 'registro') return diarioItemHTML(e.item, !!a.pode_registrar_diario);
+  if (e.fonte === 'registro') return diarioItemHTML(e.item, !!a.pode_registrar_diario && (!!a.pode_executar || !!e.item.tarefa_id));
   if (e.fonte === 'impedimento') return impedimentoHTML(e.item, podeImp);
   if (e.fonte === 'ponto') return pontoAtencaoHTML(e.item, podeImp && !a.encerrada && !a.arquivada);
   return `<div class="comentario"><span class="pilula">Comentário</span> <b>${esc(e.item.usuario_nome || '')}</b>
@@ -268,7 +269,7 @@ const linhaDoTempoListaHTML = (a, filtro, podeImp) => {
 };
 /** O que a pessoa pode registrar nesta ação (uma escolha só: o tipo vem antes do formulário). */
 const opcoesDeRegistro = (a, { leitura, podeImp }) => [
-  a.pode_registrar_diario && { id: 'registro', rotulo: 'Andamento, entrega ou observação', dica: 'O que foi feito, com a tarefa e o tempo, se quiser.' },
+  a.pode_registrar_diario && a.pode_executar && { id: 'registro', rotulo: 'Andamento, entrega ou observação', dica: 'O que foi feito, com a tarefa e o tempo, se quiser.' },
   aceitaImpedimento(a) && podeImp && { id: 'impedimento', rotulo: 'Impedimento', dica: 'Algo trava a ação. Um impedimento crítico deixa a seção em vermelho.' },
   podeImp && !a.encerrada && !a.arquivada && { id: 'ponto', rotulo: 'Ponto de atenção', dica: 'Algo que merece atenção, sem travar a ação.' },
   !leitura && a.pode_comentar && { id: 'comentario', rotulo: 'Comentário', dica: 'Conversa sobre a ação.' },
