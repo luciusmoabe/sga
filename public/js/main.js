@@ -336,7 +336,7 @@ async function telaEntrada({ expirada = false } = {}) {
   app.innerHTML = moldeEntrada(`
     <p class="entrada-tag">Protótipo de demonstração</p>
     <h1>Bem-vindo ao Agilis</h1>
-    <p class="lema">Acompanhamento semanal${nomeDemo ? ` — ${esc(nomeDemo)}` : ''}.</p>
+    <p class="lema">Acompanhamento periódico${nomeDemo ? ` — ${esc(nomeDemo)}` : ''}.</p>
     <div class="info">Protótipo com dados fictícios. Escolha um perfil para explorar; não há senha nesta versão.</div>
     ${trocaEmpresa}
     ${us.length ? '' : '<div class="info">Esta empresa ainda não tem usuários cadastrados.</div>'}

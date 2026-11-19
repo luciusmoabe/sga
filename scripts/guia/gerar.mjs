@@ -173,7 +173,7 @@ const edicao = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'nu
 function html({ ate = caps.length, paginas = {} } = {}) {
   const toc = caps.map(([id, t], i) => `<li><a href="#${id}"><span class="n">${String(i + 1).padStart(2, '0')}</span><span class="t">${t}</span><span class="pg">${paginas[id] ?? ''}</span></a></li>`).join('');
   return `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Guia do Usuário — Agilis</title><style>${css}</style><body>
-<div class="capa"><div class="logo"><img src="img/logo.png" alt="Agilis"></div><div style="position:relative"><h1>Guia do Usuário</h1><div class="sub">Acompanhamento semanal dos Centros do Departamento de Planejamento, Orçamento e Gestão</div></div><div class="meta">Sistema Agilis<br>Para Chefes, Membros, Diretor, Apoio, Consulta e Administradores<br>Edição de ${edicao}</div></div>
+<div class="capa"><div class="logo"><img src="img/logo.png" alt="Agilis"></div><div style="position:relative"><h1>Guia do Usuário</h1><div class="sub">Acompanhamento periódico dos Centros do Departamento de Planejamento, Orçamento e Gestão</div></div><div class="meta">Sistema Agilis<br>Para Chefes, Membros, Diretor, Apoio, Consulta e Administradores<br>Edição de ${edicao}</div></div>
 <div class="sumario"><h1>Sumário</h1><ol>${toc}</ol><p class="obs">As imagens usam dados fictícios de demonstração. Para o detalhamento técnico das regras, consulte a Documentação do SGC.</p></div>
 ${secoes.slice(0, ate).join('\n')}</body></html>`;
 }
