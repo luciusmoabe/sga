@@ -32,17 +32,15 @@ test('Chefe: registra no cartão apontando a tarefa e concluindo-a; vê o diári
   const cartao = await cartaoDe(p, 'Manifestar-se sobre o contrato');
   await (await cartao.$('[data-registrar]')).click();
   await p.waitForSelector('dialog[open] #dr-texto');
-  assert.equal(await p.$eval('#dr-concluir', (c) => c.disabled), true, 'sem tarefa escolhida, não dá para concluir');
-  assert.deepEqual(await p.$$eval('#dr-tarefa option', (os) => os.map((o) => o.textContent)), ['Geral da ação', 'Minuta do ofício', 'Conferir o empenho']);
+  assert.equal(await p.$('#dr-tarefa'), null, 'a tarefa não se escolhe no formulário');
+  assert.equal(await p.$('#dr-concluir'), null, 'o registro geral da ação não conclui tarefa');
+  assert.match(await p.$eval('#dr-texto', (e) => e.closest('dialog').querySelector('.suave.pequeno').textContent), /Ação: Manifestar-se sobre o contrato · Tarefa: Geral da ação/);
   await p.select('#dr-tipo', 'impedimento');
   assert.equal(await p.$eval('#dr-dica-imp', (e) => e.classList.contains('oculto')), false, 'dica: o registro só documenta o impedimento');
   await p.select('#dr-tipo', 'entrega');
   assert.equal(await p.$eval('#dr-dica-imp', (e) => e.classList.contains('oculto')), true);
 
   await p.type('#dr-texto', 'Minuta revisada e enviada ao jurídico.');
-  await p.select('#dr-tarefa', String(t1));
-  assert.equal(await p.$eval('#dr-concluir', (c) => c.disabled), false, 'com tarefa escolhida, pode concluí-la');
-  await p.click('#dr-concluir');
   await p.type('#dr-min', '30');
   await p.type('#dr-ref', 'SEI 052.3010.2026.0005350-55');
   const falhas = await violacoes(p, axe, 'dialog[open]');
@@ -56,9 +54,8 @@ test('Chefe: registra no cartão apontando a tarefa e concluindo-a; vê o diári
   const d1 = (await app.api(CHEFE_COF, 'GET', `/acoes/${acao}`)).dados;
   assert.equal(d1.diario.length, 1);
   assert.equal(d1.diario[0].tipo, 'entrega');
-  assert.equal(d1.diario[0].tarefa_id, t1);
+  assert.equal(d1.diario[0].tarefa_id, null, 'o registro do cartão é da ação toda');
   assert.equal(d1.tempo_total, 30);
-  assert.equal(d1.checklist.find((c) => c.id === t1).concluido, true, 'a tarefa foi concluída pelo registro');
 
   // 2. Na ficha: a seção abre sozinha com o registro, a tarefa mostra o contador, e o contador leva ao diário filtrado.
   await p.evaluate(() => [...document.querySelectorAll('article.acao')].find((c) => c.querySelector('h3').textContent === 'Manifestar-se sobre o contrato').querySelector('[data-detalhe]').click());
@@ -66,16 +63,16 @@ test('Chefe: registra no cartão apontando a tarefa e concluindo-a; vê o diári
   assert.match(await texto(p, 'dialog[open]'), /Diário de progresso \(1\)/);
   assert.equal(await p.$eval('#diario-bloco', (e) => e.closest('details').open), true, 'abre sozinha porque há registros');
   assert.match(await texto(p, '#diario-bloco'), /Entrega/);
-  assert.match(await texto(p, '#diario-bloco'), /Tarefa: Minuta do ofício/);
+  assert.match(await texto(p, '#diario-bloco'), /Geral da ação/);
   assert.match(await texto(p, '#diario-bloco'), /SEI 052\.3010\.2026\.0005350-55/);
-  assert.match(await texto(p, 'dialog[open] #acao-checklist-bloco'), /1 registro no diário/);
 
   // 3. Registrar pela própria tarefa: já vem escolhida.
-  await p.click('dialog[open] [data-registrar-tarefa]');
+  await p.click(`dialog[open] [data-registrar-tarefa="${t2}"]`);
   await p.waitForSelector('dialog[open] dialog[open], dialog[open] #dr-texto', { timeout: 4000 }).catch(() => {});
   await p.waitForFunction(() => document.querySelectorAll('dialog[open] #dr-texto').length === 1);
-  const escolhida = await p.$eval('#dr-tarefa', (s) => s.options[s.selectedIndex].textContent);
-  assert.equal(escolhida, 'Conferir o empenho', 'a tarefa do botão já vem escolhida');
+  assert.equal(await p.$('#dr-tarefa'), null, 'sem seletor de tarefa');
+  assert.match(await p.$eval('#dr-texto', (e) => e.closest('dialog').querySelector('.suave.pequeno').textContent), /Tarefa: Conferir o empenho/, 'a tarefa do botão aparece fixa no cabeçalho');
+  assert.equal(await p.$eval('input[name=tarefa_id]', (e) => e.value), String(t2));
   await p.type('#dr-texto', 'Empenho conferido: falta apenas a nota fiscal.');
   await enviar(p);
   await p.waitForFunction(() => document.querySelector('#diario-bloco') && /Diário de progresso \(2\)/.test(document.querySelector('dialog[open]')?.innerText || ''), { timeout: 8000 });

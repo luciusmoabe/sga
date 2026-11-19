@@ -146,21 +146,22 @@ const pontoAtencaoHTML = (p, podeAlterar) => `<div class="impedimento ${p.ativo 
 /**
  * Formulário de um registro no diário. Busca o detalhe da ação quando preciso (a lista não traz as tarefas). `tarefaId` já escolhe a
  * tarefa (botão "Registrar" da própria tarefa); `retifica` é o registro que o novo corrige (ele continua no diário, marcado como retificado).
- * Quem só tem uma tarefa na ação registra sobre as tarefas dele; quem a executa também registra "Geral da ação" e o tempo.
+ * A tarefa não se escolhe no formulário: ela aparece fixa, como rótulo, no cabeçalho, depois do nome da ação. O "+ Registrar andamento" do cartão e da ficha
+ * registra sobre a ação toda ("Geral da ação", só quem a executa); o registro de uma tarefa nasce do "+ Registrar" da própria tarefa, na ficha.
  */
 export async function abrirNovoRegistro(a, aoConcluir, { tarefaId = null, retifica = null } = {}) {
   const d = a.checklist ? a : await get(`/acoes/${a.id}`);
   const executa = !!d.pode_executar;
-  const tarefas = (d.checklist || []).filter((c) => !c.concluido && (executa || c.responsavel_id === est.user?.id));
+  const daTarefa = retifica ? (retifica.tarefa_id ? { id: retifica.tarefa_id, texto: retifica.tarefa_nome } : null) : (tarefaId ? (d.checklist || []).find((c) => c.id === tarefaId) : null);
+  if (!daTarefa && !executa) throw new Error('Para registrar o andamento de uma tarefa, abra a ação e use o botão "+ Registrar" da própria tarefa.');
   const hojeISO = est.boot.hoje;
   abrirForm({
     titulo: retifica ? 'Retificar registro' : 'Registrar andamento',
-    corpo: `<p class="suave pequeno">Ação: <b>${esc(d.titulo)}</b></p>
+    corpo: `<p class="suave pequeno">Ação: <b>${esc(d.titulo)}</b> · Tarefa: <b>${daTarefa ? esc(daTarefa.texto) : 'Geral da ação'}</b></p>
+      <input type="hidden" name="tarefa_id" value="${daTarefa ? daTarefa.id : ''}">
       ${retifica ? `<div class="info">Você está retificando o registro de ${br(retifica.data)}: “${esc(resumir(retifica.texto, 140))}”. Ele continua no diário, marcado como retificado.</div>` : ''}
       <div class="campo"><label for="dr-texto">O que aconteceu</label><textarea id="dr-texto" name="texto" required maxlength="1000" placeholder="Ex.: Enviei o ofício ao jurídico e aguardo o parecer."></textarea></div>
       <div class="dois">
-        <div class="campo"><label for="dr-tarefa">Tarefa</label><select id="dr-tarefa" name="tarefa_id">${executa ? '<option value="">Geral da ação</option>' : ''}${tarefas.map((c) =>
-          `<option value="${c.id}"${c.id === tarefaId ? ' selected' : ''}>${esc(c.texto)}</option>`).join('')}</select></div>
         <div class="campo"><label for="dr-tipo">Tipo</label><select id="dr-tipo" name="tipo">${TIPOS_DIARIO.map(([v, r]) => `<option value="${v}">${r}</option>`).join('')}</select></div>
       </div>
       <p class="suave pequeno oculto" id="dr-dica-imp">Este registro só documenta o impedimento. Para travar a ação de verdade (status Bloqueada, semáforo), use <b>Impedimento</b> no cartão da ação.</p>
@@ -169,17 +170,12 @@ export async function abrirNovoRegistro(a, aoConcluir, { tarefaId = null, retifi
         <div class="campo"><label for="dr-data">Data do trabalho</label><input id="dr-data" name="data" type="date" max="${hojeISO}" value="${hojeISO}"></div>
       </div>
       <div class="campo"><label for="dr-ref">Referência (nº do SEI ou link, opcional)</label><input id="dr-ref" name="referencia" maxlength="200" autocomplete="off"></div>
-      <label class="marcar"><input type="checkbox" id="dr-concluir" name="concluir_tarefa" disabled> Concluir a tarefa escolhida</label>
+      ${daTarefa && !retifica ? '<label class="marcar"><input type="checkbox" id="dr-concluir" name="concluir_tarefa"> Concluir a tarefa</label>' : ''}
       <p class="suave pequeno">A data e a hora do registro e o seu nome entram sozinhos. ${executa ? 'O tempo informado também entra no tempo gasto da ação.' : ''}</p>`,
     rotulo: retifica ? 'Registrar retificação' : 'Registrar no diário',
     aoAbrir: (dlg) => {
-      const sel = dlg.querySelector('#dr-tarefa'), caixa = dlg.querySelector('#dr-concluir'), tipo = dlg.querySelector('#dr-tipo');
-      const ajustar = () => {
-        caixa.disabled = !sel.value;
-        if (!sel.value) caixa.checked = false;
-        dlg.querySelector('#dr-dica-imp').classList.toggle('oculto', tipo.value !== 'impedimento');
-      };
-      sel.addEventListener('change', ajustar);
+      const tipo = dlg.querySelector('#dr-tipo');
+      const ajustar = () => dlg.querySelector('#dr-dica-imp').classList.toggle('oculto', tipo.value !== 'impedimento');
       tipo.addEventListener('change', ajustar);
       ajustar();
     },
