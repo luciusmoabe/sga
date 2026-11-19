@@ -2,6 +2,7 @@
 import { post } from './api.js';
 import { TAM_SENHA } from './regras.js';
 import { abrirForm, toast } from './ui.js';
+import { moldeEntrada } from './entrada.js';
 
 const CAMPOS = `
   <div class="campo"><label for="sn-atual">Senha atual</label><input id="sn-atual" name="senha_atual" type="password" autocomplete="current-password" maxlength="1024" required></div>
@@ -25,14 +26,14 @@ async function enviar(d) {
 /** Tela cheia, sem menu: é a única coisa que a pessoa pode fazer até trocar a senha inicial. */
 export function telaTrocaSenha(app, { aoConcluir, aoSair }) {
   document.body.classList.remove('tv');
-  app.innerHTML = `<div class="entrada"><div class="entrada-caixa"><h1>Agilis</h1>
-    <p class="lema">Crie a sua senha para continuar.</p>
+  app.innerHTML = moldeEntrada(`<p class="entrada-tag">Primeiro acesso</p><h1>Crie a sua senha</h1>
+    <p class="lema">Para continuar, crie uma senha só sua.</p>
     <div class="info" role="status">Você entrou com uma senha provisória, definida por quem cadastrou a sua conta. Crie agora uma senha só sua: ela não fica visível para mais ninguém.</div>
     <form id="form-troca" novalidate>${CAMPOS}
       <p id="troca-erro" role="alert" aria-live="polite"></p>
       <button class="btn btn-primario" type="submit">Salvar nova senha</button>
       <button class="btn btn-fantasma" type="button" id="troca-sair">Sair</button>
-    </form></div></div>`;
+    </form>`);
   const form = app.querySelector('#form-troca');
   const erro = app.querySelector('#troca-erro');
   app.querySelector('#troca-sair').addEventListener('click', () => aoSair());

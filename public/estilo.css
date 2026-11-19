@@ -1705,3 +1705,50 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
   .menu-recolhido .menu-versao .menu-rotulo { gap: 0; }
 }
 @media (max-width: 760px) { .menu-versao { display: none; } } /* no celular a opção está na folha "Mais" */
+
+/* ---------- Telas de entrada: vitrine à esquerda e conteúdo à direita ---------- */
+.entrada.entrada-dividida { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); gap: 0; padding: 24px; place-items: stretch; min-height: 100vh; background: var(--bg); }
+.entrada-vitrine { position: sticky; top: 24px; height: calc(100vh - 48px); min-height: 560px; display: flex; flex-direction: column; justify-content: space-between; padding: 56px 56px 52px; border-radius: 28px; background: var(--pale); border: 1px solid var(--line); overflow: hidden; }
+.vitrine-logo { display: block; width: 100%; max-width: 190px; height: auto; }
+.vitrine-arte { position: relative; align-self: center; width: min(100%, 460px); aspect-ratio: 1; flex: 0 1 auto; }
+.vitrine-aneis { position: absolute; inset: 0; width: 100%; height: 100%; }
+.vitrine-aneis circle { fill: none; stroke: var(--line-str); stroke-width: 1; stroke-dasharray: 3 5; }
+.vitrine-aneis circle.ponto { fill: var(--line-str); stroke: none; }
+.vitrine-icone { position: absolute; left: 50%; top: 50%; width: 36%; aspect-ratio: 1; transform: translate(-50%, -50%) rotate(-7deg); display: grid; place-items: center; background: var(--card); border-radius: 26px; box-shadow: 0 18px 40px rgba(40,61,53,.14); }
+.vitrine-icone img { width: 52%; height: auto; }
+.vitrine-selo { position: absolute; display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: var(--card); border-radius: 12px; box-shadow: 0 10px 26px rgba(40,61,53,.12); font-size: .92rem; color: var(--ink); white-space: nowrap; }
+.vitrine-selo svg { color: var(--green); }
+.vitrine-selo.selo-a { right: 0; top: 24%; transform: rotate(3deg); }
+.vitrine-selo.selo-b { left: 2%; bottom: 20%; transform: rotate(-3deg); }
+.vitrine-eyebrow { margin: 0 0 10px; font-size: .74rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--green); }
+.vitrine-titulo { margin: 0; font-family: var(--head); font-weight: 800; font-size: clamp(1.8rem, 2.9vw, 2.7rem); line-height: 1.08; letter-spacing: -.02em; color: var(--ink); }
+
+.entrada-painel { display: flex; align-items: center; justify-content: center; padding: 32px clamp(20px, 5vw, 72px); min-width: 0; }
+.entrada-conteudo { width: min(480px, 100%); }
+.entrada-conteudo.larga { width: min(820px, 100%); }
+.entrada-conteudo .entrada-tag { margin: 0 0 10px; }
+.entrada-conteudo h1 { font-size: clamp(1.8rem, 3vw, 2.3rem); line-height: 1.1; letter-spacing: -.02em; color: var(--ink); }
+.entrada-conteudo .lema { color: var(--muted); margin: 10px 0 28px; font-size: 1rem; }
+.entrada-logo-movel { display: none; width: 100%; max-width: 150px; height: auto; margin: 0 0 28px; }
+.entrada-conteudo .campo { margin-bottom: 18px; }
+.entrada-conteudo .campo label { display: block; margin-bottom: 8px; }
+.linha-rotulo { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.linha-rotulo label { margin: 0; }
+.link-discreto { border: 0; background: transparent; padding: 4px 2px; font: inherit; font-size: .9rem; font-weight: 600; color: var(--ink); cursor: pointer; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; }
+.link-discreto:hover { text-decoration-color: currentColor; }
+.link-discreto:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; border-radius: 4px; }
+.com-icone { position: relative; }
+.com-icone > svg { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.com-icone input, #login-senha .com-icone input { width: 100%; min-height: 52px; padding: 12px 16px 12px 48px; border-radius: 12px; background: var(--pale); border: 1px solid var(--line); font-size: 1rem; }
+.com-icone input:focus { background: var(--card); }
+.com-icone.senha-com-olho input, #login-senha .com-icone.senha-com-olho input { padding-right: 56px; }
+.entrada-conteudo .btn-entrar { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; border-radius: 12px; margin-top: 8px; }
+.entrada-conteudo .login-ajuda { text-align: left; margin-top: 28px; }
+
+@media (max-width: 900px) {
+  .entrada.entrada-dividida { grid-template-columns: minmax(0, 1fr); padding: 0; }
+  .entrada-vitrine { display: none; }
+  .entrada-painel { padding: 40px max(20px, env(safe-area-inset-left, 0px)) 40px; align-items: flex-start; }
+  .entrada-logo-movel { display: block; }
+  .link-discreto { min-height: 44px; display: inline-flex; align-items: center; padding: 0 4px; }
+}

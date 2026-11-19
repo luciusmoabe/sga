@@ -62,7 +62,7 @@ export async function subir(t) {
     await p.goto(`${base}/${rota}`, { waitUntil: 'networkidle0' });
     return p;
   };
-  return { base, db, api, abrir, caminhoAxe: exigir.resolve('axe-core/axe.min.js') };
+  return { base, db, api, abrir, navegador: browser, caminhoAxe: exigir.resolve('axe-core/axe.min.js') };
 }
 
 /** Clica no primeiro elemento visível de `seletor` cujo texto contém `texto`. Falha com mensagem clara se não achar. */

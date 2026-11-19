@@ -9,6 +9,7 @@ import { agenda } from './agenda.js';
 import { gestao } from './gestao.js';
 import { diarioTela } from './diario-tela.js';
 import { abrirNovaAcao, podeCriarAcao } from './nova-acao.js';
+import { ICONE_ENTRADA, moldeEntrada } from './entrada.js';
 import { usoTelas } from './uso-telas.js';
 import { PERFIS_NOVA_INTERFACE, TODAS_AS_AREAS, abaAtiva, abasDaArea, areaDaRota, areasDoPerfil, casaNovaInterface, definirNovaInterface, menuNovaInterface, novaInterfaceLigada, temNovaInterface } from './nova-interface.js';
 import { combinados } from './combinados.js';
@@ -269,23 +270,28 @@ async function telaEntrada({ expirada = false } = {}) {
   document.body.classList.remove('tv');
   if (!expirada) retorno = null;
   if (await modoAuth() === 'supabase') {
-    app.innerHTML = `<div class="entrada"><div class="entrada-caixa estreita">
-      <img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo">
-      <p class="entrada-tag">Acompanhamento semanal</p>
-      <h1>Bem-vindo ao Agilis</h1>
-      <p class="lema">Entre com seu e-mail e senha.</p>
+    app.innerHTML = moldeEntrada(`
+      <p class="entrada-tag">Bem-vindo de volta</p>
+      <h1>Acessar o sistema</h1>
+      <p class="lema">Entre com o seu e-mail e a sua senha.</p>
       ${expirada ? '<div class="info" role="status">Sua sessão expirou. Entre novamente para continuar de onde parou; rascunhos não enviados foram mantidos.</div>' : ''}
       <form id="login-senha">
         <div class="campo"><label for="login-email">E-mail</label>
-        <input id="login-email" name="email" type="email" autocomplete="username" maxlength="254" required></div>
-        <div class="campo"><label for="login-password">Senha</label>
-        <div class="senha-com-olho"><input id="login-password" name="senha" type="password" autocomplete="current-password" maxlength="1024" required>
-        <button type="button" class="senha-olho" id="mostrar-senha" aria-label="Mostrar senha" aria-controls="login-password" aria-pressed="false" title="Mostrar senha"><svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+          <div class="com-icone">${ICONE_ENTRADA.email}<input id="login-email" name="email" type="email" autocomplete="username" maxlength="254" placeholder="nome@orgao.gov.br" required></div></div>
+        <div class="campo"><div class="linha-rotulo"><label for="login-password">Senha</label>
+          <button type="button" class="link-discreto" id="esqueceu-senha" aria-expanded="false" aria-controls="esqueceu-ajuda">Esqueceu a senha?</button></div>
+          <div class="com-icone senha-com-olho">${ICONE_ENTRADA.cadeado}<input id="login-password" name="senha" type="password" autocomplete="current-password" maxlength="1024" required>
+            <button type="button" class="senha-olho" id="mostrar-senha" aria-label="Mostrar senha" aria-controls="login-password" aria-pressed="false" title="Mostrar senha">${ICONE_ENTRADA.olho}</button></div></div>
+        <p id="esqueceu-ajuda" class="info" role="note" hidden>Para redefinir a sua senha, fale com quem administra o Agilis no seu órgão: a redefinição é feita por essa pessoa.</p>
         <p id="login-erro" role="alert" aria-live="polite"></p>
-        <button class="btn btn-primario btn-entrar" type="submit">Entrar <span aria-hidden="true">→</span></button>
-      </form><p class="login-ajuda">Para solicitar acesso ou redefinir sua senha, contate o administrador do Agilis.</p>
-      </div></div>`;
+        <button class="btn btn-primario btn-entrar" type="submit">${ICONE_ENTRADA.chave}<span>Entrar</span></button>
+      </form><p class="login-ajuda">Acesso restrito a pessoal autorizado. Para solicitar acesso, contate o administrador do Agilis.</p>`);
     const form = $('#login-senha');
+    $('#esqueceu-senha').addEventListener('click', (e) => {
+      const ajuda = $('#esqueceu-ajuda');
+      ajuda.hidden = !ajuda.hidden;
+      e.currentTarget.setAttribute('aria-expanded', String(!ajuda.hidden));
+    });
     $('#mostrar-senha').addEventListener('click', (e) => {
       const campo = $('#login-password');
       const mostrar = campo.type === 'password';
@@ -299,7 +305,7 @@ async function telaEntrada({ expirada = false } = {}) {
       const botao = form.querySelector('button[type=submit]');
       if (botao.disabled) return;
       botao.disabled = true;
-      botao.textContent = 'Entrando…';
+      botao.querySelector('span').textContent = 'Entrando…';
       const erro = form.querySelector('#login-erro');
       erro.textContent = '';
       try {
@@ -314,7 +320,7 @@ async function telaEntrada({ expirada = false } = {}) {
         form.elements.senha.value = '';
         erro.textContent = err.message;
         form.elements.senha.focus();
-      } finally { botao.disabled = false; botao.textContent = 'Entrar'; }
+      } finally { botao.disabled = false; botao.querySelector('span').textContent = 'Entrar'; }
     });
     return;
   }
@@ -327,8 +333,7 @@ async function telaEntrada({ expirada = false } = {}) {
   const trocaEmpresa = lista.empresas.length > 1
     ? `<div class="grupo-titulo">Empresa</div><div class="perfis">${[...lista.empresas].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map((e) => `<button class="perfil${e.slug === slugDemo ? ' ativo' : ''}" data-empresa="${esc(e.slug)}" aria-pressed="${e.slug === slugDemo}"><b>${esc(e.nome)}</b></button>`).join('')}</div>` : '';
   const card = (u) => `<button class="perfil" data-u="${u.id}"><b>${esc(u.nome)}</b><span>${['chefe', 'membro'].includes(u.perfil) ? esc(u.secao_nome || 'Sem seção atribuída') : PERFIL[u.perfil]}</span></button>`;
-  app.innerHTML = `<div class="entrada"><div class="entrada-caixa">
-    <img src="/imagens/logo-agilis.png" alt="Agilis" class="entrada-logo">
+  app.innerHTML = moldeEntrada(`
     <p class="entrada-tag">Protótipo de demonstração</p>
     <h1>Bem-vindo ao Agilis</h1>
     <p class="lema">Acompanhamento semanal${nomeDemo ? ` — ${esc(nomeDemo)}` : ''}.</p>
@@ -337,7 +342,7 @@ async function telaEntrada({ expirada = false } = {}) {
     ${us.length ? '' : '<div class="info">Esta empresa ainda não tem usuários cadastrados.</div>'}
     ${us.length ? `<div class="grupo-titulo">Diretor e Apoio</div><div class="perfis">${us.filter((u) => !['chefe', 'membro'].includes(u.perfil)).map(card).join('')}</div>
     <div class="grupo-titulo">Chefes de seção</div><div class="perfis">${us.filter((u) => u.perfil === 'chefe').map(card).join('')}</div>` : ''}
-    ${us.some((u) => u.perfil === 'membro') ? `<div class="grupo-titulo">Membros da equipe</div><div class="perfis">${us.filter((u) => u.perfil === 'membro').map(card).join('')}</div>` : ''}</div></div>`;
+    ${us.some((u) => u.perfil === 'membro') ? `<div class="grupo-titulo">Membros da equipe</div><div class="perfis">${us.filter((u) => u.perfil === 'membro').map(card).join('')}</div>` : ''}`, { larga: true });
 }
 
 // Delegação única no contêiner #app: vale para a tela de entrada, sem acumular ouvintes.
