@@ -1752,3 +1752,15 @@ details.secao-rec > summary:focus-visible { outline: 2px solid var(--ink); outli
   .entrada-logo-movel { display: block; }
   .link-discreto { min-height: 44px; display: inline-flex; align-items: center; padding: 0 4px; }
 }
+
+/* Ficha da ação: faixa "Gerenciar a ação" (editar, redirecionar e arquivar à esquerda; excluir sozinho à direita) */
+.ficha-gestao { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); }
+.ficha-gestao-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.ficha-gestao-perigo { margin-left: auto; }
+.ficha-gestao-aviso { flex-basis: 100%; margin: 0; }
+@media (max-width: 760px) {
+  .ficha-gestao { flex-direction: column; align-items: stretch; }
+  .ficha-gestao-acoes { flex-direction: column; }
+  .ficha-gestao-acoes .btn, .ficha-gestao-perigo .btn { width: 100%; justify-content: center; }
+  .ficha-gestao-perigo { margin-left: 0; padding-top: 10px; border-top: 1px dashed var(--line); }
+}

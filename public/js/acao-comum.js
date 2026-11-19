@@ -690,24 +690,23 @@ export async function abrirAcao(id, aoMudar) {
   const pValid = `
     ${validacaoHTML(a)}
 `;
-  const pRodape = `
-    ${a.pode_editar || a.pode_mudar_demanda ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Editar ação</button>'
-      : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-editar-acao>Alterar prazo</button>' : ''}
-    ${aceitaRedirecionar(a) ? '<button type="button" class="btn btn-sec btn-mini" style="margin-top:12px" data-redirecionar>Redirecionar para outra seção</button>' : ''}
-    ${leitura || ehMembro ? '' : (!a.demandada_diretor && !a.demandada_chefe) || (a.demanda_diretor && !a.diretriz_id) || ehAdmin() ? `
-      <div class="linha" style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line);align-items:center">
-        ${a.arquivada
-          ? `<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar ação</button>`
-          : `<button type="button" class="btn btn-sec btn-mini" data-arquivar>Arquivar ação</button>`}
-
-      </div>
-    ` : `
-      <div class="suave pequeno" style="margin-top:14px;padding-top:8px;border-top:1px solid var(--line)">
-        <i>${a.demandada_chefe ? 'Esta ação foi direcionada pelo chefe da seção acima e não pode ser arquivada por quem a recebeu.' : `Esta ação foi demandada ${peloTopo()} e não pode ser excluída nem arquivada pela seção.`}</i>
-      </div>
-    `}
-    ${a.pode_excluir ? '<button type="button" class="btn btn-perigo" style="margin-top:12px" data-excluir>Excluir ação</button>' : ''}
-`;
+  // Rodapé da ficha: uma só faixa "Gerenciar a ação", separada do conteúdo. À esquerda o que se faz com a ação (editar, redirecionar, arquivar),
+  // à direita, sozinho, o que apaga (Excluir). Fechar e Comentar ficam no rodapé do diálogo, abaixo.
+  const botaoEditar = a.pode_editar || a.pode_mudar_demanda ? '<button type="button" class="btn btn-sec btn-mini" data-editar-acao>Editar ação</button>'
+    : a.pode_mudar_prazo ? '<button type="button" class="btn btn-sec btn-mini" data-editar-acao>Alterar prazo</button>' : '';
+  const botaoRedirecionar = aceitaRedirecionar(a) ? '<button type="button" class="btn btn-sec btn-mini" data-redirecionar>Redirecionar para outra seção</button>' : '';
+  const podeArquivar = !(leitura || ehMembro) && ((!a.demandada_diretor && !a.demandada_chefe) || (a.demanda_diretor && !a.diretriz_id) || ehAdmin());
+  const botaoArquivar = podeArquivar
+    ? (a.arquivada ? '<button type="button" class="btn btn-sec btn-mini" data-desarquivar>Desarquivar ação</button>' : '<button type="button" class="btn btn-sec btn-mini" data-arquivar>Arquivar ação</button>') : '';
+  const botaoExcluir = a.pode_excluir ? '<button type="button" class="btn btn-perigo btn-mini" data-excluir>Excluir ação</button>' : '';
+  const avisoSemArquivar = !(leitura || ehMembro) && !podeArquivar
+    ? `<p class="suave pequeno ficha-gestao-aviso"><i>${a.demandada_chefe ? 'Esta ação foi direcionada pelo chefe da seção acima e não pode ser arquivada por quem a recebeu.' : `Esta ação foi demandada ${peloTopo()} e não pode ser excluída nem arquivada pela seção.`}</i></p>` : '';
+  const pRodape = botaoEditar || botaoRedirecionar || botaoArquivar || botaoExcluir || avisoSemArquivar ? `
+    <div class="ficha-gestao" role="group" aria-label="Gerenciar a ação">
+      ${botaoEditar || botaoRedirecionar || botaoArquivar ? `<div class="ficha-gestao-acoes">${botaoEditar}${botaoRedirecionar}${botaoArquivar}</div>` : ''}
+      ${botaoExcluir ? `<div class="ficha-gestao-perigo">${botaoExcluir}</div>` : ''}
+      ${avisoSemArquivar}
+    </div>` : '';
   const novaFicha = temNovaInterface(est.user?.perfil) && novaInterfaceLigada();
   // Situação (versão nova): o próximo passo sugerido, com os botões do que a pessoa pode fazer agora.
   const passo = novaFicha ? proximoPasso(a, { leitura, hoje: est.boot.hoje }) : null;
