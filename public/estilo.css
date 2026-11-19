@@ -834,6 +834,18 @@ html:has(body.tv) { font-size: clamp(15px, min(1.15vw, 2.05vh), 26px); }
    aqui precisam ser realmente pequenos para não competir com o texto da decisão. */
 .tv-app .tv-decisao-acoes .btn { padding: 3px 10px; font-size: 0.8rem; border-radius: 6px; }
 .tv-dica { color: #8fbfa6; font-size: 0.95rem; }
+/* Diálogos do Modo Reunião (fundo escuro): as cores-base são trocadas por uma paleta escura, para que tudo o que a ficha desenha com elas (texto, apoio,
+   fundos claros, linhas, semáforo) continue legível; o que usa fundo verde com texto branco recebe o par escuro abaixo. */
+.tv dialog {
+  --bg: #0c2a1e; --ink: #eef8f2; --muted: #b4d4c2; --card: #143826; --pale: #173d2a; --sidebar: #112e1f;
+  --line: #2f5f46; --line-str: #4a8264;
+  --ink-2: #8fe8b8; --green: #6fe0a8; --green-bg: #1a4e38; --azul-bg: #1a4e38;
+  --verde: #7fe3a8; --verde-bg: #1a4e38; --amarelo: #f4c75a; --amarelo-bg: #4a3d10; --vermelho: #ffa196; --vermelho-bg: #4b2620;
+  color-scheme: dark;
+}
+.tv dialog .segmento button[aria-pressed="true"], .tv dialog .pilula.nova, .tv dialog .btn-ok, .tv dialog .cal-dia.cal-escolhido { background: #4fcf90; color: #062219; }
+.tv dialog .checklist-texto:hover, .tv dialog .checklist-texto:focus-visible { background: #0c2a1e; color: #fff; }
+.tv dialog a { color: #8fe8b8; }
 .tv dialog { background: #112e1f; color: #dff0e8; }
 .tv dialog input, .tv dialog textarea, .tv dialog select { background: #0c2a1e; color: #fff; border-color: #3a6e52; }
 .tv dialog .btn-sec, .tv dialog .btn-fantasma { background: transparent; color: #dff0e8; border-color: #3a6e52; }
